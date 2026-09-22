@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
+import ThemeToggle from "./theme-toggle";
 
 // Self-hosted at build time — no runtime CDN request. Exposed as --font-inter,
 // which globals.css feeds into the --font-sf token.
@@ -52,6 +53,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
+        <ThemeToggle />
         {children}
         <Dock />
         <SiteBehaviour />

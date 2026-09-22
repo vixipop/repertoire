@@ -41,24 +41,18 @@ export default function Home() {
                 <p className="appear">
                   PLACEHOLDER — recent work, with inline links like{" "}
                   <a href="#">
-                    <span className="scramble-text link-label">
-                      <span className="scramble-original">Project One</span>
-                    </span>
+                    <span className="link-label">Project One</span>
                   </a>{" "}
                   and{" "}
                   <a href="#">
-                    <span className="scramble-text link-label">
-                      <span className="scramble-original">Project Two</span>
-                    </span>
+                    <span className="link-label">Project Two</span>
                   </a>
                   .
                 </p>
                 <p className="appear">
                   Explore my{" "}
                   <a href="#">
-                    <span className="scramble-text link-label">
-                      <span className="scramble-original">Selected work</span>
-                    </span>
+                    <span className="link-label">Selected work</span>
                   </a>
                 </p>
               </div>
@@ -137,9 +131,7 @@ function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
                     ? { target: "_blank", rel: "noopener noreferrer" }
                     : {})}
                 >
-                  <span className="scramble-text link-label">
-                    <span className="scramble-original">{row.name}</span>
-                  </span>
+                  <span className="link-label">{row.name}</span>
                 </a>
               ) : (
                 <span className="link-disabled">
