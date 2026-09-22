@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import CopyButton from "./copy-button";
+import Tooltip from "./tooltip";
 
 /**
  * Homepage.
@@ -23,11 +24,17 @@ export default function Home() {
           <div className="stack">
             <div className="body-copy">
               <div className="greetings appear">
-                <span>hello,</span>
-                <span lang="ja">
-                  こんにちは<span className="greetings-comma">,</span>
-                </span>
-                <span lang="hy">բարև</span>
+                <span>jahnavi,</span>
+                <Tooltip label="Hindi">
+                  <span lang="hi">
+                    जाह्नवी<span className="greetings-comma">,</span>
+                  </span>
+                </Tooltip>
+                <Tooltip label="Sindhi">
+                  <span lang="sd" dir="rtl">
+                    جھانوي
+                  </span>
+                </Tooltip>
               </div>
 
               <div className="information">

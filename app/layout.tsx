@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
@@ -12,6 +12,22 @@ const inter = Inter({
   weight: ["400", "500"],
   display: "swap",
   variable: "--font-inter",
+});
+
+// Inter has no Devanagari or Arabic coverage, so the name in those scripts
+// would otherwise fall back to whatever the OS happens to have.
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ["devanagari"],
+  weight: ["400"],
+  display: "swap",
+  variable: "--font-devanagari",
+});
+
+const arabic = Noto_Naskh_Arabic({
+  subsets: ["arabic"],
+  weight: ["400"],
+  display: "swap",
+  variable: "--font-arabic",
 });
 
 export const metadata: Metadata = {
@@ -48,7 +64,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${devanagari.variable} ${arabic.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>

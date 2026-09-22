@@ -173,8 +173,49 @@ body {
   position: relative;
 }
 
-.greetings [lang="hy"] { font-family: "Noto Sans Armenian", var(--font-sf); }
+.greetings [lang="hi"] { font-family: var(--font-devanagari), var(--font-sf); }
+.greetings [lang="sd"] { font-family: var(--font-arabic), var(--font-sf); }
 .greetings-comma { margin-left: 0; }
+
+/* ==========================================================================
+   Tooltip
+   ========================================================================== */
+
+.cv-tooltip-wrap {
+  position: relative;
+  display: inline-block;
+  cursor: default;
+  outline: none;
+}
+
+.cv-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  /* Fixed rather than themed: the tooltip floats over body copy in both
+     palettes and needs to read as a separate surface. */
+  box-shadow: 0 2px 2px 0 #00000014, 0 12px 20px 0 #0000001f;
+  font-family: var(--font-sf);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s cubic-bezier(.25, .46, .45, .94);
+}
+.cv-tooltip-wrap:hover .cv-tooltip,
+.cv-tooltip-wrap:focus-visible .cv-tooltip {
+  opacity: 1;
+  will-change: opacity;
+}
 
 .information {
   flex: none;
@@ -187,6 +228,9 @@ body {
   font-family: var(--font-sf);
   font-size: 14px;
   line-height: 22px;
+  /* Link rows sit at full strength, brighter than body copy (--text).
+     `.names a` inherits this. */
+  color: var(--text-strong);
 }
 
 .information p {
