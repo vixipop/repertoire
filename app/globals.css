@@ -195,8 +195,10 @@ body {
 }
 .spline-stage[data-status="ready"] { background: none; }
 
-.spline-canvas { width: 100%; height: 100%; }
-.spline-canvas canvas { display: block; touch-action: pan-y; }
+.spline-stage spline-viewer { display: block; width: 100%; height: 100%; }
+/* The viewer takes pointer gestures on its canvas; keep vertical page
+   scrolling working over the top of it. */
+.spline-stage canvas { display: block; touch-action: pan-y !important; }
 
 .spline-fallback {
   position: absolute;

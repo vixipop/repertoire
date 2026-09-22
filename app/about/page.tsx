@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import SplineMount from "./spline-mount";
+import SplineEmbed from "./spline-embed";
 
 export const metadata: Metadata = {
   title: "About",
@@ -18,7 +18,7 @@ export default function About() {
       <section className="intro-section">
         <div className="content">
           <div className="stack">
-            <SplineMount />
+            <SplineEmbed />
 
             <div className="body-copy">
               <div className="information">
