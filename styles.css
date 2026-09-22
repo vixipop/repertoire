@@ -1,0 +1,454 @@
+/* ==========================================================================
+   Design tokens
+   Palette, type scale and spacing transcribed from the reference stylesheet.
+   ========================================================================== */
+
+:root {
+  --zinc-950: #000;
+  --zinc-900: #18181b;
+  --zinc-800: #27272a;
+  --zinc-400: #9f9fa9;
+  --pink-400: #fb5ab2;
+  --pink-100: #ffd9eb;
+  --accent: var(--pink-400);
+
+  /* "Site Inter" is the reference site's own alias for a self-hosted
+     InterVariable. We alias the CDN Inter to the same name below so this
+     stack resolves identically. */
+  --font-sf: "Site Inter", Inter, -apple-system, BlinkMacSystemFont,
+             "Helvetica Neue", Arial, sans-serif;
+
+  /* light */
+  --page: #fafafa;
+  --bg-surface: #fff;
+  --bg-icon: #f9f9f9;
+  --bg-icon-hover: #efefef;
+  --text: #000;
+  --text-strong: #000;
+  --text-muted: #9f9f9f;
+  --border-soft: #e4e4e4;
+  --border-faint: #f5f5f5;
+  --border-divider: #00000014;
+  --selection-bg: #0000000d;
+  --button-bg: #000;
+  --button-bg-hover: #111;
+  --button-bg-active: #1c1c1c;
+  --button-text: #fafafa;
+  --dock-shadow: 0 2px 2px 0 #00000014, 0 12px 20px 0 #0000001f;
+}
+
+[data-theme="dark"] {
+  --page: #0e0e0e;
+  --bg-surface: #111;
+  --bg-icon: #171717;
+  --bg-icon-hover: #1f1f1f;
+  --text: #b0b0b0;
+  --text-strong: #fff;
+  --text-muted: #6e6e6e;
+  --border-soft: #1c1c1c;
+  --border-faint: #141414;
+  --border-divider: #181818;
+  --selection-bg: #ffffff14;
+  --button-bg: #fff;
+  --button-bg-hover: #f0f0f0;
+  --button-bg-active: #d4d4d4;
+  --button-text: #0a0a0a;
+  --dock-shadow: none;
+}
+
+/* Alias the CDN Inter to the reference stack's first family name. */
+@font-face {
+  font-family: "Site Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Inter"), local("Inter Variable"), local("InterVariable");
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  background: var(--page);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sf);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background: var(--selection-bg); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* ==========================================================================
+   Shell / intro section
+   ========================================================================== */
+
+.site {
+  width: 100%;
+  min-width: 320px;
+  overflow-x: clip;
+}
+
+.intro-section {
+  width: 100%;
+  min-height: 742px;
+  padding: 120px 0 111px;
+  position: relative;
+}
+
+/* The single narrow column everything sits in. */
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 36px;
+  width: 540px;
+  max-width: calc(100% - 60px);
+  min-height: 0;
+  margin: 0 auto;
+  position: relative;
+}
+
+.stack,
+.body-copy,
+.information,
+.link-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.stack,
+.body-copy,
+.information,
+.link-groups,
+.link-section,
+.link-row,
+.names,
+.dates { height: auto; }
+
+.stack,
+.body-copy,
+.information,
+.link-section,
+.link-row,
+.names { min-width: 0; }
+
+.stack { gap: 18px; width: 100%; }
+
+.body-copy {
+  flex: none;
+  gap: 14px;
+  width: 100%;
+  position: relative;
+}
+
+/* ==========================================================================
+   Greetings + intro copy
+   ========================================================================== */
+
+.greetings {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-left: -1px;
+  padding: 0;
+  color: var(--text-muted);
+  font-family: var(--font-sf);
+  font-size: 14px;
+  line-height: 22px;
+  white-space: nowrap;
+  position: relative;
+}
+
+.greetings [lang="hy"] { font-family: "Noto Sans Armenian", var(--font-sf); }
+.greetings-comma { margin-left: 0; }
+
+.information {
+  flex: none;
+  gap: 12px;
+  width: 100%;
+}
+
+.information p,
+.names {
+  font-family: var(--font-sf);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.information p {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  color: var(--text);
+  hyphens: none;
+  overflow-wrap: break-word;
+  letter-spacing: 0;
+  flex: none;
+}
+
+.information a,
+.connect-copy a {
+  color: var(--text-strong);
+  text-decoration: none;
+  transition: color .16s;
+  position: relative;
+}
+
+.information a:hover,
+.information a:focus-visible,
+.connect-copy a:hover,
+.connect-copy a:focus-visible { outline: none; color: var(--accent); }
+
+/* Underline that stays put while the label scrambles. */
+.information a .link-label::after,
+.connect-copy a .link-label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  border-bottom: 1px solid currentColor;
+  opacity: .28;
+  transition: opacity .16s;
+}
+.information a:hover .link-label::after { opacity: .6; }
+
+/* ==========================================================================
+   Link groups (Projects / Playground / Notes)
+   ========================================================================== */
+
+.link-groups {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  min-height: 176px;
+  padding: 0;
+}
+
+.link-section { width: 100%; }
+
+.link-section h2,
+.connect-section h2 {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-sf);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+/* Two-column rows: name flexes, date hugs right, both on a shared baseline. */
+.link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 16px;
+  width: 100%;
+  min-height: 46px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.names a {
+  width: fit-content;
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  line-height: 22px;
+  transition: color .16s;
+  position: relative;
+}
+.names a:hover { color: var(--accent); }
+
+.dates {
+  color: var(--text-muted);
+  font-family: var(--font-sf);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.link-label {
+  display: inline-block;
+  line-height: 22px;
+  position: relative;
+}
+
+.link-disabled { color: var(--text-muted); cursor: default; }
+
+/* Zero-height rule drawn by a pseudo-element, so it never affects layout. */
+.link-divider {
+  flex: none;
+  width: 100%;
+  height: 0;
+  position: relative;
+}
+.link-divider::before {
+  content: "";
+  border-top: 1px solid var(--border-faint);
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* ==========================================================================
+   Avatar
+   ========================================================================== */
+
+.avatar-wrap {
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 40px;
+  height: 40px;
+  padding-left: 0;
+}
+
+.avatar-swap { display: block; width: 40px; height: 40px; }
+
+.avatar {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-icon);
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+/* ==========================================================================
+   Connect + footer
+   ========================================================================== */
+
+.connect-section { width: 100%; display: flex; flex-direction: column; align-items: flex-start; }
+.connect-copy p { margin: 0; color: var(--text); }
+
+.copy-button {
+  font-family: var(--font-sf);
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  padding: 0 0 0 6px;
+  cursor: pointer;
+  transition: color .16s;
+}
+.copy-button:hover { color: var(--text-strong); }
+
+.footer-banner {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 48px 20px 0;
+  position: relative;
+}
+
+.footer-note {
+  margin: 0 0 48px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* ==========================================================================
+   Floating dock
+   ========================================================================== */
+
+.floating-dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  box-shadow: var(--dock-shadow);
+  z-index: 20;
+}
+[data-theme="dark"] .floating-dock { box-shadow: inset 0 0 0 1px var(--border-soft); }
+
+.floating-dock-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-icon);
+  color: var(--text-strong);
+  cursor: pointer;
+  transition: background .16s;
+}
+.floating-dock-icon:hover { background: var(--bg-icon-hover); }
+
+/* ==========================================================================
+   Entrance animation
+   ========================================================================== */
+
+.appear {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: appear .5s cubic-bezier(.22,.61,.36,1) forwards;
+  animation-delay: var(--appear-delay, 0ms);
+}
+@keyframes appear {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Responsive — breakpoint and values from the reference stylesheet
+   ========================================================================== */
+
+@media (max-width: 720px) {
+  .intro-section {
+    height: auto;
+    min-height: 0;
+    padding: 64px 0 80px;
+  }
+  .content {
+    gap: 26px;
+    width: calc(100% - 40px);
+    max-width: 560px;
+    height: auto;
+    margin: 0 auto;
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+  }
+  .body-copy { gap: 12px; }
+  .information { gap: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appear {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  * { transition-duration: .001ms !important; }
+}

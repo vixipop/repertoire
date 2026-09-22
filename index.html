@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+<title>Portfolio — Homepage</title>
+<meta name="description" content="Single-column portfolio homepage scaffold.">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+
+<!-- Inter (open source, SIL OFL). Aliased to "Site Inter" in CSS so the
+     font-family token matches the reference stack. Swap for a self-hosted
+     InterVariable.woff2 when you want to drop the CDN dependency. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500&display=swap">
+
+<link rel="stylesheet" href="styles.css">
+
+<script>
+  // Set the theme before first paint so there's no flash of the wrong palette.
+  (function(){
+    try{
+      var s = localStorage.getItem('theme');
+      var m = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var t = (s === 'light' || s === 'dark') ? s : (m ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    }catch(e){}
+  })();
+</script>
+</head>
+<body>
+
+<main class="site">
+  <section class="intro-section">
+    <div class="content">
+
+      <div class="avatar-wrap appear">
+        <span class="avatar-swap">
+          <!-- 40x40 placeholder. Drop your own square image in at this size. -->
+          <span class="avatar avatar-still" role="img" aria-label="Avatar placeholder"></span>
+        </span>
+      </div>
+
+      <div class="stack">
+
+        <div class="body-copy">
+          <div class="greetings appear">
+            <span>hello,</span>
+            <span lang="ja">こんにちは<span class="greetings-comma">,</span></span>
+            <span lang="hy">բարև</span>
+          </div>
+
+          <div class="information">
+            <p class="appear">
+              PLACEHOLDER — one-line introduction goes here, name and what you do.
+            </p>
+            <p class="appear">
+              PLACEHOLDER — a second line for background or current focus. Keep it to
+              a sentence or two; the column is intentionally narrow.
+            </p>
+            <p class="appear">
+              PLACEHOLDER — recent work, with inline links like
+              <a href="#"><span class="scramble-text link-label"><span class="scramble-original">Project One</span></span></a>
+              and
+              <a href="#"><span class="scramble-text link-label"><span class="scramble-original">Project Two</span></span></a>.
+            </p>
+            <p class="appear">
+              Explore my
+              <a href="#"><span class="scramble-text link-label"><span class="scramble-original">Selected work</span></span></a>
+            </p>
+          </div>
+        </div>
+
+        <div class="link-groups">
+
+          <div class="link-divider"></div>
+          <section class="link-section appear" aria-labelledby="Projects-title">
+            <h2 id="Projects-title">Projects</h2>
+            <div class="link-row">
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">Placeholder project</span></span></a></div>
+              <div class="dates"><span>Month 2026</span></div>
+
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">Another project</span></span></a></div>
+              <div class="dates"><span>Month 2026</span></div>
+
+              <div class="names"><span class="link-disabled"><span class="link-label">Unreleased thing</span></span></div>
+              <div class="dates"><span>soon</span></div>
+            </div>
+          </section>
+
+          <div class="link-divider"></div>
+          <section class="link-section appear" aria-labelledby="Playground-title">
+            <h2 id="Playground-title">Playground</h2>
+            <div class="link-row">
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">Experiment one</span></span></a></div>
+              <div class="dates"><span>Month 2026</span></div>
+
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">Experiment two</span></span></a></div>
+              <div class="dates"><span>Month 2026</span></div>
+            </div>
+          </section>
+
+          <div class="link-divider"></div>
+          <section class="link-section appear" aria-labelledby="Notes-title">
+            <h2 id="Notes-title">Notes</h2>
+            <div class="link-row">
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">A written note</span></span></a></div>
+              <div class="dates"><span>5 min read</span></div>
+
+              <div class="names"><a href="#"><span class="scramble-text link-label"><span class="scramble-original">Another note</span></span></a></div>
+              <div class="dates"><span>8 min read</span></div>
+            </div>
+          </section>
+
+          <div class="link-divider"></div>
+        </div>
+
+        <section class="connect-section appear" aria-labelledby="Connect-title">
+          <h2 id="Connect-title">Connect</h2>
+          <div class="connect-copy">
+            <p>
+              Reach me at
+              <a href="#">your@email.com</a>
+              <button class="copy-button" type="button" data-copy="your@email.com" aria-label="Copy email address">copy</button>
+            </p>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-banner">
+      <p class="footer-note">PLACEHOLDER — footer line.</p>
+    </div>
+  </footer>
+</main>
+
+<!-- Floating dock: theme toggle + social slots -->
+<div class="floating-dock" role="toolbar" aria-label="Site controls">
+  <button class="floating-dock-icon" id="themeToggle" type="button" aria-label="Toggle colour theme">
+    <svg class="theme-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4"></circle>
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+    </svg>
+  </button>
+  <a class="floating-dock-icon dock-social" href="#" aria-label="Social link one">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle></svg>
+  </a>
+  <a class="floating-dock-icon dock-social" href="#" aria-label="Social link two">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"></rect></svg>
+  </a>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
