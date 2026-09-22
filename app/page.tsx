@@ -69,8 +69,8 @@ export default function Home() {
               <LinkSection
                 title="Projects"
                 rows={[
-                  { name: "Placeholder project", meta: "Month 2026", href: "#" },
-                  { name: "Another project", meta: "Month 2026", href: "#" },
+                  { name: "Placeholder project", meta: "Month 2026", href: "#", external: true },
+                  { name: "Another project", meta: "Month 2026", href: "#", external: true },
                   { name: "Unreleased thing", meta: "soon" },
                 ]}
               />
@@ -79,8 +79,8 @@ export default function Home() {
               <LinkSection
                 title="Playground"
                 rows={[
-                  { name: "Experiment one", meta: "Month 2026", href: "#" },
-                  { name: "Experiment two", meta: "Month 2026", href: "#" },
+                  { name: "Experiment one", meta: "Month 2026", href: "#", external: true },
+                  { name: "Experiment two", meta: "Month 2026", href: "#", external: true },
                 ]}
               />
 
@@ -118,7 +118,7 @@ export default function Home() {
   );
 }
 
-type Row = { name: string; meta: string; href?: string };
+type Row = { name: string; meta: string; href?: string; external?: boolean };
 
 /** A titled group of name/date rows, e.g. Projects or Notes. */
 function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
@@ -131,7 +131,12 @@ function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
           <Fragment key={row.name}>
             <div className="names">
               {row.href ? (
-                <a href={row.href}>
+                <a
+                  href={row.href}
+                  {...(row.external
+                    ? { target: "_blank", rel: "noopener noreferrer" }
+                    : {})}
+                >
                   <span className="scramble-text link-label">
                     <span className="scramble-original">{row.name}</span>
                   </span>

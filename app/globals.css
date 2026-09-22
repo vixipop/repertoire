@@ -140,6 +140,14 @@ body {
 
 .stack { gap: 18px; width: 100%; }
 
+.link-section {
+  flex: none;
+  gap: 14px;          /* space between the h2 and its rows */
+  width: 100%;
+  min-height: 70px;
+  margin-bottom: 24px;
+}
+
 .body-copy {
   flex: none;
   gap: 14px;
@@ -203,21 +211,37 @@ body {
 .information a:hover,
 .information a:focus-visible,
 .connect-copy a:hover,
-.connect-copy a:focus-visible { outline: none; color: var(--accent); }
+.connect-copy a:focus-visible { outline: none; }
 
-/* Underline that stays put while the label scrambles. */
-.information a .link-label::after,
-.connect-copy a .link-label::after {
+/* Underline wipes in from the left on hover — it is not present at rest. */
+.link-label::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -3px;
-  border-bottom: 1px solid currentColor;
-  opacity: .28;
-  transition: opacity .16s;
+  bottom: 0;
+  height: 1px;
+  background: var(--text-strong);
+  transform: scaleX(0);
+  transform-origin: 0;
+  transition: transform .38s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+  backface-visibility: hidden;
+  will-change: transform;
 }
-.information a:hover .link-label::after { opacity: .6; }
+
+.names a:hover .link-label::after,
+.names a:focus-visible .link-label::after,
+.information a:hover .link-label::after,
+.information a:focus-visible .link-label::after,
+.connect-copy a:hover .link-label::after,
+.connect-copy a:focus-visible .link-label::after { transform: scaleX(1); }
+
+/* Keyboard focus gets a heavier rule than hover. */
+a[href]:focus-visible .link-label::after { height: 2px; transform: scaleX(1); }
+
+/* Non-links (e.g. "soon") never underline. */
+.link-disabled .link-label::after { display: none; }
 
 /* ==========================================================================
    Link groups (Projects / Playground / Notes)
@@ -233,8 +257,6 @@ body {
   min-height: 176px;
   padding: 0;
 }
-
-.link-section { width: 100%; }
 
 .link-section h2,
 .connect-section h2 {
@@ -268,7 +290,36 @@ body {
   transition: color .16s;
   position: relative;
 }
-.names a:hover { color: var(--accent); }
+.names a:hover,
+.names a:focus-visible { outline: none; }
+
+/* Arrow shown only on links that open in a new tab. Masked rather than
+   inlined so it inherits the themed --text-strong colour. */
+.names a[target="_blank"]::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 4px;
+  left: calc(100% + 5px);
+  width: 11px;
+  height: 11px;
+  background-color: var(--text-strong);
+  opacity: 0;
+  transform: translate(-3px, 3px);
+  transform-origin: 50%;
+  transition: opacity .24s, transform .42s cubic-bezier(.22, 1, .36, 1);
+  will-change: opacity, transform;
+  -webkit-mask-image: url(/arrow.svg);
+  mask-image: url(/arrow.svg);
+  -webkit-mask-position: 50%;
+  mask-position: 50%;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.names a[target="_blank"]:hover::after,
+.names a[target="_blank"]:focus-visible::after { opacity: .8; transform: translate(0); }
 
 .dates {
   color: var(--text-muted);
