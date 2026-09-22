@@ -1,0 +1,153 @@
+import { Fragment } from "react";
+import CopyButton from "./copy-button";
+
+/**
+ * Homepage.
+ *
+ * Structure and spacing follow the layout system in globals.css. All copy,
+ * project names and dates below are placeholders — swap them for your own.
+ */
+export default function Home() {
+  return (
+    <main className="site">
+      <section className="intro-section">
+        <div className="content">
+          <div className="avatar-wrap appear">
+            <span className="avatar-swap">
+              {/* 40x40. Drop a square image into /public and swap this span for
+                  next/image when you have one. */}
+              <span className="avatar avatar-still" role="img" aria-label="Avatar placeholder" />
+            </span>
+          </div>
+
+          <div className="stack">
+            <div className="body-copy">
+              <div className="greetings appear">
+                <span>hello,</span>
+                <span lang="ja">
+                  こんにちは<span className="greetings-comma">,</span>
+                </span>
+                <span lang="hy">բարև</span>
+              </div>
+
+              <div className="information">
+                <p className="appear">
+                  PLACEHOLDER — one-line introduction goes here, name and what you do.
+                </p>
+                <p className="appear">
+                  PLACEHOLDER — a second line for background or current focus. Keep it to a
+                  sentence or two; the column is intentionally narrow.
+                </p>
+                <p className="appear">
+                  PLACEHOLDER — recent work, with inline links like{" "}
+                  <a href="#">
+                    <span className="scramble-text link-label">
+                      <span className="scramble-original">Project One</span>
+                    </span>
+                  </a>{" "}
+                  and{" "}
+                  <a href="#">
+                    <span className="scramble-text link-label">
+                      <span className="scramble-original">Project Two</span>
+                    </span>
+                  </a>
+                  .
+                </p>
+                <p className="appear">
+                  Explore my{" "}
+                  <a href="#">
+                    <span className="scramble-text link-label">
+                      <span className="scramble-original">Selected work</span>
+                    </span>
+                  </a>
+                </p>
+              </div>
+            </div>
+
+            <div className="link-groups">
+              <div className="link-divider" />
+              <LinkSection
+                title="Projects"
+                rows={[
+                  { name: "Placeholder project", meta: "Month 2026", href: "#" },
+                  { name: "Another project", meta: "Month 2026", href: "#" },
+                  { name: "Unreleased thing", meta: "soon" },
+                ]}
+              />
+
+              <div className="link-divider" />
+              <LinkSection
+                title="Playground"
+                rows={[
+                  { name: "Experiment one", meta: "Month 2026", href: "#" },
+                  { name: "Experiment two", meta: "Month 2026", href: "#" },
+                ]}
+              />
+
+              <div className="link-divider" />
+              <LinkSection
+                title="Notes"
+                rows={[
+                  { name: "A written note", meta: "5 min read", href: "/notes/a-written-note" },
+                  { name: "Another note", meta: "8 min read", href: "/notes/another-note" },
+                ]}
+              />
+
+              <div className="link-divider" />
+            </div>
+
+            <section className="connect-section appear" aria-labelledby="Connect-title">
+              <h2 id="Connect-title">Connect</h2>
+              <div className="connect-copy">
+                <p>
+                  Reach me at <a href="mailto:your@email.com">your@email.com</a>
+                  <CopyButton value="your@email.com" />
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <footer className="footer">
+        <div className="footer-banner">
+          <p className="footer-note">PLACEHOLDER — footer line.</p>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+type Row = { name: string; meta: string; href?: string };
+
+/** A titled group of name/date rows, e.g. Projects or Notes. */
+function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
+  const id = `${title}-title`;
+  return (
+    <section className="link-section appear" aria-labelledby={id}>
+      <h2 id={id}>{title}</h2>
+      <div className="link-row">
+        {rows.map((row) => (
+          <Fragment key={row.name}>
+            <div className="names">
+              {row.href ? (
+                <a href={row.href}>
+                  <span className="scramble-text link-label">
+                    <span className="scramble-original">{row.name}</span>
+                  </span>
+                </a>
+              ) : (
+                <span className="link-disabled">
+                  <span className="link-label">{row.name}</span>
+                </span>
+              )}
+            </div>
+            <div className="dates">
+              <span>{row.meta}</span>
+            </div>
+          </Fragment>
+        ))}
+      </div>
+    </section>
+  );
+}

@@ -12,10 +12,9 @@
   --pink-100: #ffd9eb;
   --accent: var(--pink-400);
 
-  /* "Site Inter" is the reference site's own alias for a self-hosted
-     InterVariable. We alias the CDN Inter to the same name below so this
-     stack resolves identically. */
-  --font-sf: "Site Inter", Inter, -apple-system, BlinkMacSystemFont,
+  /* --font-inter is injected by next/font (self-hosted, no CDN request).
+     Kept under the --font-sf name so the token matches the reference stack. */
+  --font-sf: var(--font-inter), -apple-system, BlinkMacSystemFont,
              "Helvetica Neue", Arial, sans-serif;
 
   /* light */
@@ -54,15 +53,6 @@
   --button-bg-active: #d4d4d4;
   --button-text: #0a0a0a;
   --dock-shadow: none;
-}
-
-/* Alias the CDN Inter to the reference stack's first family name. */
-@font-face {
-  font-family: "Site Inter";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: local("Inter"), local("Inter Variable"), local("InterVariable");
 }
 
 /* ==========================================================================

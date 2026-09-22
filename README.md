@@ -1,20 +1,23 @@
 # Portfolio homepage scaffold
 
-A static rebuild of the single-column portfolio homepage layout. No build step —
-open `index.html` directly, or serve the folder:
+A Next.js (App Router) rebuild of the single-column portfolio homepage layout.
 
 ```bash
-python3 -m http.server 8000
-# http://localhost:8000
+npm install
+npm run dev     # http://localhost:3000
 ```
 
 ## Files
 
 | File | What's in it |
 |---|---|
-| `index.html` | Document structure — section order and element hierarchy |
-| `styles.css` | Design tokens, spacing, type scale, responsive rules |
-| `main.js` | Scramble-on-hover, staggered entrance, theme toggle, copy button |
+| `app/page.tsx` | Homepage — section order and element hierarchy |
+| `app/globals.css` | Design tokens, spacing, type scale, responsive rules |
+| `app/layout.tsx` | Root shell, `next/font` setup, pre-paint theme script |
+| `app/site-behaviour.tsx` | Scramble-on-hover + staggered entrance (client) |
+| `app/dock.tsx` | Floating dock and theme toggle (client) |
+| `app/copy-button.tsx` | Copy-to-clipboard button (client) |
+| `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
 ## What was carried over exactly
 
@@ -61,15 +64,15 @@ contribute to layout height.
 ## Known gaps
 
 **Fonts.** The reference self-hosts a variable Inter under the family name
-`"Site Inter"`. Inter is open source (SIL OFL), so this loads it from Google
-Fonts and aliases it to the same family name, keeping the `--font-sf` stack
-identical. To drop the CDN dependency, self-host `InterVariable.woff2` and
-replace the `@font-face` block in `styles.css`.
+`"Site Inter"`. Inter is open source (SIL OFL), so this uses `next/font/google`,
+which self-hosts it at build time (no runtime CDN request) and exposes it as
+`--font-inter`. `globals.css` feeds that into the `--font-sf` token, so the
+stack resolves the same way.
 
 **Scramble + entrance animations.** Driven by the reference site's compiled
 JavaScript, not its CSS — so these are written from scratch. The behaviour
 matches; exact timing/easing will differ. Tune the constants at the top of each
-block in `main.js`:
+block in `app/site-behaviour.tsx`:
 
 ```js
 var STAGGER_MS = 60;          // entrance stagger
@@ -81,3 +84,9 @@ var REVEAL_PER_FRAME = 0.34;  // scramble resolve speed
 (`.collage-item`, with separate light/dark variants), a footer collage, and a
 dock toast. Those are stubbed out or omitted — the collage in particular needs
 real images and a grid spec to be worth building. Say the word and I'll add it.
+
+**Dependency audit.** `npm audit` reports two transitive `postcss` advisories
+via Next 15. The only clean fix is Next 16, a breaking major, and the advisories
+require attacker-controlled CSS — which doesn't apply to a site whose CSS you
+author yourself. Left on 15 deliberately; upgrade when you're ready to take the
+major.
