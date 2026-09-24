@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ElementType } from "react";
+import StageTuner from "./stage-tuner"; // TEMPORARY — remove with the tuner
 
 const VIEWER_SRC = "https://unpkg.com/@splinetool/viewer@2.0.55/build/spline-viewer.js";
 const SCENE_URL = "https://prod.spline.design/uUFFhtz6UzQYnRGG/scene.splinecode";
@@ -60,6 +61,7 @@ export default function SplineEmbed() {
           {status === "loading" ? "Loading…" : "The 3D scene couldn’t load."}
         </p>
       )}
+      <StageTuner />
     </div>
   );
 }
