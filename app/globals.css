@@ -181,12 +181,19 @@ body {
    3D stage
    ========================================================================== */
 
+/* How far the viewer is grown past the stage, to push Spline's corner badge
+   out of the clipped area. Raise it if any of the pill still shows. */
+.spline-stage { --badge-clip: 96px; }
+
 .spline-stage {
   position: relative;
-  width: 100%;
-  /* Tracks the viewport but never dominates it, and never gets so short on a
-     laptop that the model is a sliver. */
-  height: clamp(260px, 42vh, 420px);
+  /* Breaks out of the 540px text column so the scene has room, while the
+     copy below it keeps the column. Capped so it stays a block on the page
+     rather than going full-bleed. */
+  width: min(1100px, calc(100vw - 48px));
+  margin-left: 50%;
+  transform: translateX(-50%);
+  height: clamp(320px, 52vh, 520px);
   border-radius: 8px;
   overflow: hidden;
   /* A faint plate so the box reads as deliberate while the scene loads. */
@@ -195,7 +202,15 @@ body {
 }
 .spline-stage[data-status="ready"] { background: none; }
 
-.spline-stage spline-viewer { display: block; width: 100%; height: 100%; }
+/* The viewer is taller than its frame and pulled up by half the difference:
+   the scene stays optically centred, and the badge anchored to the viewer's
+   bottom edge falls outside the stage's overflow: hidden. */
+.spline-stage spline-viewer {
+  display: block;
+  width: 100%;
+  height: calc(100% + var(--badge-clip));
+  margin-top: calc(var(--badge-clip) / -2);
+}
 /* The viewer takes pointer gestures on its canvas; keep vertical page
    scrolling working over the top of it. */
 .spline-stage canvas { display: block; touch-action: pan-y !important; }
@@ -212,7 +227,11 @@ body {
 }
 
 @media (max-width: 720px) {
-  .spline-stage { height: clamp(220px, 34vh, 320px); }
+  .spline-stage {
+    width: calc(100vw - 40px); /* matches the column's gutter at this width */
+    height: clamp(240px, 38vh, 380px);
+    --badge-clip: 80px;
+  }
 }
 
 /* ==========================================================================
