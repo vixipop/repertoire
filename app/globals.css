@@ -183,19 +183,20 @@ body {
 
 /* How far the viewer is grown past the stage, to push Spline's corner badge
    out of the clipped area. Raise it if any of the pill still shows. */
-.spline-stage { --badge-clip: 96px; }
+.spline-stage { --badge-clip: 160px; }
 
 .spline-stage {
   position: relative;
   /* Breaks out of the 540px text column so the scene has room, while the
      copy below it keeps the column. Capped so it stays a block on the page
      rather than going full-bleed. */
-  /* --stage-w/--stage-h are set by the temporary tuner; the fallbacks are the
-     real defaults and stay once it's removed. */
-  width: var(--stage-w, min(1100px, calc(100vw - 48px)));
+  /* 968 x 787, sized against the scene by eye. Width clamps on narrow
+     viewports; height is fixed rather than viewport-relative because the
+     scene's own copy needs the room — scaling it crops the text. */
+  width: min(968px, calc(100vw - 48px));
   margin-left: 50%;
   transform: translateX(-50%);
-  height: var(--stage-h, clamp(320px, 52vh, 520px));
+  height: 787px;
   border-radius: 8px;
   overflow: hidden;
   /* A faint plate so the box reads as deliberate while the scene loads. */
@@ -230,80 +231,12 @@ body {
 
 @media (max-width: 720px) {
   .spline-stage {
-    width: var(--stage-w, calc(100vw - 40px)); /* matches the column's gutter */
-    height: var(--stage-h, clamp(240px, 38vh, 380px));
-    --badge-clip: 80px;
+    width: calc(100vw - 40px); /* matches the column's gutter */
+    /* Keep as much of the 787px as the screen allows — the scene's text needs
+       height — without the stage running past a phone viewport. */
+    height: min(787px, 76vh);
+    --badge-clip: 120px;
   }
-}
-
-/* ==========================================================================
-   TEMPORARY — stage tuner. Delete this block along with stage-tuner.tsx once
-   the dimensions are settled.
-   ========================================================================== */
-
-/* Covers the stage so the handles have something to anchor to, but lets
-   pointer events through to the scene except on the controls themselves. */
-.stage-tuner {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.stage-tuner > * { pointer-events: auto; }
-
-.stage-handle {
-  position: absolute;
-  z-index: 5;
-  background: var(--accent);
-  opacity: 0;
-  transition: opacity .16s;
-  touch-action: none;
-}
-.spline-stage:hover .stage-handle { opacity: .5; }
-.stage-handle:hover { opacity: 1 !important; }
-
-.stage-handle-e,
-.stage-handle-w { top: 0; bottom: 0; width: 8px; cursor: ew-resize; }
-.stage-handle-e { right: 0; }
-.stage-handle-w { left: 0; }
-.stage-handle-s { left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
-.stage-handle-se {
-  right: 0;
-  bottom: 0;
-  width: 18px;
-  height: 18px;
-  cursor: nwse-resize;
-  border-radius: 3px 0 0 0;
-}
-
-.stage-readout {
-  position: absolute;
-  z-index: 6;
-  top: 10px;
-  left: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--button-bg);
-  color: var(--button-text);
-  font-family: var(--font-sf);
-  font-size: 12px;
-  line-height: 18px;
-}
-.stage-readout label { display: flex; align-items: center; gap: 6px; }
-.stage-readout input { width: 110px; }
-.stage-readout code { font-size: 12px; }
-.stage-readout-actions { display: flex; gap: 6px; }
-.stage-readout button {
-  padding: 2px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--bg-icon);
-  color: var(--text-strong);
-  font-family: var(--font-sf);
-  font-size: 12px;
-  cursor: pointer;
 }
 
 /* ==========================================================================
