@@ -53,7 +53,11 @@ export default function SplineEmbed() {
   return (
     <div className="spline-stage" data-status={status} ref={hostRef}>
       {status === "ready" && (
-        <SplineViewer url={SCENE_URL} events-target="local" loading-anim-type="none" />
+        // `background="transparent"` clears the scene's own colour so the
+        // page shows through — the viewer parses that keyword to rgba(0,0,0,0)
+        // and its WebGL context is created with alpha, so this composites
+        // properly in both themes rather than baking in one colour.
+        <SplineViewer url={SCENE_URL} background="transparent" loading-anim-type="none" />
       )}
       {status !== "ready" && (
         <p className="spline-fallback">
