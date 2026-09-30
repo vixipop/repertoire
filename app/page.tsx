@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import CopyButton from "./copy-button";
 import Tooltip from "./tooltip";
+import SwanPond from "./swan-pond";
 
 /**
  * Homepage.
@@ -13,6 +14,8 @@ export default function Home() {
     <main className="site">
       <section className="intro-section">
         <div className="content">
+          <SwanPond />
+
           <div className="avatar-wrap appear">
             <span className="avatar-swap">
               {/* 40x40. Drop a square image into /public and swap this span for

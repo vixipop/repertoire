@@ -630,6 +630,44 @@ html.is-theme-switching .theme-toggle-icon {
 .floating-dock-icon:hover { background: var(--bg-icon-hover); }
 
 /* ==========================================================================
+   Swan pond
+   Wider than the text column and centred on it; the edges feather out into
+   the page, so swans leaving the frame dissolve rather than clip.
+   ========================================================================== */
+
+.pond {
+  position: relative;
+  align-self: center;
+  width: min(680px, calc(100vw - 32px));
+  aspect-ratio: 16 / 10;
+  border-radius: 28px;
+  overflow: hidden;
+  background: #2c4e3f; /* shown only if WebGL is unavailable */
+  cursor: pointer;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%);
+  mask-composite: intersect;
+}
+.pond canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+@media (max-width: 720px) {
+  .pond { aspect-ratio: 4 / 3; border-radius: 20px; }
+}
+
+/* ==========================================================================
    Entrance animation
    ========================================================================== */
 

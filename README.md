@@ -17,6 +17,8 @@ npm run dev     # http://localhost:3000
 | `app/site-behaviour.tsx` | Scramble-on-hover + staggered entrance (client) |
 | `app/dock.tsx` | Floating dock and theme toggle (client) |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
+| `app/swan-pond.tsx` | Interactive swan pond above the intro (client) |
+| `app/swan-pond-engine.ts` | Pond engine — WebGL water shader, swan steering and drawing |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
 ## What was carried over exactly
