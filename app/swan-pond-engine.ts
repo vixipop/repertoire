@@ -10,6 +10,8 @@
  * `scale` = actual width / 680, so it behaves identically at any size.
  */
 
+import { makeLook, paintSwan, type Look } from "./swan-paint";
+
 const MAX_RIPPLES = 32;
 const DESIGN_WIDTH = 680;
 const SWAN_COUNT = 3;
@@ -52,6 +54,18 @@ type Swan = {
   lastTrail: number;
   nextRipple: number;
   lastBeat: number;
+  look: Look;
+  turnMul: number; // personality: how tightly this swan likes to turn
+  loopiness: number; // personality: how often it drifts into a loop
+  restless: number; // personality: how often it fusses (dips, preens)
+  bend: number; // neck bend, sprung so it lags and settles
+  bendV: number;
+  swayPhase: number;
+  act: "none" | "dip" | "preen";
+  actT: number;
+  actDur: number;
+  actSide: number;
+  nextAct: number;
 };
 
 /* --------------------------------------------------------------------------
@@ -483,6 +497,8 @@ export function startPond(
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     swanCanvas.width = Math.round(W * dpr);
     swanCanvas.height = Math.round(H * dpr);
+    paint.width = swanCanvas.width;
+    paint.height = swanCanvas.height;
 
     if (hasWater && gl) {
       // the shader is the heavy part; cap its resolution a little lower
@@ -545,8 +561,8 @@ export function startPond(
       h: rand(-Math.PI, Math.PI),
       w: 0,
       v: 0,
-      size: [1.06, 0.94, 1][i % 3],
-      pace: rand(0.85, 1.1),
+      size: [1.08, 0.93, 1][i % 3] * rand(0.97, 1.03),
+      pace: [0.9, 1.08, 0.97][i % 3] * rand(0.95, 1.05),
       state: "glide",
       tx: 0,
       ty: 0,
@@ -571,6 +587,18 @@ export function startPond(
       lastTrail: 0,
       nextRipple: rand(0, 2),
       lastBeat: 0,
+      look: makeLook(i),
+      turnMul: [0.85, 1.15, 1][i % 3],
+      loopiness: [0.05, 0.02, 0.035][i % 3],
+      restless: [0.7, 1, 1.4][i % 3],
+      bend: 0,
+      bendV: 0,
+      swayPhase: rand(0, 10),
+      act: "none",
+      actT: 0,
+      actDur: 0,
+      actSide: 1,
+      nextAct: rand(4, 12),
     };
     s.v = glideSpeed(s);
     pickWaypoint(s);
@@ -664,6 +692,19 @@ export function startPond(
   host.addEventListener("pointerleave", onLeave);
   host.addEventListener("pointerdown", onDown);
 
+  const actionEnvelope = (s: Swan) => {
+    if (s.act === "none") return 0;
+    const u = clamp(s.actT / s.actDur, 0, 1);
+    // ease in, hold, ease out
+    return smooth(clamp(u / 0.25, 0, 1)) * smooth(clamp((1 - u) / 0.25, 0, 1));
+  };
+
+  const headWorld = (s: Swan) => {
+    const sz = L * s.size;
+    const reach = 0.2 + s.look.neckLen * 1.1;
+    return { hx: s.x + Math.cos(s.h) * reach * sz, hy: s.y + Math.sin(s.h) * reach * sz };
+  };
+
   /* ---------- simulation ---------- */
 
   const update = (s: Swan, dt: number) => {
@@ -697,11 +738,12 @@ export function startPond(
       s.tx = s.x + (bx / bl) * (W + H);
       s.ty = s.y + (by / bl) * (W + H);
       s.headYawTarget = 0;
+      s.act = "none";
       if (Math.random() < 0.6) startFlap(s, true);
     }
 
     let vTarget = glideSpeed(s);
-    let maxTurn = 0.36;
+    let maxTurn = 0.36 * s.turnMul;
     let angAcc = 0.45;
     let accel = 0.8;
     let loopOverride: number | null = null;
@@ -737,7 +779,7 @@ export function startPond(
           s.loopTime -= dt;
           loopOverride = s.loopDir * maxTurn * 0.85;
         }
-      } else if (!edge && Math.random() < dt * 0.035) {
+      } else if (!edge && s.act === "none" && Math.random() < dt * s.loopiness) {
         const rad = s.v / (maxTurn * 0.85);
         const dir = Math.random() < 0.5 ? -1 : 1;
         const cx = s.x - dirY * dir * rad;
@@ -750,9 +792,19 @@ export function startPond(
       }
 
       s.nextFlap -= dt;
-      if (s.nextFlap <= 0) {
+      if (s.nextFlap <= 0 && s.act === "none") {
         startFlap(s, false);
         s.nextFlap = rand(10, 24);
+      }
+
+      // small private habits: dipping for weed, preening a wing
+      s.nextAct -= dt * s.restless;
+      if (s.nextAct <= 0 && s.act === "none" && s.flapT < 0) {
+        s.act = Math.random() < 0.55 ? "dip" : "preen";
+        s.actT = 0;
+        s.actDur = s.act === "dip" ? rand(2.2, 3.6) : rand(2.6, 4.2);
+        s.actSide = Math.random() < 0.5 ? -1 : 1;
+        s.nextAct = rand(7, 16);
       }
     } else if (s.state === "flee") {
       vTarget = glideSpeed(s) * 2.3;
@@ -785,9 +837,10 @@ export function startPond(
       const ox = s.x - o.x;
       const oy = s.y - o.y;
       const od = Math.hypot(ox, oy);
-      const R = 2.5 * L;
+      // open wings need more room
+      const R = (3 + (flapSpread(s) + flapSpread(o)) * 0.8) * L;
       if (od > 0 && od < R) {
-        const f = ((R - od) / R) * 1.8;
+        const f = ((R - od) / R) * 2.6;
         wantX += (ox / od) * f;
         wantY += (oy / od) * f;
       }
@@ -808,6 +861,9 @@ export function startPond(
         s.loopTime = 0;
       }
     }
+
+    const actEnv = actionEnvelope(s);
+    if (s.act !== "none") vTarget *= 1 - actEnv * (s.act === "dip" ? 0.6 : 0.45);
 
     // flapping pushes them along a little
     const spread = flapSpread(s);
@@ -851,6 +907,26 @@ export function startPond(
     }
     if (fleeing) s.headYawTarget = 0;
     s.headYaw += (s.headYawTarget - s.headYaw) * (1 - Math.exp(-dt * 1.6));
+
+    if (s.act !== "none") {
+      const before = actionEnvelope(s);
+      s.actT += dt;
+      const after = actionEnvelope(s);
+      if (s.act === "dip" && ((before < 0.5 && after >= 0.5) || (before > 0.5 && after <= 0.5))) {
+        const { hx, hy } = headWorld(s);
+        addRipple(hx, hy, 0.24);
+      }
+      if (s.actT >= s.actDur) s.act = "none";
+    }
+
+    // the neck is sprung: it leans into turns, overshoots a touch and settles
+    const env = actionEnvelope(s);
+    let bendTarget = s.w * 1.1 + s.headYaw * 0.6 + Math.sin(clock * 0.37 + s.swayPhase) * 0.1;
+    if (s.act === "preen") bendTarget = bendTarget * (1 - env) + s.actSide * 2.3 * env;
+    if (s.act === "dip") bendTarget *= 1 - env * 0.8;
+    const k = 9;
+    s.bendV += (k * (bendTarget - s.bend) - 2 * Math.sqrt(k) * 0.75 * s.bendV) * dt;
+    s.bend += s.bendV * dt;
 
     if (clock - s.lastTrail > 0.09) {
       s.trail.push({ x: s.x, y: s.y, h: s.h, v: s.v, t: clock });
@@ -927,243 +1003,50 @@ export function startPond(
   // light comes from the top-left in world space
   const LIGHT = { x: -0.55, y: -0.83 };
 
-  const drawSwan = (s: Swan) => {
+  // swans are painted to their own layer so a paper grain can sit on them alone
+  const paint = document.createElement("canvas");
+  const pctx = paint.getContext("2d")!;
+  const grain = (() => {
+    const g = document.createElement("canvas");
+    g.width = g.height = 160;
+    const gc = g.getContext("2d")!;
+    const r = mulberry32(11);
+    for (let i = 0; i < 2600; i++) {
+      const dark = r() > 0.45;
+      gc.fillStyle = dark ? `rgba(60,70,64,${0.25 + r() * 0.4})` : `rgba(255,255,250,${0.3 + r() * 0.5})`;
+      const sz = 0.6 + r() * 1.4;
+      gc.fillRect(r() * 160, r() * 160, sz, sz);
+    }
+    return pctx.createPattern(g, "repeat");
+  })();
+
+  const drawSwan = (target: CanvasRenderingContext2D, s: Swan) => {
     const sz = L * s.size;
     const speedRatio = s.v / L;
     const sway = Math.sin(s.paddle) * 0.018 * Math.min(speedRatio, 2);
     const rot = s.h + sway;
-    const px = 1 / sz; // one CSS pixel in local units
-
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(rot);
-    ctx.scale(sz, sz);
-
-    // light direction in local space
-    const lx = LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot);
-    const ly = LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot);
-    const shadeGrad = (r: number, cx = 0, cy = 0) => {
-      const g = ctx.createLinearGradient(cx + lx * r, cy + ly * r, cx - lx * r, cy - ly * r);
-      g.addColorStop(0, "#ffffff");
-      g.addColorStop(0.55, "#f3f5f2");
-      g.addColorStop(1, "#cfd6d0");
-      return g;
-    };
-    const outline = "rgba(20,45,35,0.22)";
-
-    // feet, paddling under water
-    const footA = clamp(speedRatio * 0.5, 0.12, 0.45);
-    for (const side of [1, -1]) {
-      const ph = s.paddle + (side > 0 ? 0 : Math.PI);
-      const fx = -0.28 + Math.sin(ph) * 0.07;
-      const fy = side * 0.17;
-      ctx.fillStyle = `rgba(20,24,22,${footA})`;
-      ctx.beginPath();
-      ctx.moveTo(fx + 0.1, fy * 0.8);
-      ctx.lineTo(fx - 0.12, fy + side * 0.1 * (0.6 + 0.4 * Math.cos(ph)));
-      ctx.lineTo(fx - 0.12, fy - side * 0.03);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // tail — the jiggle lives here
-    const jig = Math.sin(s.tailPhase) * s.tailAmp + Math.sin(s.tailPhase * 2.3 + 1) * s.tailAmp * 0.3;
-    ctx.save();
-    ctx.translate(-0.47, 0);
-    ctx.rotate(jig);
-    for (const [ang, len] of [
-      [0.32, 0.15],
-      [-0.32, 0.15],
-      [0.14, 0.2],
-      [-0.14, 0.2],
-      [0, 0.23],
-    ] as const) {
-      const a = ang * (1 + s.tailAmp * 1.5);
-      const ex = -Math.cos(a) * len;
-      const ey = Math.sin(a) * len;
-      const nx = -Math.sin(a) * 0.045;
-      const ny = -Math.cos(a) * 0.045;
-      ctx.fillStyle = shadeGrad(0.2);
-      ctx.strokeStyle = outline;
-      ctx.lineWidth = px;
-      ctx.beginPath();
-      ctx.moveTo(nx * 0.5, ny * 0.5);
-      ctx.quadraticCurveTo(ex * 0.5 + nx, ey * 0.5 + ny, ex, ey);
-      ctx.quadraticCurveTo(ex * 0.5 - nx, ey * 0.5 - ny, -nx * 0.5, -ny * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // body
-    ctx.fillStyle = shadeGrad(0.4);
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = px;
-    ctx.beginPath();
-    ctx.moveTo(0.44, 0);
-    ctx.bezierCurveTo(0.44, 0.19, 0.18, 0.26, -0.04, 0.26);
-    ctx.bezierCurveTo(-0.3, 0.25, -0.5, 0.15, -0.55, 0);
-    ctx.bezierCurveTo(-0.5, -0.15, -0.3, -0.25, -0.04, -0.26);
-    ctx.bezierCurveTo(0.18, -0.26, 0.44, -0.19, 0.44, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // wings
-    const spread = flapSpread(s);
-    for (const side of [1, -1]) {
-      const theta = spread * 1.45;
-      const len = 0.68 + spread * 0.8;
-      const cw = 0.19 + spread * 0.07;
-      ctx.save();
-      ctx.translate(0.2, side * 0.09);
-      ctx.rotate(-side * theta);
-      // local wing frame: backward = -x, outward = side * y
-      const P = (b: number, o: number): [number, number] => [-b, side * o];
-
-      ctx.fillStyle = shadeGrad(0.35, -len * 0.5, side * cw * 0.3);
-      ctx.strokeStyle = "rgba(20,45,35,0.14)";
-      ctx.lineWidth = px;
-      ctx.beginPath();
-      ctx.moveTo(...P(0, 0));
-      ctx.bezierCurveTo(...P(0.2 * len, cw * 1.15), ...P(0.62 * len, cw * 1.0), ...P(len, cw * 0.28));
-      // trailing edge: scalloped feather tips back to the shoulder
-      const tips = 6;
-      for (let i = 1; i <= tips; i++) {
-        const u = 1 - i / (tips + 1);
-        const b = u * len;
-        const o = -0.045 + (1 - u) * 0.02;
-        const next = P(b, o);
-        // folded, the tips lie flat; opened, each primary shows
-        const ctl = P(b + len * 0.11, o - 0.012 - spread * 0.045);
-        ctx.quadraticCurveTo(ctl[0], ctl[1], next[0], next[1]);
-      }
-      ctx.quadraticCurveTo(...P(0.02, -0.04), ...P(0, 0));
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // feather lines
-      ctx.strokeStyle = `rgba(40,60,50,${0.03 + spread * 0.12})`;
-      ctx.lineWidth = px * 0.9;
-      for (let i = 1; i <= 4; i++) {
-        const u = 0.35 + i * 0.13;
-        ctx.beginPath();
-        ctx.moveTo(...P(u * len * 0.7, cw * 0.7));
-        ctx.lineTo(...P(u * len, -0.02));
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // neck — bends into the turn, stretches when fleeing
+    const env = actionEnvelope(s);
     const fleeing = s.state === "flee";
-    const bend = clamp(s.w * 0.9 + s.headYaw * 0.55, -0.9, 0.9);
-    const nl = fleeing ? 0.42 : 0.36;
-    const bx = 0.2;
-    const hx = bx + Math.cos(bend) * nl;
-    const hy = Math.sin(bend) * nl;
-    const cx = bx + 0.26;
-    const cy = 0;
-    const pts: Array<[number, number, number]> = [];
-    const N = 9;
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const x = (1 - t) * (1 - t) * bx + 2 * (1 - t) * t * cx + t * t * hx;
-      const y = (1 - t) * (1 - t) * 0 + 2 * (1 - t) * t * cy + t * t * hy;
-      pts.push([x, y, 0.125 - 0.06 * Math.sqrt(t)]);
-    }
-    const left: Array<[number, number]> = [];
-    const right: Array<[number, number]> = [];
-    for (let i = 0; i <= N; i++) {
-      const a = pts[Math.max(0, i - 1)];
-      const b = pts[Math.min(N, i + 1)];
-      const tx = b[0] - a[0];
-      const ty = b[1] - a[1];
-      const tl = Math.hypot(tx, ty) || 1;
-      const nx = -ty / tl;
-      const ny = tx / tl;
-      left.push([pts[i][0] + nx * pts[i][2], pts[i][1] + ny * pts[i][2]]);
-      right.push([pts[i][0] - nx * pts[i][2], pts[i][1] - ny * pts[i][2]]);
-    }
-    // soft breast where the neck rises out of the body — no outline, so the
-    // join reads as one continuous form over the wing shoulders
-    ctx.fillStyle = shadeGrad(0.4);
-    ctx.beginPath();
-    ctx.ellipse(0.27, 0, 0.17, 0.165, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = shadeGrad(0.4);
-    ctx.beginPath();
-    ctx.moveTo(left[0][0], left[0][1]);
-    for (const p of left) ctx.lineTo(p[0], p[1]);
-    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i][0], right[i][1]);
-    ctx.closePath();
-    ctx.fill();
-    // outline only the upper neck; the lower part melts into the breast
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = px;
-    for (const edge of [left, right]) {
-      ctx.beginPath();
-      ctx.moveTo(edge[4][0], edge[4][1]);
-      for (let i = 5; i < edge.length; i++) ctx.lineTo(edge[i][0], edge[i][1]);
-      ctx.stroke();
-    }
 
-    // head + beak
-    const ha = bend * 1.25 + s.headYaw * 0.4;
-    ctx.save();
-    ctx.translate(hx, hy);
-    ctx.rotate(ha);
-    ctx.fillStyle = shadeGrad(0.1);
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = px;
-    ctx.beginPath();
-    ctx.ellipse(0.015, 0, 0.115, 0.082, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // black facial mask + knob
-    ctx.fillStyle = "#1c1d1b";
-    ctx.beginPath();
-    ctx.ellipse(0.105, 0, 0.04, 0.052, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // beak
-    ctx.fillStyle = "#e9763c";
-    ctx.beginPath();
-    ctx.moveTo(0.105, 0.038);
-    ctx.quadraticCurveTo(0.23, 0.032, 0.285, 0.009);
-    ctx.quadraticCurveTo(0.296, 0, 0.285, -0.009);
-    ctx.quadraticCurveTo(0.23, -0.032, 0.105, -0.038);
-    ctx.closePath();
-    ctx.fill();
-    // highlight along the ridge
-    ctx.strokeStyle = "rgba(255,200,160,0.55)";
-    ctx.lineWidth = px * 1.1;
-    ctx.beginPath();
-    ctx.moveTo(0.14, 0);
-    ctx.lineTo(0.26, 0);
-    ctx.stroke();
-    // nail
-    ctx.fillStyle = "#2a2622";
-    ctx.beginPath();
-    ctx.ellipse(0.28, 0, 0.015, 0.011, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // knob on top
-    ctx.fillStyle = "#151614";
-    ctx.beginPath();
-    ctx.ellipse(0.115, 0, 0.03, 0.021, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // eyes
-    ctx.fillStyle = "#0d0d0c";
-    for (const side of [1, -1]) {
-      ctx.beginPath();
-      ctx.arc(0.055, side * 0.066, 0.012, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    ctx.restore();
+    target.save();
+    target.translate(s.x, s.y);
+    target.rotate(rot);
+    target.scale(sz, sz);
+    paintSwan(target, s.look, {
+      spread: flapSpread(s),
+      jig: Math.sin(s.tailPhase) * s.tailAmp + Math.sin(s.tailPhase * 2.3 + 1) * s.tailAmp * 0.3,
+      tailAmp: s.tailAmp,
+      paddle: s.paddle,
+      speedRatio,
+      bend: clamp(s.bend, -2.5, 2.5),
+      headTurn: s.headYaw * 0.4 + (s.act === "preen" ? Math.sin(s.actT * 9) * 0.16 * env : 0),
+      stretch: (fleeing ? 1.15 : 1) + (s.act === "dip" ? env * 0.22 : 0) + Math.sin(s.paddle * 2) * 0.015,
+      sink: s.act === "dip" ? clamp((env - 0.35) / 0.45, 0, 1) : 0,
+      lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
+      ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
+      px: 1 / sz,
+    });
+    target.restore();
   };
 
   /* ---------- loop ---------- */
@@ -1206,7 +1089,19 @@ export function startPond(
     for (const s of live) drawShadow(s);
     // draw back-to-front so overlapping swans stack sensibly
     live.sort((a, b) => a.y - b.y);
-    for (const s of live) drawSwan(s);
+    pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pctx.globalCompositeOperation = "source-over";
+    pctx.globalAlpha = 1;
+    pctx.clearRect(0, 0, W, H);
+    for (const s of live) drawSwan(pctx, s);
+    if (grain) {
+      pctx.globalCompositeOperation = "source-atop";
+      pctx.globalAlpha = 0.16;
+      pctx.fillStyle = grain;
+      pctx.fillRect(0, 0, W, H);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(paint, 0, 0);
 
     scheduleFromFrame();
   };
