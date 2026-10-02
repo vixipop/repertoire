@@ -39,6 +39,10 @@ export type PondParams = {
 
 export const PRESETS: Array<{ name: string; params: PondParams }> = [
   {
+    name: "Signature",
+    params: { waterHue: 186, waterSat: 0.88, waterDepth: 0.95, waterLight: 0.9, swanHue: 30, swanTint: 0.16, glow: 0.37, paint: 0.8, brush: 0.05, bloom: 0.3 },
+  },
+  {
     name: "Giverny",
     params: { waterHue: 166, waterSat: 0.52, waterDepth: 0.48, waterLight: 0.68, swanHue: 42, swanTint: 0.06, glow: 0.4, paint: 0.7, brush: 0.45, bloom: 0.45 },
   },
@@ -278,6 +282,7 @@ uniform float uMurk;
 uniform float uLight;
 uniform float uGlow;
 uniform float uTintAmt;
+uniform sampler2D uCanopy;
 uniform vec3 uReflSky;
 uniform vec3 uReflTree;
 uniform float uRefl;
@@ -361,6 +366,41 @@ vec3 bedAt(vec2 p, float blur) {
   return c;
 }
 
+float canopyA(vec2 p) {
+  return texture2D(uCanopy, clamp(p / uRes, 0.0, 1.0)).a;
+}
+
+// The canopy's silhouette, thrown down-right across the water by the sun.
+float canopyShadow(vec2 p, float depth) {
+  vec2 q = p - vec2(0.55, 0.83) * (34.0 + 26.0 * depth) * uScale;
+  float r = (5.0 + 6.0 * depth) * uScale;
+  float a = canopyA(q) * 0.2;
+  for (int i = 0; i < 8; i++) {
+    float an = float(i) * 0.785398 + 0.2;
+    a += canopyA(q + vec2(cos(an), sin(an)) * r) * 0.1;
+  }
+  return a;
+}
+
+// Shafts of sun slanting down through gaps in the leaves.
+float sunbeams(vec2 p, float t) {
+  vec2 dir = normalize(vec2(0.55, 0.83));
+  vec2 perp = vec2(-dir.y, dir.x);
+  float across = dot(p, perp) / (26.0 * uScale);
+  float along = dot(p, dir) / uRes.y;
+  float streak = smoothstep(0.55, 0.95, noise(vec2(across, t * 0.04)));
+  streak *= 0.6 + 0.4 * noise(vec2(across * 2.7 + 3.0, t * 0.07));
+  // trace back toward the sun: lit only where that path met leaves with a gap
+  float near = canopyA(p - dir * 70.0 * uScale);
+  float wide = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float an = float(i) * 1.5708;
+    wide += canopyA(p - dir * 70.0 * uScale + vec2(cos(an), sin(an)) * 30.0 * uScale) * 0.25;
+  }
+  float gap = smoothstep(0.05, 0.35, wide) * (1.0 - near * 0.8);
+  return streak * gap * exp(-along * 1.4);
+}
+
 vec4 swanTex(vec2 p) {
   return texture2D(uSwans, clamp(p / uRes, 0.0, 1.0));
 }
@@ -439,7 +479,10 @@ void main() {
   bed = bed * (1.0 - wd.a) + wd.rgb;
 
   float sh = swanShadow(p + off * 0.4, depth);
-  float dap = shade(p + off * 0.5, uTime);
+  float dap = shade(p + off * 0.5, uTime) * 0.55;
+  float csh = canopyShadow(p + off * 0.4, depth);
+  dap = clamp(dap + csh * 0.9, 0.0, 1.0);
+  float beams = sunbeams(p, uTime);
 
   vec2 cp = (p + off * 2.0) / (300.0 * uScale);
   float ca = caustic(cp, uTime * 0.3 + 23.0);
@@ -467,6 +510,11 @@ void main() {
   col += uSky * smoothstep(0.6, 1.0, lit) * (1.0 - dap) * 0.3;
   col += uSky * 0.07 * smoothstep(0.35, 1.0, vUv.y);
 
+  // sun shafts warm the water and kindle the caustics where they land
+  vec3 sun = vec3(1.0, 0.93, 0.74);
+  col += sun * beams * 0.38 * uLight;
+  col *= 1.0 - csh * 0.22;
+
   // swans and leaves: softened, tinted, glowing onto the water around them
   vec4 sw = swanSoft(p);
   float halo = swanHalo(p);
@@ -476,6 +524,12 @@ void main() {
   vec3 glowCol = mix(vec3(1.0, 0.98, 0.94), uTint, 0.35 + uTintAmt);
   col += glowCol * halo * uGlow * 0.6 * (1.0 - sw.a);
   col = col * (1.0 - sw.a) + srgb * (1.0 + uGlow * 0.12);
+
+  // overhanging vines, nearest the eye: backlit where the sun comes through
+  vec4 cv = texture2D(uCanopy, clamp(p / uRes, 0.0, 1.0));
+  vec3 crgb = cv.rgb * (0.55 + 0.6 * uLight);
+  crgb += cv.a * vec3(0.16, 0.2, 0.04) * beams * uLight;
+  col = col * (1.0 - cv.a) + crgb;
 
   vec2 v = vUv - 0.5;
   col *= 1.0 - dot(v, v) * 0.5;
@@ -862,6 +916,8 @@ export function startPond(
   const weeds = document.createElement("canvas");
   const wctx = weeds.getContext("2d")!;
   const surf = document.createElement("canvas"); // wake height map
+  const canopy = document.createElement("canvas"); // overhanging vines
+  const cctx = canopy.getContext("2d")!;
   const sctx = surf.getContext("2d")!;
 
   /* ---------- WebGL ---------- */
@@ -877,6 +933,7 @@ export function startPond(
   let tSwans: WebGLTexture | null = null;
   let tSurf: WebGLTexture | null = null;
   let tScene: WebGLTexture | null = null;
+  let tCanopy: WebGLTexture | null = null;
   let fbo: WebGLFramebuffer | null = null;
 
   if (gl) {
@@ -889,7 +946,7 @@ export function startPond(
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf"]) {
+      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy"]) {
         wu[n] = gl.getUniformLocation(waterProg, n);
       }
       for (const n of ["uRes", "uTime", "uScale", "uScene", "uSwans", "uPaint", "uBrush", "uBloom"]) {
@@ -900,6 +957,7 @@ export function startPond(
       tSwans = makeTexture(gl);
       tSurf = makeTexture(gl);
       tScene = makeTexture(gl);
+      tCanopy = makeTexture(gl);
       fbo = gl.createFramebuffer();
     } catch (err) {
       console.warn("[swan-pond] shaders unavailable, using flat water", err);
@@ -995,6 +1053,183 @@ export function startPond(
     }
   };
 
+  /* ---------- overhanging vines ---------- */
+
+  type VLeaf = { t: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
+  type Vine = {
+    kind: "hang" | "rope";
+    ax: number;
+    ay: number;
+    pts: Array<[number, number]>; // rope only: fixed path
+    ang: number;
+    len: number;
+    phase: number;
+    leaves: VLeaf[];
+  };
+  let vines: Vine[] = [];
+  let crown: Array<VLeaf & { x: number; y: number }> = [];
+
+  const leafColour = (r: () => number) => {
+    const h = 88 + r() * 40;
+    const sat = 30 + r() * 25;
+    const l = 20 + r() * 22;
+    return { col: `hsl(${h} ${sat}% ${l}%)`, hi: `hsl(${h - 6} ${sat + 8}% ${l + 12}%)` };
+  };
+
+  const buildVines = () => {
+    const r = mulberry32(31);
+    vines = [];
+    const leavesAlong = (n: number, size: number): VLeaf[] =>
+      Array.from({ length: n }, (_, i) => ({
+        t: (i + 0.3 + r() * 0.4) / n,
+        side: i % 2 ? 1 : -1,
+        r: size * (0.75 + r() * 0.5) * scale,
+        rot: (r() - 0.5) * 0.8,
+        flutter: r() * 10,
+        ...leafColour(r),
+      }));
+
+    // a rope of vine along the top edge, sagging between holds
+    const top: Array<[number, number]> = [];
+    for (let i = 0; i <= 24; i++) {
+      const u = i / 24;
+      top.push([(-0.04 + u * 1.08) * W, (0.045 + Math.sin(u * Math.PI * 2.2 + 0.4) * 0.018 + Math.sin(u * 9) * 0.006) * H]);
+    }
+    vines.push({ kind: "rope", ax: 0, ay: 0, pts: top, ang: 0, len: 0, phase: 0, leaves: leavesAlong(95, 5.4) });
+    // and one tumbling down the right-hand side
+    const right: Array<[number, number]> = [];
+    for (let i = 0; i <= 20; i++) {
+      const u = i / 20;
+      right.push([(0.955 + Math.sin(u * 7 + 1) * 0.012) * W, (0.03 + u * 0.82) * H]);
+    }
+    vines.push({ kind: "rope", ax: 0, ay: 0, pts: right, ang: 0, len: 0, phase: 1, leaves: leavesAlong(60, 5) });
+
+    // strands hanging from the top rope; longest near the corners
+    const anchors = [0.06, 0.13, 0.22, 0.34, 0.47, 0.62, 0.74, 0.83, 0.9];
+    for (const ax of anchors) {
+      const corner = Math.min(ax, 1 - ax);
+      const len = (0.1 + (0.5 - corner) * 0.36 + r() * 0.08) * H;
+      vines.push({
+        kind: "hang",
+        ax: ax * W,
+        ay: (0.05 + Math.sin(ax * Math.PI * 2.2 + 0.4) * 0.018) * H,
+        pts: [],
+        ang: Math.PI / 2 + (r() - 0.5) * 0.3,
+        len,
+        phase: r() * 10,
+        leaves: leavesAlong(Math.round(len / (6 * scale)), 4.6),
+      });
+    }
+
+    // a tree's crown leaning in over the top-left corner
+    crown = [];
+    for (let i = 0; i < 150; i++) {
+      const a = r() * Math.PI * 0.5;
+      const rr = Math.sqrt(r());
+      const x = (-0.03 + Math.cos(a) * rr * 0.24) * W;
+      const y = (-0.04 + Math.sin(a) * rr * 0.3) * H;
+      crown.push({ x, y, t: 0, side: 1, r: (5 + r() * 4) * scale, rot: Math.PI * 0.25 + (r() - 0.5) * 2.4, flutter: r() * 10, ...leafColour(r) });
+    }
+  };
+
+  const drawVineLeaf = (x: number, y: number, l: VLeaf, rot: number) => {
+    const k = canopy.width / W;
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
+    const r = l.r;
+    const st = r * 0.55; // petiole
+    cctx.strokeStyle = "rgba(48,60,30,0.85)";
+    cctx.lineWidth = 0.7 * scale;
+    cctx.beginPath();
+    cctx.moveTo(0, 0);
+    cctx.lineTo(st, 0);
+    cctx.stroke();
+    // ivy-ish leaf: notched base, broad shoulders, pointed tip
+    const half = (side: number) => {
+      cctx.beginPath();
+      cctx.moveTo(st, 0);
+      cctx.bezierCurveTo(st - r * 0.2, side * r * 0.75, st + r * 0.9, side * r * 1.0, st + r * 1.4, side * r * 0.45);
+      cctx.quadraticCurveTo(st + r * 1.75, side * r * 0.18, st + r * 2.05, 0);
+      cctx.lineTo(st + r * 0.15, 0);
+      cctx.closePath();
+    };
+    cctx.fillStyle = l.hi;
+    half(-1);
+    cctx.fill();
+    cctx.fillStyle = l.col;
+    half(1);
+    cctx.fill();
+    cctx.strokeStyle = "rgba(18,34,16,0.4)";
+    cctx.lineWidth = 0.5 * scale;
+    cctx.beginPath();
+    cctx.moveTo(st, 0);
+    cctx.lineTo(st + r * 1.8, 0);
+    cctx.stroke();
+  };
+
+  const drawVines = () => {
+    const k = canopy.width / W;
+    cctx.setTransform(1, 0, 0, 1, 0, 0);
+    cctx.clearRect(0, 0, canopy.width, canopy.height);
+    const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
+
+    const stem = (pts: Array<[number, number]>, w: number) => {
+      cctx.setTransform(k, 0, 0, k, 0, 0);
+      cctx.strokeStyle = "rgba(62,58,34,0.9)";
+      cctx.lineWidth = w * scale;
+      cctx.lineCap = "round";
+      cctx.beginPath();
+      pts.forEach((q, i) => (i ? cctx.lineTo(q[0], q[1]) : cctx.moveTo(q[0], q[1])));
+      cctx.stroke();
+    };
+    const along = (pts: Array<[number, number]>, t: number) => {
+      const f = t * (pts.length - 1);
+      const i = Math.min(pts.length - 2, Math.floor(f));
+      const u = f - i;
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[i + 1];
+      return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u, a: Math.atan2(y1 - y0, x1 - x0) };
+    };
+
+    for (const v of vines) {
+      let pts = v.pts;
+      if (v.kind === "hang") {
+        // a pendulum that bends more toward its free end
+        pts = [];
+        let x = v.ax;
+        let y = v.ay;
+        let a = v.ang;
+        const segs = 10;
+        for (let i = 0; i <= segs; i++) {
+          pts.push([x, y]);
+          const u = i / segs;
+          a += (Math.sin(clock * 0.55 + v.phase - u * 1.6) * 0.035 + breeze * 0.012) * (0.3 + u);
+          x += Math.cos(a) * (v.len / segs);
+          y += Math.sin(a) * (v.len / segs);
+        }
+      } else {
+        const wob = 1.2 * scale;
+        pts = v.pts.map(([x, y], i) => [x + Math.sin(clock * 0.4 + i * 0.6 + v.phase) * wob * 0.4, y + Math.sin(clock * 0.5 + i * 0.7 + v.phase) * wob]);
+      }
+      stem(pts, v.kind === "rope" ? 2.6 : 1.3);
+      for (const l of v.leaves) {
+        const q = along(pts, l.t);
+        const flutter = Math.sin(clock * 1.7 + l.flutter) * 0.12 + breeze * 0.05;
+        // leaves splay out from the stem, then droop toward the water
+        let la = q.a + l.side * (0.9 + l.rot * 0.6) + flutter;
+        la += wrapAngle(Math.PI / 2 - la) * 0.45;
+        drawVineLeaf(q.x, q.y, l, la);
+      }
+    }
+    for (const l of crown) {
+      const flutter = Math.sin(clock * 1.3 + l.flutter) * 0.1 + breeze * 0.06;
+      const dx = Math.sin(clock * 0.5 + l.flutter) * 0.8 * scale;
+      drawVineLeaf(l.x + dx, l.y, l, l.rot + flutter);
+    }
+    cctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
   /* ---------- sizing ---------- */
 
   const sizeLayers = () => {
@@ -1002,6 +1237,8 @@ export function startPond(
     paint.height = Math.round(H * (hasGL ? wd : dpr));
     weeds.width = Math.round(W * 0.75);
     weeds.height = Math.round(H * 0.75);
+    canopy.width = Math.round(W * Math.min(wd, 1));
+    canopy.height = Math.round(H * Math.min(wd, 1));
     surf.width = Math.round(W * 0.5);
     surf.height = Math.round(H * 0.5);
     if (hasGL && gl) {
@@ -1045,6 +1282,7 @@ export function startPond(
     swanCanvas.height = Math.round(H * dpr);
     sizeLayers();
     buildWeeds();
+    buildVines();
     if (hasGL && gl) {
       gl.bindTexture(gl.TEXTURE_2D, tBed);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, paintBed(W, H, scale));
@@ -1146,8 +1384,16 @@ export function startPond(
   for (let i = 0; i < SWAN_COUNT; i++) swans.push(makeSwan(i));
   for (const s of swans) pickWaypoint(s);
 
+  const nearestOther = (s: Swan) => {
+    let d = Infinity;
+    for (const o of swans) if (o !== s && o.state !== "away") d = Math.min(d, Math.hypot(o.x - s.x, o.y - s.y));
+    return d;
+  };
+
   const startFlap = (s: Swan, quick: boolean) => {
     if (s.flapT >= 0) return;
+    // a swan needs elbow room to open its wings
+    if (nearestOther(s) < 3.4 * L * s.size) return;
     s.flapT = 0;
     s.flapDur = quick ? rand(1.1, 1.4) : rand(1.8, 2.6);
     s.flapBeats = quick ? 3 : Math.random() < 0.35 ? 1 : rand(2, 4);
@@ -1487,7 +1733,7 @@ export function startPond(
       const cy = ry + vy * tc;
       const cd = Math.hypot(cx, cy);
       const span = (s.size + o.size) / 2;
-      const safe = (2.0 + (flapSpread(s) + flapSpread(o)) * 0.9) * L * span;
+      const safe = 2.0 * L * span;
       if (cd < safe) {
         const u = (1 - cd / safe) * (1 - tc / 4.5);
         let ax = -cx;
@@ -1512,8 +1758,8 @@ export function startPond(
         wantY -= (ry / od) * f;
       }
     }
-    maxTurn *= 1 + urgent * 0.9;
-    angAcc *= 1 + urgent * 1.2;
+    maxTurn *= 1 + urgent * 0.5;
+    angAcc *= 1 + urgent * 0.6;
 
     if (pointer && s.state !== "flee") {
       const px = s.x - pointer.x;
@@ -1609,7 +1855,7 @@ export function startPond(
 
   // Last line of defence: swans are capsules (tail to head); if two would
   // touch, ease them apart along the line between their closest points.
-  const resolveOverlaps = () => {
+  const resolveOverlaps = (dt: number) => {
     const live = swans.filter((s) => s.state !== "away");
     for (let i = 0; i < live.length; i++) {
       for (let j = i + 1; j < live.length; j++) {
@@ -1625,7 +1871,8 @@ export function startPond(
           a.x - ac * 0.55 * la, a.y - as * 0.55 * la, a.x + ac * 0.62 * la, a.y + as * 0.62 * la,
           b.x - bc * 0.55 * lb, b.y - bs * 0.55 * lb, b.x + bc * 0.62 * lb, b.y + bs * 0.62 * lb,
         );
-        const minD = 0.26 * (la + lb) + Math.max(flapSpread(a), flapSpread(b)) * 0.9 * (la + lb) * 0.5;
+        // bodies only — open wings may brush past each other, but never shove
+        const minD = 0.26 * (la + lb);
         if (r.d < minD) {
           let nx = r.ax - r.bx;
           let ny = r.ay - r.by;
@@ -1635,7 +1882,8 @@ export function startPond(
             ny = a.y - b.y;
             nl = Math.hypot(nx, ny) || 1;
           }
-          const push = (minD - r.d) * 0.5;
+          // ease apart over a fraction of a second rather than in one frame
+          const push = (minD - r.d) * 0.5 * Math.min(1, dt * 2.5);
           a.x += (nx / nl) * push;
           a.y += (ny / nl) * push;
           b.x -= (nx / nl) * push;
@@ -1797,7 +2045,7 @@ export function startPond(
     }
 
     for (const s of swans) update(s, dt * motion);
-    resolveOverlaps();
+    resolveOverlaps(dt * motion);
     updateLeaves(dt);
 
     for (let i = ripples.length - 1; i >= 0; i--) if (clock - ripples[i].t > 5.5) ripples.splice(i, 1);
@@ -1818,6 +2066,8 @@ export function startPond(
       upload(1, tWeeds, weeds, true);
       upload(2, tSwans, paint, true);
       upload(3, tSurf, surf, false);
+      drawVines();
+      upload(5, tCanopy, canopy, true);
 
       rippleData.fill(0);
       ripples.forEach((r, i) => {
@@ -1835,6 +2085,7 @@ export function startPond(
       gl.uniform1i(wu.uWeeds, 1);
       gl.uniform1i(wu.uSwans, 2);
       gl.uniform1i(wu.uSurf, 3);
+      gl.uniform1i(wu.uCanopy, 5);
       gl.uniform2f(wu.uRes, W, H);
       gl.uniform1f(wu.uTime, clock);
       gl.uniform1f(wu.uScale, scale);
