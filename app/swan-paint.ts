@@ -29,6 +29,13 @@ const BEAKS: Array<[string, string, string]> = [
   ["#bd4b28", "#e2733f", "#f6b08a"],
 ];
 
+const mixRGB = (a: RGB, b: RGB, t: number): RGB => [
+  Math.round(a[0] + (b[0] - a[0]) * t),
+  Math.round(a[1] + (b[1] - a[1]) * t),
+  Math.round(a[2] + (b[2] - a[2]) * t),
+];
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
 const css = (c: RGB, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
 export type Look = {
@@ -40,6 +47,8 @@ export type Look = {
   headR: number;
   tailLen: number;
   wingLen: number;
+  wingScale: number;
+  feathers: Array<{ tract: number; u: number; len: number; w: number; ang: number; tone: number }>;
   p: Plumage;
   beak: [string, string, string];
   rowJitter: number[];
@@ -67,7 +76,7 @@ export function makeLook(index: number, rnd: () => number = Math.random): Look {
   const nose = r(0.34, 0.39);
   const rear = r(-0.68, -0.62);
   const look: Look = {
-    bw: [0.255, 0.228, 0.243][index % 3] + r(-0.008, 0.008),
+    bw: [0.255, 0.228, 0.243][index % 3] + r(-0.022, 0.022),
     nose,
     rear,
     neckLen: r(0.44, 0.54),
@@ -75,6 +84,8 @@ export function makeLook(index: number, rnd: () => number = Math.random): Look {
     headR: r(0.078, 0.09),
     tailLen: r(0.1, 0.16),
     wingLen: 0.15 - rear - 0.01,
+    wingScale: r(0.86, 1.14),
+    feathers: [],
     p: PLUMAGE[index % PLUMAGE.length],
     beak: BEAKS[index % BEAKS.length],
     rowJitter: Array.from({ length: 24 }, () => r(-1, 1)),
@@ -84,6 +95,22 @@ export function makeLook(index: number, rnd: () => number = Math.random): Look {
   if (look.p.mottle) {
     for (let i = 0; i < 7; i++) look.mottle.push({ x: r(-0.5, 0.05), y: r(-0.15, 0.15), r: r(0.04, 0.09) });
   }
+  // wing feathers by tract: 0 primaries, 1 secondaries, 2 greater coverts,
+  // 3 lesser coverts — drawn in that order so each layer overlaps the last
+  const counts = [8, 8, 8, 11];
+  counts.forEach((count, tract) => {
+    for (let i = 0; i < count; i++) {
+      look.feathers.push({
+        tract,
+        u: count === 1 ? 0 : i / (count - 1),
+        len: r(0.88, 1.12),
+        w: r(0.85, 1.15),
+        ang: r(-0.07, 0.07),
+        tone: r(-1, 1),
+      });
+    }
+  });
+
   const n = 3 + Math.floor(rnd() * 3);
   for (let i = 0; i < n; i++) {
     const u = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
@@ -247,8 +274,8 @@ export function paintSwan(ctx: CanvasRenderingContext2D, look: Look, pose: Pose)
   const outline = wingOutline(spread);
   for (const side of [1, -1]) {
     const theta = spread * 1.45;
-    const len = look.wingLen + spread * 0.78;
-    const cw = look.bw * 0.86 + spread * 0.08;
+    const len = (look.wingLen + spread * 0.78) * (0.94 + look.wingScale * 0.06);
+    const cw = (look.bw * 0.86 + spread * 0.08) * (0.9 + look.wingScale * 0.1);
     const sx = 0.15;
     const sy = side * look.bw * 0.24;
     const c = Math.cos(-side * theta);
@@ -269,59 +296,120 @@ export function paintSwan(ctx: CanvasRenderingContext2D, look: Look, pose: Pose)
     ctx.fill(wing);
     ctx.restore();
 
-    const [ccx, ccy] = map(0.45, 0.35);
-    const gx = ccx + lx * cw * 0.6;
-    const gy = ccy + ly * cw * 0.6;
-    const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, len * 0.75);
-    g.addColorStop(0, css(p.hi));
-    g.addColorStop(0.5, css(p.mid));
-    g.addColorStop(0.9, css(p.shade));
-    g.addColorStop(1, css(p.deep));
-    ctx.fillStyle = g;
+    // underdown: a darker wash so gaps between feathers read as depth
+    ctx.fillStyle = css(mixRGB(p.shade, p.mid, 0.4));
     ctx.fill(wing);
 
-    ctx.save();
-    ctx.clip(wing);
-    // inner rim light
-    ctx.translate(-lx * 0.016, -ly * 0.016);
-    ctx.strokeStyle = css(p.rim, 0.6);
-    ctx.lineWidth = 0.035;
-    ctx.stroke(wing);
-    ctx.translate(lx * 0.016, ly * 0.016);
+    const [ccx, ccy] = map(0.45, 0.35);
+    const ws = look.wingScale;
+    const dirOf = (b: number, o: number, db: number, dO: number): [number, number] => {
+      const [x0, y0] = map(b, o);
+      const [x1, y1] = map(b + db * 0.05, o + dO * 0.05);
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const dl = Math.hypot(dx, dy) || 1;
+      return [dx / dl, dy / dl];
+    };
 
-    // covert rows: soft scallops, like overlapping felted feathers
-    ctx.strokeStyle = css(p.shade, 0.1);
-    ctx.lineWidth = 0.014;
-    const rows = [0.16, 0.3, 0.44];
-    rows.forEach((rb, ri) => {
-      const k = 5 + ri;
-      for (let i = 0; i < k; i++) {
-        const o0 = -0.15 + (i / k) * 1.0;
-        const o1 = o0 + 1 / k;
-        const jb = rb + look.rowJitter[(ri * 8 + i) % 24] * 0.015;
-        const [x0, y0] = map(jb, o0);
-        const [x1, y1] = map(jb, o1);
-        const [qx, qy] = map(jb + 0.07 + spread * 0.03, (o0 + o1) / 2);
+    for (const f of look.feathers) {
+      const u = f.u;
+      let rb: number;
+      let ro: number;
+      let flen: number;
+      let fw: number;
+      let sb: number;
+      let so: number;
+      if (f.tract === 0) {
+        // primaries: long, from the hand out to the tip, fanning when open
+        rb = 0.5 + 0.26 * u;
+        ro = 0.45 - 0.32 * u;
+        flen = 0.36 + 0.06 * u;
+        fw = 0.05;
+        sb = 1 - 0.65 * (1 - u);
+        so = -(0.15 + 0.85 * (1 - u));
+      } else if (f.tract === 1) {
+        // secondaries: broad, along the arm, trailing behind
+        rb = 0.1 + 0.44 * u;
+        ro = 0.2 + 0.08 * (1 - u);
+        flen = 0.27;
+        fw = 0.075;
+        sb = 0.18;
+        so = -1;
+      } else if (f.tract === 2) {
+        // greater coverts: a shorter row laid over the secondaries
+        rb = 0.07 + 0.42 * u;
+        ro = 0.52 + 0.12 * (1 - u);
+        flen = 0.17;
+        fw = 0.065;
+        sb = 0.35;
+        so = -1;
+      } else {
+        // lesser coverts: small, rounded, close along the leading edge
+        rb = 0.02 + 0.4 * u;
+        ro = 0.8 + 0.06 * Math.sin(u * 9);
+        flen = 0.095;
+        fw = 0.05;
+        sb = 0.45;
+        so = -1;
+      }
+      // folded, everything lies back along the body
+      const db = 1 + (sb - 1) * spread;
+      const dO = -0.2 + (so + 0.2) * spread;
+      const [rx, ry] = map(rb, ro);
+      let [dx, dy] = dirOf(rb, ro, db, dO);
+      const ca = Math.cos(f.ang);
+      const sa = Math.sin(f.ang);
+      [dx, dy] = [dx * ca - dy * sa, dx * sa + dy * ca];
+      const L = flen * f.len * ws * (0.78 + spread * 0.4);
+      const Wd = fw * f.w * (1.25 - spread * 0.15);
+
+      const nx = -dy * Wd * 0.5;
+      const ny = dx * Wd * 0.5;
+      const tx = rx + dx * L;
+      const ty = ry + dy * L;
+      const shape = new Path2D();
+      shape.moveTo(rx + nx * 0.5, ry + ny * 0.5);
+      shape.quadraticCurveTo(rx + dx * L * 0.5 + nx * 1.25, ry + dy * L * 0.5 + ny * 1.25, rx + dx * L * 0.86 + nx * 0.85, ry + dy * L * 0.86 + ny * 0.85);
+      shape.quadraticCurveTo(tx + dx * Wd * 0.55, ty + dy * Wd * 0.55, rx + dx * L * 0.86 - nx * 0.85, ry + dy * L * 0.86 - ny * 0.85);
+      shape.quadraticCurveTo(rx + dx * L * 0.5 - nx * 1.25, ry + dy * L * 0.5 - ny * 1.25, rx - nx * 0.5, ry - ny * 0.5);
+      shape.closePath();
+
+      // each feather casts a little shadow onto the one beneath it
+      ctx.save();
+      ctx.translate(-lx * 0.011, -ly * 0.011);
+      ctx.fillStyle = css(p.deep, 0.24);
+      ctx.fill(shape);
+      ctx.restore();
+
+      // light: where the feather sits on the wing, plus its own tone
+      const mx = rx + dx * L * 0.5;
+      const my = ry + dy * L * 0.5;
+      const lf = clamp01(0.55 + ((mx - ccx) * lx + (my - ccy) * ly) * 2.2 + f.tone * 0.1 + (f.tract === 3 ? 0.08 : 0));
+      const body = lf > 0.5 ? mixRGB(p.mid, p.hi, (lf - 0.5) * 2) : mixRGB(p.shade, p.mid, lf * 2);
+      const g = ctx.createLinearGradient(rx, ry, tx, ty);
+      g.addColorStop(0, css(body));
+      g.addColorStop(0.75, css(mixRGB(body, p.shade, 0.18)));
+      g.addColorStop(1, css(mixRGB(body, p.shade, 0.4)));
+      ctx.fillStyle = g;
+      ctx.fill(shape);
+
+      // a lit edge on the sunny side and a faint shaft
+      const lit = nx * lx + ny * ly > 0 ? 1 : -1;
+      ctx.strokeStyle = css(p.rim, 0.45);
+      ctx.lineWidth = 0.007;
+      ctx.beginPath();
+      ctx.moveTo(rx + nx * 0.6 * lit, ry + ny * 0.6 * lit);
+      ctx.quadraticCurveTo(rx + dx * L * 0.5 + nx * 1.1 * lit, ry + dy * L * 0.5 + ny * 1.1 * lit, rx + dx * L * 0.84 + nx * 0.75 * lit, ry + dy * L * 0.84 + ny * 0.75 * lit);
+      ctx.stroke();
+      if (f.tract < 2) {
+        ctx.strokeStyle = css(p.shade, 0.3);
+        ctx.lineWidth = 0.0045;
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.quadraticCurveTo(qx, qy, x1, y1);
+        ctx.moveTo(rx, ry);
+        ctx.lineTo(rx + dx * L * 0.8, ry + dy * L * 0.8);
         ctx.stroke();
       }
-    });
-    // long flight-feather lines sweeping to the tip
-    ctx.strokeStyle = css(p.shade, 0.13);
-    ctx.lineWidth = 0.014;
-    for (let i = 0; i < 4; i++) {
-      const o = 0.05 + i * 0.2;
-      const [x0, y0] = map(0.55, o);
-      const [qx, qy] = map(0.8, o * 0.7 + 0.02);
-      const [x1, y1] = map(0.99, -0.1 + spread * 0.35 + i * 0.03);
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.quadraticCurveTo(qx, qy, x1, y1);
-      ctx.stroke();
     }
-    ctx.restore();
   }
 
   // the valley between folded wings
