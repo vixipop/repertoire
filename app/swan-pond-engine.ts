@@ -50,19 +50,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 196, waterSat: 0.34, waterDepth: 0.62, waterLight: 0.8, lightHue: 345, lightSat: 0.55, sun: 0.55, skyHue: 338, skySat: 0.5, moon: 0, fog: 0.6, swanHue: 340, swanTint: 0.2, glow: 0.5, paint: 0.65, brush: 0.15, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 186, waterSat: 1, waterDepth: 0.95, waterLight: 0.25, lightHue: 46, lightSat: 0.6, sun: 0.9, skyHue: 200, skySat: 0.45, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.6, brush: 0.17, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 255, waterSat: 0.42, waterDepth: 0.78, waterLight: 0.58, lightHue: 24, lightSat: 0.92, sun: 0.8, skyHue: 22, skySat: 0.88, moon: 0, fog: 0.12, swanHue: 20, swanTint: 0.3, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 222, waterSat: 0.6, waterDepth: 0.95, waterLight: 0.06, lightHue: 212, lightSat: 0.35, sun: 0.4, skyHue: 226, skySat: 0.45, moon: 1, fog: 0, swanHue: 215, swanTint: 0.22, glow: 0.95, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -1212,11 +1212,12 @@ export function startPond(
     };
     branches = [
       // kept to the margins: corners and the odd spray along the sides
-      grow(-0.06 * W, -0.08 * H, 0.72, 0.24 * W, 2, 0),
-      grow(-0.07 * W, 0.2 * H, 0.12, 0.12 * W, 2, 0),
-      grow(1.06 * W, -0.05 * H, Math.PI - 0.6, 0.2 * W, 2, 0),
-      grow(1.06 * W, 0.98 * H, Math.PI + 0.62, 0.16 * W, 2, 0),
-      grow(-0.07 * W, 0.8 * H, -0.22, 0.12 * W, 1, 0),
+      grow(-0.06 * W, -0.08 * H, 0.72, 0.28 * W, 2, 0),
+      grow(-0.07 * W, 0.22 * H, 0.12, 0.14 * W, 2, 0),
+      grow(1.06 * W, -0.05 * H, Math.PI - 0.6, 0.23 * W, 2, 0),
+      grow(1.07 * W, 0.55 * H, Math.PI + 0.1, 0.1 * W, 1, 0),
+      grow(1.06 * W, 0.98 * H, Math.PI + 0.62, 0.19 * W, 2, 0),
+      grow(-0.07 * W, 0.8 * H, -0.22, 0.14 * W, 2, 0),
     ];
   };
 

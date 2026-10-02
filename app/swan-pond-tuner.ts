@@ -9,7 +9,7 @@
 import { PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 
-const STORAGE_KEY = "swan-pond-looks-v2";
+const STORAGE_KEY = "swan-pond-looks-v3";
 
 type Saved = { looks: Looks; mode: "Auto" | TimeName };
 
