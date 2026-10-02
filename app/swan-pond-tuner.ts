@@ -1,58 +1,83 @@
 /**
- * Colour and paint controls for the pond. Plain DOM so the same panel works
- * in the React component and in the standalone preview page.
+ * Time-of-day and colour controls for the pond. Plain DOM so the same panel
+ * works in the React component and in the standalone preview page.
+ *
+ * "Auto" follows the viewer's clock. Picking a time previews it, and the
+ * sliders then edit that time's look. "Copy settings" copies all four looks.
  */
 
-import { DEFAULT_PARAMS, PARAM_SPECS, PRESETS, type PondController, type PondParams } from "./swan-pond-engine";
+import { PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
+import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 
-const STORAGE_KEY = "swan-pond-params";
+const STORAGE_KEY = "swan-pond-looks-v2";
 
-export function loadSavedParams(): Partial<PondParams> {
+type Saved = { looks: Looks; mode: "Auto" | TimeName };
+
+export function loadSaved(): Saved {
+  const base = defaultLooks();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<PondParams>) : {};
+    if (raw) {
+      const s = JSON.parse(raw) as Partial<Saved>;
+      for (const n of TIME_NAMES) if (s.looks?.[n]) base[n] = { ...base[n], ...s.looks[n] };
+      return { looks: base, mode: s.mode ?? "Auto" };
+    }
   } catch {
-    return {};
+    /* storage blocked: start from the defaults */
   }
+  return { looks: base, mode: "Auto" };
 }
 
-function save(p: PondParams) {
+function save(s: Saved) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch {
     /* private mode or blocked storage: the sliders still work */
   }
+}
+
+/** Params the pond should open with, before the panel mounts. */
+export function initialParams(): PondParams {
+  const s = loadSaved();
+  return s.mode === "Auto" ? lookAt(s.looks).params : { ...s.looks[s.mode] };
 }
 
 const hueTrack = (s: number, l: number) =>
   `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((h) => `hsl(${h} ${s}% ${l}%)`).join(", ")})`;
 
 export function mountTuner(container: HTMLElement, ctl: PondController): () => void {
+  const state = loadSaved();
+  let stopClock: (() => void) | null = null;
+
   const root = document.createElement("div");
   root.className = "pond-tuner";
 
   const head = document.createElement("div");
   head.className = "pond-tuner-presets";
-  const presetLabel = document.createElement("span");
-  presetLabel.className = "pond-tuner-label";
-  presetLabel.textContent = "Presets";
-  head.appendChild(presetLabel);
-  const presetButtons: HTMLButtonElement[] = [];
-  for (const preset of PRESETS) {
+  const headLabel = document.createElement("span");
+  headLabel.className = "pond-tuner-label";
+  headLabel.textContent = "Time of day";
+  head.appendChild(headLabel);
+  const chips = new Map<"Auto" | TimeName, HTMLButtonElement>();
+  for (const name of ["Auto", ...TIME_NAMES] as const) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "pond-tuner-chip";
-    b.textContent = preset.name;
-    b.addEventListener("click", () => apply(preset.params));
+    b.textContent = name;
+    if (name !== "Auto") b.title = TIME_HOURS[name];
+    b.addEventListener("click", () => setMode(name));
     head.appendChild(b);
-    presetButtons.push(b);
+    chips.set(name, b);
   }
+  const note = document.createElement("span");
+  note.className = "pond-tuner-status";
+  head.appendChild(note);
   root.appendChild(head);
 
   const groups = document.createElement("div");
   groups.className = "pond-tuner-groups";
   const inputs = new Map<keyof PondParams, { input: HTMLInputElement; out: HTMLOutputElement }>();
-  for (const group of ["Water", "Swans", "Painting"] as const) {
+  for (const group of ["Water", "Light", "Swans", "Painting"] as const) {
     const fs = document.createElement("fieldset");
     fs.className = "pond-tuner-group";
     const lg = document.createElement("legend");
@@ -71,12 +96,10 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
       input.min = String(spec.min);
       input.max = String(spec.max);
       input.step = String(spec.step);
-      input.className = spec.kind === "hue" ? "pond-tuner-range is-hue" : "pond-tuner-range";
+      input.className = "pond-tuner-range";
       const out = document.createElement("output");
       out.htmlFor.add(id);
-      input.addEventListener("input", () => {
-        apply({ [spec.key]: Number(input.value) } as Partial<PondParams>);
-      });
+      input.addEventListener("input", () => edit(spec.key, Number(input.value)));
       row.append(label, input, out);
       fs.appendChild(row);
       inputs.set(spec.key, { input, out });
@@ -107,10 +130,10 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
   root.append(actions, fallback);
 
   copy.addEventListener("click", () => {
-    const text = JSON.stringify(ctl.getParams());
+    const text = JSON.stringify(state.looks);
     const done = () => {
-      status.textContent = "Copied";
-      setTimeout(() => (status.textContent = ""), 1600);
+      status.textContent = "Copied all four times of day";
+      setTimeout(() => (status.textContent = ""), 1800);
     };
     const manual = () => {
       fallback.hidden = false;
@@ -124,35 +147,69 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
       manual();
     }
   });
-  reset.addEventListener("click", () => apply(DEFAULT_PARAMS));
+  reset.addEventListener("click", () => {
+    state.looks = defaultLooks();
+    save(state);
+    setMode(state.mode);
+  });
+
+  /** The look the sliders are editing right now. */
+  const editing = (): TimeName => (state.mode === "Auto" ? lookAt(state.looks).name : state.mode);
+
+  function setMode(mode: "Auto" | TimeName) {
+    state.mode = mode;
+    save(state);
+    stopClock?.();
+    stopClock = null;
+    if (mode === "Auto") stopClock = followClock(ctl, () => state.looks, false);
+    else ctl.setParams(state.looks[mode]);
+    sync();
+  }
+
+  function edit(key: keyof PondParams, v: number) {
+    // editing while on Auto pins the time that's showing, so you see exactly what you change
+    if (state.mode === "Auto") {
+      state.mode = editing();
+      stopClock?.();
+      stopClock = null;
+    }
+    state.looks[state.mode as TimeName][key] = v;
+    save(state);
+    ctl.setParams({ [key]: v } as Partial<PondParams>);
+    sync();
+  }
 
   function sync() {
-    const p = ctl.getParams();
-    const waterL = Math.round(28 + p.waterLight * 30);
+    const name = editing();
+    const p = state.mode === "Auto" ? lookAt(state.looks).params : state.looks[name];
     for (const spec of PARAM_SPECS) {
       const ui = inputs.get(spec.key)!;
       const v = p[spec.key];
       ui.input.value = String(v);
       ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : `${Math.round((v / spec.max) * 100)}`;
     }
+    for (const [n, b] of chips) b.setAttribute("aria-pressed", String(n === state.mode));
+    chips.get("Auto")!.textContent = state.mode === "Auto" ? `Auto · ${name}` : "Auto";
+    note.textContent = state.mode === "Auto" ? "follows your clock" : `editing ${name} (${TIME_HOURS[name]})`;
+
     // tracks preview the colour you're choosing
+    const waterL = Math.round(28 + p.waterLight * 30);
     inputs.get("waterHue")!.input.style.background = hueTrack(Math.round(p.waterSat * 100), waterL);
     inputs.get("waterSat")!.input.style.background = `linear-gradient(to right, hsl(${p.waterHue} 0% ${waterL}%), hsl(${p.waterHue} 100% ${waterL}%))`;
     inputs.get("waterLight")!.input.style.background = `linear-gradient(to right, hsl(${p.waterHue} ${p.waterSat * 100}% 6%), hsl(${p.waterHue} ${p.waterSat * 100}% 60%))`;
+    inputs.get("lightHue")!.input.style.background = hueTrack(70, 70);
+    inputs.get("lightSat")!.input.style.background = `linear-gradient(to right, hsl(${p.lightHue} 0% 78%), hsl(${p.lightHue} 90% 70%))`;
+    inputs.get("skyHue")!.input.style.background = hueTrack(55, 72);
+    inputs.get("skySat")!.input.style.background = `linear-gradient(to right, hsl(${p.skyHue} 0% 72%), hsl(${p.skyHue} 80% 65%))`;
     inputs.get("swanHue")!.input.style.background = hueTrack(60, 78);
     inputs.get("swanTint")!.input.style.background = `linear-gradient(to right, #fbfaf7, hsl(${p.swanHue} 60% 72%))`;
     root.style.setProperty("--pond-swatch", `hsl(${p.waterHue} ${p.waterSat * 100}% ${waterL}%)`);
-    const match = PRESETS.findIndex((pr) => (Object.keys(pr.params) as Array<keyof PondParams>).every((k) => Math.abs(pr.params[k] - p[k]) < 1e-6));
-    presetButtons.forEach((b, i) => b.setAttribute("aria-pressed", String(i === match)));
   }
 
-  function apply(p: Partial<PondParams>) {
-    ctl.setParams(p);
-    save(ctl.getParams());
-    sync();
-  }
-
-  sync();
+  setMode(state.mode);
   container.appendChild(root);
-  return () => root.remove();
+  return () => {
+    stopClock?.();
+    root.remove();
+  };
 }

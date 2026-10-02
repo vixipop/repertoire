@@ -2,15 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import { startPond } from "./swan-pond-engine";
-import { loadSavedParams, mountTuner } from "./swan-pond-tuner";
+import { defaultLooks, followClock, lookAt } from "./swan-pond-time";
+import { initialParams, mountTuner } from "./swan-pond-tuner";
 
 /**
  * Interactive pond — swans drift in long loops; hovering stirs the water,
- * clicking startles them off-frame until they wander back.
+ * clicking startles them off-frame until they wander back. The light follows
+ * the visitor's clock: dawn, day, dusk and dark.
  *
- * The colour panel shows in development, or on any build with `?tune` in the
- * URL. Pick a look there, press "Copy settings", and paste the values into
- * DEFAULT_PARAMS / PRESETS in swan-pond-engine.ts to make them the default.
+ * The panel shows in development, or on any build with `?tune` in the URL.
+ * Tune each time of day there, press "Copy settings", and paste the values
+ * into TIMES in swan-pond-engine.ts to make them the defaults.
  */
 export default function SwanPond() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -26,10 +28,11 @@ export default function SwanPond() {
 
     const tune =
       process.env.NODE_ENV === "development" || new URLSearchParams(window.location.search).has("tune");
-    const ctl = startPond(host, water, swans, tune ? loadSavedParams() : {});
-    const unmountTuner = tune && tunerRef.current ? mountTuner(tunerRef.current, ctl) : undefined;
+    const ctl = startPond(host, water, swans, tune ? initialParams() : lookAt(defaultLooks()).params);
+    const stop =
+      tune && tunerRef.current ? mountTuner(tunerRef.current, ctl) : followClock(ctl, defaultLooks);
     return () => {
-      unmountTuner?.();
+      stop();
       ctl.destroy();
     };
   }, []);

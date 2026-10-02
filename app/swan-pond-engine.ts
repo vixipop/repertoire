@@ -29,6 +29,12 @@ export type PondParams = {
   waterSat: number; // 0–1
   waterDepth: number; // 0–1 murk / absorption
   waterLight: number; // 0–1 daylight
+  lightHue: number; // 0–360 colour of the sun (or moon)
+  lightSat: number; // 0–1
+  sun: number; // 0–1 sunbeams and glints
+  skyHue: number; // 0–360 sky mirrored in the water
+  skySat: number; // 0–1
+  moon: number; // 0–1 moon on the water
   swanHue: number; // 0–360
   swanTint: number; // 0–0.5
   glow: number; // 0–1
@@ -37,39 +43,34 @@ export type PondParams = {
   bloom: number; // 0–1
 };
 
-export const PRESETS: Array<{ name: string; params: PondParams }> = [
+export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
+
+/** One look per time of day; the pond blends between them by the clock. */
+export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
-    name: "Signature",
-    params: { waterHue: 186, waterSat: 0.88, waterDepth: 0.95, waterLight: 0.9, swanHue: 30, swanTint: 0.16, glow: 0.37, paint: 0.8, brush: 0.05, bloom: 0.3 },
+    name: "Dawn",
+    params: { waterHue: 196, waterSat: 0.34, waterDepth: 0.62, waterLight: 0.8, lightHue: 345, lightSat: 0.55, sun: 0.55, skyHue: 338, skySat: 0.5, moon: 0, swanHue: 340, swanTint: 0.2, glow: 0.5, paint: 0.65, brush: 0.15, bloom: 0.55 },
   },
   {
-    name: "Giverny",
-    params: { waterHue: 166, waterSat: 0.52, waterDepth: 0.48, waterLight: 0.68, swanHue: 42, swanTint: 0.06, glow: 0.4, paint: 0.7, brush: 0.45, bloom: 0.45 },
-  },
-  {
-    name: "Clear spring",
-    params: { waterHue: 162, waterSat: 0.36, waterDepth: 0.38, waterLight: 0.7, swanHue: 45, swanTint: 0.03, glow: 0.3, paint: 0.25, brush: 0.3, bloom: 0.3 },
-  },
-  {
-    name: "Lagoon",
-    params: { waterHue: 186, waterSat: 0.55, waterDepth: 0.6, waterLight: 0.6, swanHue: 200, swanTint: 0.05, glow: 0.4, paint: 0.5, brush: 0.4, bloom: 0.45 },
+    name: "Day",
+    params: { waterHue: 186, waterSat: 1, waterDepth: 0.95, waterLight: 0.25, lightHue: 46, lightSat: 0.6, sun: 0.9, skyHue: 200, skySat: 0.45, moon: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.6, brush: 0.17, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 282, waterSat: 0.28, waterDepth: 0.6, waterLight: 0.36, swanHue: 24, swanTint: 0.2, glow: 0.7, paint: 0.75, brush: 0.55, bloom: 0.7 },
+    params: { waterHue: 255, waterSat: 0.42, waterDepth: 0.78, waterLight: 0.58, lightHue: 24, lightSat: 0.92, sun: 0.8, skyHue: 22, skySat: 0.88, moon: 0, swanHue: 20, swanTint: 0.3, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
-    name: "Moonlit",
-    params: { waterHue: 216, waterSat: 0.38, waterDepth: 0.82, waterLight: 0.06, swanHue: 212, swanTint: 0.1, glow: 0.95, paint: 0.5, brush: 0.4, bloom: 0.85 },
+    name: "Dark",
+    params: { waterHue: 222, waterSat: 0.6, waterDepth: 0.95, waterLight: 0.06, lightHue: 212, lightSat: 0.35, sun: 0.4, skyHue: 226, skySat: 0.45, moon: 1, swanHue: 215, swanTint: 0.22, glow: 0.95, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
-export const DEFAULT_PARAMS: PondParams = { ...PRESETS[0].params };
+export const DEFAULT_PARAMS: PondParams = { ...TIMES[1].params };
 
 export type ParamSpec = {
   key: keyof PondParams;
   label: string;
-  group: "Water" | "Swans" | "Painting";
+  group: "Water" | "Light" | "Swans" | "Painting";
   min: number;
   max: number;
   step: number;
@@ -81,6 +82,12 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "waterSat", label: "Colour", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "waterDepth", label: "Depth", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "waterLight", label: "Daylight", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "lightHue", label: "Sun hue", group: "Light", min: 0, max: 360, step: 1, kind: "hue" },
+  { key: "lightSat", label: "Sun colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "sun", label: "Sunbeams", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "skyHue", label: "Sky hue", group: "Light", min: 0, max: 360, step: 1, kind: "hue" },
+  { key: "skySat", label: "Sky colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "moon", label: "Moon", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
   { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
@@ -89,8 +96,24 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "bloom", label: "Bloom", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
 ];
 
+const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue"]);
+
+/** Blend two looks; hues travel the short way round the wheel. */
+export function mixParams(a: PondParams, b: PondParams, t: number): PondParams {
+  const out = { ...a };
+  for (const k of Object.keys(a) as Array<keyof PondParams>) {
+    if (HUE_KEYS.has(k)) {
+      const d = ((((b[k] - a[k]) % 360) + 540) % 360) - 180;
+      out[k] = (((a[k] + d * t) % 360) + 360) % 360;
+    } else {
+      out[k] = a[k] + (b[k] - a[k]) * t;
+    }
+  }
+  return out;
+}
+
 export type PondController = {
-  setParams(p: Partial<PondParams>): void;
+  setParams(p: Partial<PondParams>, instant?: boolean): void;
   getParams(): PondParams;
   destroy(): void;
 };
@@ -283,7 +306,12 @@ uniform float uLight;
 uniform float uGlow;
 uniform float uTintAmt;
 uniform sampler2D uCanopy;
+uniform vec3 uSun;
+uniform float uSunAmt;
+uniform float uMoon;
+uniform float uGrade;
 uniform vec3 uReflSky;
+uniform vec3 uReflSky2;
 uniform vec3 uReflTree;
 uniform float uRefl;
 
@@ -501,7 +529,9 @@ void main() {
   vec2 rq = (p + g * 14.0 * uScale) / (230.0 * uScale);
   float rn = fbm(rq + vec2(0.0, uTime * 0.01));
   float trees = smoothstep(0.45, 0.75, rn + (1.0 - vUv.y) * 0.0 + dap * 0.4);
-  vec3 refl = mix(uReflSky, uReflTree, trees);
+  // two sky colours drift through each other: pink and gold at dusk, peach and rose at dawn
+  float skyMix = smoothstep(0.3, 0.7, fbm(rq * 0.6 + vec2(uTime * 0.008, 3.0)));
+  vec3 refl = mix(mix(uReflSky, uReflSky2, skyMix), uReflTree, trees);
   col = mix(col, refl, uRefl * (0.55 + 0.45 * smoothstep(0.2, 1.0, vUv.y)));
 
   float lit = dot(-g, normalize(vec2(-0.55, -0.83)));
@@ -511,8 +541,22 @@ void main() {
   col += uSky * 0.07 * smoothstep(0.35, 1.0, vUv.y);
 
   // sun shafts warm the water and kindle the caustics where they land
-  vec3 sun = vec3(1.0, 0.93, 0.74);
-  col += sun * beams * 0.38 * uLight;
+  col += uSun * beams * 0.42 * uSunAmt * (0.35 + uLight * 0.8);
+
+  // moonlight: a broken path of light across the water, and starry glints
+  if (uMoon > 0.001) {
+    vec2 mp = vec2(0.68, 0.3) * uRes + g * 26.0 * uScale;
+    vec2 md = (p - mp) / uScale;
+    float disc = exp(-dot(md, md) / (2.0 * 26.0 * 26.0));
+    float glade = exp(-md.x * md.x / (2.0 * 40.0 * 40.0)) * exp(-max(md.y, 0.0) / 220.0) * step(-60.0, md.y);
+    float shards = smoothstep(0.55, 0.95, noise(vec2(p.x / (9.0 * uScale), p.y / (2.5 * uScale) + uTime * 0.6)));
+    vec3 moonCol = mix(vec3(0.8, 0.88, 1.0), uSun, 0.35);
+    col += moonCol * uMoon * (disc * 0.9 + glade * shards * 0.75 + glade * 0.08);
+    vec2 sc = p / (6.0 * uScale);
+    float star = step(0.985, hash(floor(sc))) * smoothstep(0.35, 0.0, length(fract(sc) - 0.5));
+    star *= 0.5 + 0.5 * sin(uTime * 2.0 + hash(floor(sc) + 3.0) * 40.0);
+    col += vec3(0.85, 0.9, 1.0) * star * uMoon * 0.5 * (1.0 - dap * 0.7);
+  }
   col *= 1.0 - csh * 0.22;
 
   // swans and leaves: softened, tinted, glowing onto the water around them
@@ -527,9 +571,16 @@ void main() {
 
   // overhanging vines, nearest the eye: backlit where the sun comes through
   vec4 cv = texture2D(uCanopy, clamp(p / uRes, 0.0, 1.0));
-  vec3 crgb = cv.rgb * (0.55 + 0.6 * uLight);
+  // leaves take the hour's light: sun-coloured by day, moon-dark silhouettes at night
+  float dayK = clamp((uLight - 0.2) * 1.4, 0.0, 1.0);
+  vec3 lightOn = mix(vec3(0.16, 0.2, 0.32), mix(vec3(1.0), uSun * 1.25, 0.7), dayK);
+  vec3 crgb = cv.rgb * lightOn * (0.5 + 0.45 * dayK);
+  crgb += cv.a * vec3(0.05, 0.07, 0.12) * uMoon;
   crgb += cv.a * vec3(0.16, 0.2, 0.04) * beams * uLight;
   col = col * (1.0 - cv.a) + crgb;
+
+  // the whole scene is bathed in the hour's light
+  col *= mix(vec3(1.0), uSun * 1.22, 0.3 * uGrade);
 
   vec2 v = vUv - 0.5;
   col *= 1.0 - dot(v, v) * 0.5;
@@ -902,7 +953,8 @@ export function startPond(
 ): PondController {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const motion = reduceMotion ? 0.55 : 1;
-  let params: PondParams = { ...DEFAULT_PARAMS, ...initial };
+  let target: PondParams = { ...DEFAULT_PARAMS, ...initial };
+  let params: PondParams = { ...target };
 
   let W = host.clientWidth || DESIGN_WIDTH;
   let H = host.clientHeight || DESIGN_WIDTH * 0.62;
@@ -946,7 +998,7 @@ export function startPond(
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy"]) {
+      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade"]) {
         wu[n] = gl.getUniformLocation(waterProg, n);
       }
       for (const n of ["uRes", "uTime", "uScale", "uScene", "uSwans", "uPaint", "uBrush", "uBloom"]) {
@@ -1056,18 +1108,19 @@ export function startPond(
   /* ---------- overhanging vines ---------- */
 
   type VLeaf = { t: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
-  type Vine = {
-    kind: "hang" | "rope";
-    ax: number;
-    ay: number;
-    pts: Array<[number, number]>; // rope only: fixed path
+  type Branch = {
+    bx: number; // base, usually just outside the frame
+    by: number;
     ang: number;
     len: number;
+    curve: number;
+    width: number;
     phase: number;
+    at: number; // where on the parent it sprouts (0..1)
     leaves: VLeaf[];
+    kids: Branch[];
   };
-  let vines: Vine[] = [];
-  let crown: Array<VLeaf & { x: number; y: number }> = [];
+  let branches: Branch[] = [];
 
   const leafColour = (r: () => number) => {
     const h = 88 + r() * 40;
@@ -1076,60 +1129,50 @@ export function startPond(
     return { col: `hsl(${h} ${sat}% ${l}%)`, hi: `hsl(${h - 6} ${sat + 8}% ${l + 12}%)` };
   };
 
+  // Leafy branches reaching in from beyond the frame, forking as they go.
   const buildVines = () => {
     const r = mulberry32(31);
-    vines = [];
-    const leavesAlong = (n: number, size: number): VLeaf[] =>
-      Array.from({ length: n }, (_, i) => ({
-        t: (i + 0.3 + r() * 0.4) / n,
-        side: i % 2 ? 1 : -1,
-        r: size * (0.75 + r() * 0.5) * scale,
-        rot: (r() - 0.5) * 0.8,
-        flutter: r() * 10,
-        ...leafColour(r),
-      }));
-
-    // a rope of vine along the top edge, sagging between holds
-    const top: Array<[number, number]> = [];
-    for (let i = 0; i <= 24; i++) {
-      const u = i / 24;
-      top.push([(-0.04 + u * 1.08) * W, (0.045 + Math.sin(u * Math.PI * 2.2 + 0.4) * 0.018 + Math.sin(u * 9) * 0.006) * H]);
-    }
-    vines.push({ kind: "rope", ax: 0, ay: 0, pts: top, ang: 0, len: 0, phase: 0, leaves: leavesAlong(95, 5.4) });
-    // and one tumbling down the right-hand side
-    const right: Array<[number, number]> = [];
-    for (let i = 0; i <= 20; i++) {
-      const u = i / 20;
-      right.push([(0.955 + Math.sin(u * 7 + 1) * 0.012) * W, (0.03 + u * 0.82) * H]);
-    }
-    vines.push({ kind: "rope", ax: 0, ay: 0, pts: right, ang: 0, len: 0, phase: 1, leaves: leavesAlong(60, 5) });
-
-    // strands hanging from the top rope; longest near the corners
-    const anchors = [0.06, 0.13, 0.22, 0.34, 0.47, 0.62, 0.74, 0.83, 0.9];
-    for (const ax of anchors) {
-      const corner = Math.min(ax, 1 - ax);
-      const len = (0.1 + (0.5 - corner) * 0.36 + r() * 0.08) * H;
-      vines.push({
-        kind: "hang",
-        ax: ax * W,
-        ay: (0.05 + Math.sin(ax * Math.PI * 2.2 + 0.4) * 0.018) * H,
-        pts: [],
-        ang: Math.PI / 2 + (r() - 0.5) * 0.3,
+    const grow = (bx: number, by: number, ang: number, len: number, depth: number, at: number): Branch => {
+      const n = Math.max(4, Math.round(len / (4.2 * scale)));
+      const br: Branch = {
+        bx,
+        by,
+        ang,
         len,
+        curve: (r() - 0.5) * 1.4 / len,
+        width: (1 + depth * 1.1) * scale,
         phase: r() * 10,
-        leaves: leavesAlong(Math.round(len / (6 * scale)), 4.6),
-      });
-    }
-
-    // a tree's crown leaning in over the top-left corner
-    crown = [];
-    for (let i = 0; i < 150; i++) {
-      const a = r() * Math.PI * 0.5;
-      const rr = Math.sqrt(r());
-      const x = (-0.03 + Math.cos(a) * rr * 0.24) * W;
-      const y = (-0.04 + Math.sin(a) * rr * 0.3) * H;
-      crown.push({ x, y, t: 0, side: 1, r: (5 + r() * 4) * scale, rot: Math.PI * 0.25 + (r() - 0.5) * 2.4, flutter: r() * 10, ...leafColour(r) });
-    }
+        at,
+        leaves: Array.from({ length: n }, (_, i) => {
+          const t = 0.18 + (i / n) * 0.82 + r() * 0.03;
+          return {
+            t,
+            side: i % 2 ? 1 : -1,
+            // leaves shrink toward the tip
+            r: (5.2 + r() * 3.2) * (1.12 - t * 0.4) * scale,
+            rot: (r() - 0.5) * 0.9,
+            flutter: r() * 10,
+            ...leafColour(r),
+          };
+        }),
+        kids: [],
+      };
+      if (depth > 0) {
+        const k = 2 + Math.floor(r() * 1.6);
+        for (let i = 0; i < k; i++) {
+          const side = i % 2 ? 1 : -1;
+          br.kids.push(grow(0, 0, side * (0.45 + r() * 0.5), len * (0.42 + r() * 0.2), depth - 1, 0.3 + r() * 0.45));
+        }
+      }
+      return br;
+    };
+    branches = [
+      grow(-0.04 * W, -0.06 * H, 0.72, 0.36 * W, 2, 0),
+      grow(1.04 * W, 0.1 * H, Math.PI - 0.32, 0.3 * W, 2, 0),
+      grow(0.6 * W, -0.07 * H, Math.PI / 2 + 0.3, 0.13 * W, 1, 0),
+      grow(1.05 * W, 0.97 * H, Math.PI + 0.62, 0.2 * W, 1, 0),
+      grow(-0.05 * W, 0.74 * H, -0.22, 0.13 * W, 1, 0),
+    ];
   };
 
   const drawVineLeaf = (x: number, y: number, l: VLeaf, rot: number) => {
@@ -1174,59 +1217,54 @@ export function startPond(
     cctx.clearRect(0, 0, canopy.width, canopy.height);
     const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
 
-    const stem = (pts: Array<[number, number]>, w: number) => {
-      cctx.setTransform(k, 0, 0, k, 0, 0);
-      cctx.strokeStyle = "rgba(62,58,34,0.9)";
-      cctx.lineWidth = w * scale;
-      cctx.lineCap = "round";
-      cctx.beginPath();
-      pts.forEach((q, i) => (i ? cctx.lineTo(q[0], q[1]) : cctx.moveTo(q[0], q[1])));
-      cctx.stroke();
-    };
-    const along = (pts: Array<[number, number]>, t: number) => {
-      const f = t * (pts.length - 1);
-      const i = Math.min(pts.length - 2, Math.floor(f));
-      const u = f - i;
-      const [x0, y0] = pts[i];
-      const [x1, y1] = pts[i + 1];
-      return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u, a: Math.atan2(y1 - y0, x1 - x0) };
-    };
-
-    for (const v of vines) {
-      let pts = v.pts;
-      if (v.kind === "hang") {
-        // a pendulum that bends more toward its free end
-        pts = [];
-        let x = v.ax;
-        let y = v.ay;
-        let a = v.ang;
-        const segs = 10;
-        for (let i = 0; i <= segs; i++) {
-          pts.push([x, y]);
-          const u = i / segs;
-          a += (Math.sin(clock * 0.55 + v.phase - u * 1.6) * 0.035 + breeze * 0.012) * (0.3 + u);
-          x += Math.cos(a) * (v.len / segs);
-          y += Math.sin(a) * (v.len / segs);
-        }
-      } else {
-        const wob = 1.2 * scale;
-        pts = v.pts.map(([x, y], i) => [x + Math.sin(clock * 0.4 + i * 0.6 + v.phase) * wob * 0.4, y + Math.sin(clock * 0.5 + i * 0.7 + v.phase) * wob]);
+    const draw = (br: Branch, x0: number, y0: number, baseAng: number) => {
+      // the whole limb rocks a little from its base; tips move most
+      const segs = 9;
+      const pts: Array<[number, number, number]> = [];
+      let x = x0;
+      let y = y0;
+      let a = baseAng + Math.sin(clock * 0.45 + br.phase) * 0.025 + breeze * 0.012;
+      for (let i = 0; i <= segs; i++) {
+        pts.push([x, y, a]);
+        const u = i / segs;
+        a += br.curve * (br.len / segs) + Math.sin(clock * 0.7 + br.phase - u * 1.4) * 0.008 * u;
+        // a gentle droop under its own weight
+        a += wrapAngle(Math.PI / 2 - a) * 0.025 * u;
+        x += Math.cos(a) * (br.len / segs);
+        y += Math.sin(a) * (br.len / segs);
       }
-      stem(pts, v.kind === "rope" ? 2.6 : 1.3);
-      for (const l of v.leaves) {
-        const q = along(pts, l.t);
+      const at = (t: number) => {
+        const f = t * segs;
+        const i = Math.min(segs - 1, Math.floor(f));
+        const u = f - i;
+        const p0 = pts[i];
+        const p1 = pts[i + 1];
+        return { x: p0[0] + (p1[0] - p0[0]) * u, y: p0[1] + (p1[1] - p0[1]) * u, a: p0[2] + (p1[2] - p0[2]) * u };
+      };
+
+      cctx.setTransform(k, 0, 0, k, 0, 0);
+      cctx.strokeStyle = "rgba(58,52,34,0.9)";
+      cctx.lineCap = "round";
+      for (let i = 0; i < segs; i++) {
+        cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
+        cctx.beginPath();
+        cctx.moveTo(pts[i][0], pts[i][1]);
+        cctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
+        cctx.stroke();
+      }
+      for (const kid of br.kids) {
+        const q = at(kid.at);
+        draw(kid, q.x, q.y, q.a + kid.ang);
+      }
+      for (const l of br.leaves) {
+        const q = at(l.t);
         const flutter = Math.sin(clock * 1.7 + l.flutter) * 0.12 + breeze * 0.05;
-        // leaves splay out from the stem, then droop toward the water
-        let la = q.a + l.side * (0.9 + l.rot * 0.6) + flutter;
-        la += wrapAngle(Math.PI / 2 - la) * 0.45;
+        let la = q.a + l.side * (0.85 + l.rot * 0.6) + flutter;
+        la += wrapAngle(Math.PI / 2 - la) * 0.25;
         drawVineLeaf(q.x, q.y, l, la);
       }
-    }
-    for (const l of crown) {
-      const flutter = Math.sin(clock * 1.3 + l.flutter) * 0.1 + breeze * 0.06;
-      const dx = Math.sin(clock * 0.5 + l.flutter) * 0.8 * scale;
-      drawVineLeaf(l.x + dx, l.y, l, l.rot + flutter);
-    }
+    };
+    for (const br of branches) draw(br, br.bx, br.by, br.ang);
     cctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
@@ -1250,6 +1288,54 @@ export function startPond(
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tScene, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+  };
+
+  const featherEdge = () => {
+    const m = document.createElement("canvas");
+    m.width = Math.max(1, Math.round(W));
+    m.height = Math.max(1, Math.round(H));
+    const mc = m.getContext("2d")!;
+    const r = mulberry32(5);
+    const inset = 16 * scale;
+    const rad = 46 * scale;
+    // trace the rounded rect with a little wobble so the edge feels hand-torn
+    const pts: Array<[number, number]> = [];
+    const x0 = inset, y0 = inset, x1 = W - inset, y1 = H - inset;
+    const per = 2 * (x1 - x0 + y1 - y0);
+    const n = 160;
+    const ph = [r() * 10, r() * 10];
+    for (let i = 0; i < n; i++) {
+      let d = (i / n) * per;
+      let x: number, y: number, nx: number, ny: number;
+      const wTop = x1 - x0, hSide = y1 - y0;
+      if (d < wTop) { x = x0 + d; y = y0; nx = 0; ny = -1; }
+      else if ((d -= wTop) < hSide) { x = x1; y = y0 + d; nx = 1; ny = 0; }
+      else if ((d -= hSide) < wTop) { x = x1 - d; y = y1; nx = 0; ny = 1; }
+      else { d -= wTop; x = x0; y = y1 - d; nx = -1; ny = 0; }
+      // pull corners in along a circle
+      const cx = clamp(x, x0 + rad, x1 - rad);
+      const cy = clamp(y, y0 + rad, y1 - rad);
+      const dx = x - cx, dy = y - cy;
+      const dl = Math.hypot(dx, dy);
+      if (dl > rad) { x = cx + (dx / dl) * rad; y = cy + (dy / dl) * rad; }
+      const t = i / n;
+      const wob = (Math.sin(t * 37 + ph[0]) * 0.6 + Math.sin(t * 83 + ph[1]) * 0.4) * 5 * scale;
+      pts.push([x + nx * wob, y + ny * wob]);
+    }
+    if ("filter" in mc) mc.filter = `blur(${Math.round(13 * scale)}px)`;
+    mc.fillStyle = "#000";
+    mc.beginPath();
+    pts.forEach((p, i) => (i ? mc.lineTo(p[0], p[1]) : mc.moveTo(p[0], p[1])));
+    mc.closePath();
+    mc.fill();
+    const url = `url(${m.toDataURL("image/png")})`;
+    host.style.setProperty("-webkit-mask-image", url);
+    host.style.setProperty("mask-image", url);
+    host.style.setProperty("-webkit-mask-size", "100% 100%");
+    host.style.setProperty("mask-size", "100% 100%");
+    host.style.setProperty("-webkit-mask-composite", "source-over");
+    host.style.setProperty("mask-composite", "add");
+    host.style.borderRadius = "0";
   };
 
   const resize = () => {
@@ -1283,6 +1369,7 @@ export function startPond(
     sizeLayers();
     buildWeeds();
     buildVines();
+    featherEdge();
     if (hasGL && gl) {
       gl.bindTexture(gl.TEXTURE_2D, tBed);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, paintBed(W, H, scale));
@@ -1982,8 +2069,10 @@ export function startPond(
     const p = params;
     const deep = hsl(p.waterHue, p.waterSat, 0.05 + 0.17 * p.waterLight);
     const shallow = hsl(p.waterHue - 10, p.waterSat * 0.75, 0.6 + 0.25 * p.waterLight);
-    const caustic = hsl(p.waterHue - 25, 0.45, 0.86);
-    const sky = hsl(p.waterHue + 20, 0.25, 0.86).map((c) => c * (0.3 + 0.7 * p.waterLight));
+    // caustics and glints take on the colour of the light
+    const sunC = hsl(p.lightHue, p.lightSat, 0.8);
+    const caustic = hsl(p.waterHue - 25, 0.45, 0.86).map((c, i) => c * 0.5 + sunC[i] * 0.5);
+    const sky = hsl(p.skyHue, p.skySat * 0.5, 0.86).map((c, i) => (c * 0.6 + sunC[i] * 0.4) * (0.3 + 0.7 * Math.max(p.waterLight, p.moon * 0.4)));
     const tint = hsl(p.swanHue, 0.6, 0.75);
     gl.useProgram(waterProg);
     gl.uniform3fv(wu.uDeep, deep);
@@ -1995,9 +2084,14 @@ export function startPond(
     gl.uniform1f(wu.uLight, 0.22 + 1.0 * p.waterLight);
     gl.uniform1f(wu.uGlow, p.glow);
     gl.uniform1f(wu.uTintAmt, p.swanTint);
-    gl.uniform3fv(wu.uReflSky, hsl(p.waterHue + 70, 0.35, 0.5 + 0.3 * p.waterLight).map((c) => c * (0.25 + 0.75 * p.waterLight)));
+    gl.uniform3fv(wu.uReflSky, hsl(p.skyHue, p.skySat, 0.5 + 0.25 * p.waterLight).map((c) => c * (0.3 + 0.7 * Math.max(p.waterLight, p.skySat * 0.6))));
+    gl.uniform3fv(wu.uReflSky2, hsl(p.skyHue - 42, p.skySat * 0.9, 0.58 + 0.2 * p.waterLight).map((c) => c * (0.3 + 0.7 * Math.max(p.waterLight, p.skySat * 0.6))));
+    gl.uniform3fv(wu.uSun, hsl(p.lightHue, p.lightSat, 0.78));
+    gl.uniform1f(wu.uSunAmt, p.sun);
+    gl.uniform1f(wu.uMoon, p.moon);
     gl.uniform3fv(wu.uReflTree, hsl(p.waterHue - 20, Math.min(1, p.waterSat * 1.1), 0.12 + 0.14 * p.waterLight));
-    gl.uniform1f(wu.uRefl, 0.12 + 0.2 * p.paint);
+    gl.uniform1f(wu.uRefl, 0.12 + 0.15 * p.paint + 0.38 * p.skySat * (1 - p.moon * 0.6));
+    gl.uniform1f(wu.uGrade, p.lightSat * (1 - p.moon * 0.7));
     gl.useProgram(postProg);
     gl.uniform1f(pu.uPaint, p.paint);
     gl.uniform1f(pu.uBrush, p.brush);
@@ -2043,6 +2137,10 @@ export function startPond(
       perfAcc = 0;
       perfN = 0;
     }
+
+    // looks change like light does: gradually
+    params = mixParams(params, target, 1 - Math.exp(-dt * 1.4));
+    uploadParams();
 
     for (const s of swans) update(s, dt * motion);
     resolveOverlaps(dt * motion);
@@ -2143,12 +2241,15 @@ export function startPond(
   schedule();
 
   return {
-    setParams(p) {
-      params = { ...params, ...p };
-      uploadParams();
+    setParams(p, instant = false) {
+      target = { ...target, ...p };
+      if (instant) {
+        params = { ...target };
+        uploadParams();
+      }
     },
     getParams() {
-      return { ...params };
+      return { ...target };
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);

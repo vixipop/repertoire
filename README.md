@@ -20,7 +20,8 @@ npm run dev     # http://localhost:3000
 | `app/swan-pond.tsx` | Interactive swan pond above the intro (client) |
 | `app/swan-pond-engine.ts` | Pond engine — water + Monet paint shaders, swan steering, weeds, leaves |
 | `app/swan-paint.ts` | How each swan is painted (proportions, plumage, wings, neck) |
-| `app/swan-pond-tuner.ts` | Colour panel — shown in dev or with `?tune` in the URL |
+| `app/swan-pond-tuner.ts` | Time-of-day + colour panel — shown in dev or with `?tune` in the URL |
+| `app/swan-pond-time.ts` | Follows the visitor's clock: dawn, day, dusk, dark |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
 ## What was carried over exactly
