@@ -15,7 +15,7 @@
 
 import { makeLook, paintSwan, type Look } from "./swan-paint";
 
-const MAX_RIPPLES = 32;
+const MAX_RIPPLES = 20;
 const DESIGN_WIDTH = 680;
 const SWAN_COUNT = 3;
 const LEAF_COUNT = 5;
@@ -334,6 +334,7 @@ vec2 slope(vec2 p) {
     vec2 dv = p - r.xy;
     float d = length(dv) + 0.0001;
     float x = d - c * age;
+    if (abs(x) > 3.0 * w) continue;
     float env = exp(-x * x / (w * w)) * exp(-age * 0.9) * r.w / (1.0 + d / fall);
     env *= smoothstep(0.0, 6.0 * uScale, d);
     float dh = env * (k * cos(x * k) - sin(x * k) * 2.0 * x / (w * w));
@@ -513,7 +514,7 @@ void main() {
   float sh = swanShadow(p + off * 0.4, depth);
   float dap = shade(p + off * 0.5, uTime) * 0.55;
   float csh = canopyShadow(p + off * 0.4, depth);
-  dap = clamp(dap + csh * 0.9, 0.0, 1.0);
+  dap = clamp(dap + csh * 0.38, 0.0, 1.0);
   float beams = sunbeams(p, uTime);
 
   vec2 cp = (p + off * 2.0) / (300.0 * uScale);
@@ -561,7 +562,7 @@ void main() {
     star *= 0.5 + 0.5 * sin(uTime * 2.0 + hash(floor(sc) + 3.0) * 40.0);
     col += vec3(0.85, 0.9, 1.0) * star * uMoon * 0.5 * (1.0 - dap * 0.7);
   }
-  col *= 1.0 - csh * 0.22;
+  col *= 1.0 - csh * 0.06;
 
   // swans and leaves: softened, tinted, glowing onto the water around them
   vec4 sw = swanSoft(p);
@@ -1210,12 +1211,12 @@ export function startPond(
       return br;
     };
     branches = [
-      grow(-0.05 * W, -0.07 * H, 0.7, 0.34 * W, 3, 0),
-      grow(-0.06 * W, 0.18 * H, 0.15, 0.16 * W, 2, 0),
-      grow(1.05 * W, 0.08 * H, Math.PI - 0.32, 0.3 * W, 3, 0),
-      grow(0.6 * W, -0.08 * H, Math.PI / 2 + 0.3, 0.13 * W, 2, 0),
-      grow(1.05 * W, 0.98 * H, Math.PI + 0.62, 0.2 * W, 2, 0),
-      grow(-0.06 * W, 0.78 * H, -0.22, 0.14 * W, 2, 0),
+      // kept to the margins: corners and the odd spray along the sides
+      grow(-0.06 * W, -0.08 * H, 0.72, 0.24 * W, 2, 0),
+      grow(-0.07 * W, 0.2 * H, 0.12, 0.12 * W, 2, 0),
+      grow(1.06 * W, -0.05 * H, Math.PI - 0.6, 0.2 * W, 2, 0),
+      grow(1.06 * W, 0.98 * H, Math.PI + 0.62, 0.16 * W, 2, 0),
+      grow(-0.07 * W, 0.8 * H, -0.22, 0.12 * W, 1, 0),
     ];
   };
 
@@ -1431,9 +1432,12 @@ export function startPond(
 
   /* ---------- sizing ---------- */
 
+  let sceneW = 1;
+  let sceneH = 1;
+
   const sizeLayers = () => {
-    paint.width = Math.round(W * (hasGL ? wd : dpr));
-    paint.height = Math.round(H * (hasGL ? wd : dpr));
+    paint.width = Math.round(W * (hasGL ? Math.min(wd, 1) : dpr));
+    paint.height = Math.round(H * (hasGL ? Math.min(wd, 1) : dpr));
     weeds.width = Math.round(W * 0.75);
     weeds.height = Math.round(H * 0.75);
     canopy.width = Math.round(W * Math.min(wd, 1));
@@ -1443,8 +1447,11 @@ export function startPond(
     if (hasGL && gl) {
       waterCanvas.width = Math.round(W * wd);
       waterCanvas.height = Math.round(H * wd);
+      // the heavy water pass runs at ~70% resolution; the paint pass upsamples it
+      sceneW = Math.max(1, Math.round(waterCanvas.width * 0.7));
+      sceneH = Math.max(1, Math.round(waterCanvas.height * 0.7));
       gl.bindTexture(gl.TEXTURE_2D, tScene);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, waterCanvas.width, waterCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tScene, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1470,12 +1477,12 @@ export function startPond(
       return perm[i & 511] * (1 - u) + perm[(i + 1) & 511] * u;
     };
     // ragged profile along the edge: big bites, then fibres
-    const rag = (t: number) => n1(t * 0.04) * 0.6 + n1(t * 0.13 + 40) * 0.28 + n1(t * 0.55 + 90) * 0.12;
+    const rag = (t: number) => n1(t * 0.03) * 0.7 + n1(t * 0.1 + 40) * 0.24 + n1(t * 0.4 + 90) * 0.06;
     const k = 2; // mask is half resolution
     const inset = 9 * scale;
     const rad = 34 * scale;
-    const depth = 12 * scale; // how far the tear wanders
-    const soft = 6 * scale; // the fuzz of torn fibres
+    const depth = 6 * scale; // how far the tear wanders
+    const soft = 7 * scale; // the fuzz of torn fibres
     for (let py = 0; py < mh; py++) {
       for (let px = 0; px < mw; px++) {
         const x = px * k;
@@ -1571,7 +1578,7 @@ export function startPond(
   /* ---------- swans ---------- */
 
   const swans: Swan[] = [];
-  const glideSpeed = (s: Swan) => 0.55 * L * s.pace * motion;
+  const glideSpeed = (s: Swan) => 0.69 * L * s.pace * motion;
   const inner = (m: number) => ({ x0: m, y0: m, x1: W - m, y1: H - m });
 
   const pickWaypoint = (s: Swan) => {
@@ -1823,7 +1830,7 @@ export function startPond(
     const p = local(e);
     pointer = p;
     const d = Math.hypot(p.x - lastHover.x, p.y - lastHover.y);
-    if (d > 20 * scale && clock - lastHover.t > 0.05) {
+    if (d > 26 * scale && clock - lastHover.t > 0.08) {
       addRipple(p.x, p.y, clamp(0.12 + d / (160 * scale), 0.14, 0.34));
       lastHover = { x: p.x, y: p.y, t: clock };
     }
@@ -2308,13 +2315,13 @@ export function startPond(
     // if the machine is struggling, render at a lower resolution
     perfAcc += real;
     perfN++;
-    if (perfN >= 90) {
+    if (perfN >= 45) {
       const avg = perfAcc / perfN;
-      if (hasGL && avg > 0.026 && wd > 0.75) {
-        wd = Math.max(0.75, wd - 0.25);
+      if (hasGL && avg > 0.024 && wd > 0.6) {
+        wd = Math.max(0.6, wd - 0.2);
         sizeLayers();
-      } else if (hasGL && avg < 0.0135 && wd < maxWd) {
-        wd = Math.min(maxWd, wd + 0.25);
+      } else if (hasGL && avg < 0.0125 && wd < maxWd) {
+        wd = Math.min(maxWd, wd + 0.1);
         sizeLayers();
       }
       perfAcc = 0;
@@ -2366,7 +2373,7 @@ export function startPond(
 
       // pass 1: water + swans into the scene texture
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.viewport(0, 0, waterCanvas.width, waterCanvas.height);
+      gl.viewport(0, 0, sceneW, sceneH);
       gl.useProgram(waterProg);
       gl.uniform1i(wu.uBed, 0);
       gl.uniform1i(wu.uWeeds, 1);
