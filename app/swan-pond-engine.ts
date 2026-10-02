@@ -35,6 +35,7 @@ export type PondParams = {
   skyHue: number; // 0–360 sky mirrored in the water
   skySat: number; // 0–1
   moon: number; // 0–1 moon on the water
+  fog: number; // 0–1 mist drifting over the water
   swanHue: number; // 0–360
   swanTint: number; // 0–0.5
   glow: number; // 0–1
@@ -49,19 +50,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 196, waterSat: 0.34, waterDepth: 0.62, waterLight: 0.8, lightHue: 345, lightSat: 0.55, sun: 0.55, skyHue: 338, skySat: 0.5, moon: 0, swanHue: 340, swanTint: 0.2, glow: 0.5, paint: 0.65, brush: 0.15, bloom: 0.55 },
+    params: { waterHue: 196, waterSat: 0.34, waterDepth: 0.62, waterLight: 0.8, lightHue: 345, lightSat: 0.55, sun: 0.55, skyHue: 338, skySat: 0.5, moon: 0, fog: 0.6, swanHue: 340, swanTint: 0.2, glow: 0.5, paint: 0.65, brush: 0.15, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 186, waterSat: 1, waterDepth: 0.95, waterLight: 0.25, lightHue: 46, lightSat: 0.6, sun: 0.9, skyHue: 200, skySat: 0.45, moon: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.6, brush: 0.17, bloom: 0.51 },
+    params: { waterHue: 186, waterSat: 1, waterDepth: 0.95, waterLight: 0.25, lightHue: 46, lightSat: 0.6, sun: 0.9, skyHue: 200, skySat: 0.45, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.6, brush: 0.17, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 255, waterSat: 0.42, waterDepth: 0.78, waterLight: 0.58, lightHue: 24, lightSat: 0.92, sun: 0.8, skyHue: 22, skySat: 0.88, moon: 0, swanHue: 20, swanTint: 0.3, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 255, waterSat: 0.42, waterDepth: 0.78, waterLight: 0.58, lightHue: 24, lightSat: 0.92, sun: 0.8, skyHue: 22, skySat: 0.88, moon: 0, fog: 0.12, swanHue: 20, swanTint: 0.3, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 222, waterSat: 0.6, waterDepth: 0.95, waterLight: 0.06, lightHue: 212, lightSat: 0.35, sun: 0.4, skyHue: 226, skySat: 0.45, moon: 1, swanHue: 215, swanTint: 0.22, glow: 0.95, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 222, waterSat: 0.6, waterDepth: 0.95, waterLight: 0.06, lightHue: 212, lightSat: 0.35, sun: 0.4, skyHue: 226, skySat: 0.45, moon: 1, fog: 0, swanHue: 215, swanTint: 0.22, glow: 0.95, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -88,6 +89,7 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "skyHue", label: "Sky hue", group: "Light", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "skySat", label: "Sky colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "moon", label: "Moon", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "fog", label: "Fog", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
   { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
@@ -310,6 +312,8 @@ uniform vec3 uSun;
 uniform float uSunAmt;
 uniform float uMoon;
 uniform float uGrade;
+uniform float uFog;
+uniform vec3 uFogCol;
 uniform vec3 uReflSky;
 uniform vec3 uReflSky2;
 uniform vec3 uReflTree;
@@ -578,6 +582,19 @@ void main() {
   crgb += cv.a * vec3(0.05, 0.07, 0.12) * uMoon;
   crgb += cv.a * vec3(0.16, 0.2, 0.04) * beams * uLight;
   col = col * (1.0 - cv.a) + crgb;
+
+  // morning mist: soft banks drifting with the air, thicker toward the far bank,
+  // brighter where the sun shafts catch it
+  if (uFog > 0.001) {
+    vec2 fq = p / (210.0 * uScale);
+    float f1 = fbm(fq + vec2(uTime * 0.018, uTime * 0.006));
+    float f2 = fbm(fq * 2.1 - vec2(uTime * 0.027, -uTime * 0.01) + 7.3);
+    float mist = smoothstep(0.42, 0.78, f1 * 0.7 + f2 * 0.45);
+    mist = mix(mist, 1.0, 0.1) * (0.5 + 0.5 * smoothstep(0.0, 1.0, vUv.y));
+    float fogA = clamp(mist * uFog * 0.85, 0.0, 0.85);
+    vec3 fc = uFogCol + uSun * beams * 0.25;
+    col = mix(col, fc, fogA);
+  }
 
   // the whole scene is bathed in the hour's light
   col *= mix(vec3(1.0), uSun * 1.22, 0.3 * uGrade);
@@ -998,7 +1015,7 @@ export function startPond(
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade"]) {
+      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade", "uFog", "uFogCol"]) {
         wu[n] = gl.getUniformLocation(waterProg, n);
       }
       for (const n of ["uRes", "uTime", "uScale", "uScene", "uSwans", "uPaint", "uBrush", "uBloom"]) {
@@ -2092,6 +2109,11 @@ export function startPond(
     gl.uniform3fv(wu.uReflTree, hsl(p.waterHue - 20, Math.min(1, p.waterSat * 1.1), 0.12 + 0.14 * p.waterLight));
     gl.uniform1f(wu.uRefl, 0.12 + 0.15 * p.paint + 0.38 * p.skySat * (1 - p.moon * 0.6));
     gl.uniform1f(wu.uGrade, p.lightSat * (1 - p.moon * 0.7));
+    gl.uniform1f(wu.uFog, p.fog);
+    // mist glows with the sky and the low sun
+    const fogSky = hsl(p.skyHue, p.skySat * 0.45, 0.86);
+    const fogSun = hsl(p.lightHue, p.lightSat * 0.5, 0.9);
+    gl.uniform3fv(wu.uFogCol, fogSky.map((c, i) => (c * 0.55 + fogSun[i] * 0.45) * (0.35 + 0.65 * Math.max(p.waterLight, 0.2))));
     gl.useProgram(postProg);
     gl.uniform1f(pu.uPaint, p.paint);
     gl.uniform1f(pu.uBrush, p.brush);
