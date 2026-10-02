@@ -1124,7 +1124,8 @@ export function startPond(
 
   /* ---------- overhanging vines ---------- */
 
-  type VLeaf = { t: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
+  type VLeaf = { t: number; off: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
+  type Bloom = { t: number; off: number; r: number; rot: number; hue: number; light: number };
   type Branch = {
     bx: number; // base, usually just outside the frame
     by: number;
@@ -1135,9 +1136,12 @@ export function startPond(
     phase: number;
     at: number; // where on the parent it sprouts (0..1)
     leaves: VLeaf[];
+    blooms: Bloom[];
     kids: Branch[];
   };
   let branches: Branch[] = [];
+  // where blossoms are this frame, so petals can fall from them
+  let bloomSpots: Array<[number, number, number]> = [];
 
   const leafColour = (r: () => number) => {
     const h = 88 + r() * 40;
@@ -1146,49 +1150,72 @@ export function startPond(
     return { col: `hsl(${h} ${sat}% ${l}%)`, hi: `hsl(${h - 6} ${sat + 8}% ${l + 12}%)` };
   };
 
-  // Leafy branches reaching in from beyond the frame, forking as they go.
+  // Leafy limbs reaching in from beyond the frame: they fork, and every twig
+  // ends in a full clump of leaves, with blossom tucked among them.
   const buildVines = () => {
     const r = mulberry32(31);
+    const leaf = (t: number, off: number, size: number): VLeaf => ({
+      t,
+      off,
+      side: r() < 0.5 ? -1 : 1,
+      r: size * scale,
+      rot: (r() - 0.5) * 1.1,
+      flutter: r() * 10,
+      ...leafColour(r),
+    });
     const grow = (bx: number, by: number, ang: number, len: number, depth: number, at: number): Branch => {
-      const n = Math.max(4, Math.round(len / (4.2 * scale)));
+      const n = Math.max(5, Math.round(len / (3.4 * scale)));
+      const leaves: VLeaf[] = [];
+      for (let i = 0; i < n; i++) {
+        const t = 0.12 + (i / n) * 0.88;
+        leaves.push(leaf(t, (r() - 0.5) * 7 * scale, (4.8 + r() * 3) * (1.1 - t * 0.3)));
+      }
+      // the clump at the tip
+      const clump = 10 + Math.floor(r() * 8);
+      for (let i = 0; i < clump; i++) {
+        leaves.push(leaf(0.82 + r() * 0.2, (r() - 0.5) * 26 * scale, 4.4 + r() * 3.2));
+      }
+      const blooms: Bloom[] = [];
+      const nb = Math.round(n * 0.18 + clump * 0.35);
+      for (let i = 0; i < nb; i++) {
+        blooms.push({
+          t: 0.35 + r() * 0.7,
+          off: (r() - 0.5) * 22 * scale,
+          r: (2.3 + r() * 1.6) * scale,
+          rot: r() * Math.PI,
+          hue: 342 + r() * 14,
+          light: 86 + r() * 8,
+        });
+      }
       const br: Branch = {
         bx,
         by,
         ang,
         len,
-        curve: (r() - 0.5) * 1.4 / len,
-        width: (1 + depth * 1.1) * scale,
+        curve: (r() - 0.5) * 1.3 / len,
+        width: (1.2 + depth * 1.2) * scale,
         phase: r() * 10,
         at,
-        leaves: Array.from({ length: n }, (_, i) => {
-          const t = 0.18 + (i / n) * 0.82 + r() * 0.03;
-          return {
-            t,
-            side: i % 2 ? 1 : -1,
-            // leaves shrink toward the tip
-            r: (5.2 + r() * 3.2) * (1.12 - t * 0.4) * scale,
-            rot: (r() - 0.5) * 0.9,
-            flutter: r() * 10,
-            ...leafColour(r),
-          };
-        }),
+        leaves,
+        blooms,
         kids: [],
       };
       if (depth > 0) {
-        const k = 2 + Math.floor(r() * 1.6);
+        const k = 2 + Math.floor(r() * 2);
         for (let i = 0; i < k; i++) {
           const side = i % 2 ? 1 : -1;
-          br.kids.push(grow(0, 0, side * (0.45 + r() * 0.5), len * (0.42 + r() * 0.2), depth - 1, 0.3 + r() * 0.45));
+          br.kids.push(grow(0, 0, side * (0.4 + r() * 0.55), len * (0.38 + r() * 0.22), depth - 1, 0.25 + r() * 0.55));
         }
       }
       return br;
     };
     branches = [
-      grow(-0.04 * W, -0.06 * H, 0.72, 0.36 * W, 2, 0),
-      grow(1.04 * W, 0.1 * H, Math.PI - 0.32, 0.3 * W, 2, 0),
-      grow(0.6 * W, -0.07 * H, Math.PI / 2 + 0.3, 0.13 * W, 1, 0),
-      grow(1.05 * W, 0.97 * H, Math.PI + 0.62, 0.2 * W, 1, 0),
-      grow(-0.05 * W, 0.74 * H, -0.22, 0.13 * W, 1, 0),
+      grow(-0.05 * W, -0.07 * H, 0.7, 0.34 * W, 3, 0),
+      grow(-0.06 * W, 0.18 * H, 0.15, 0.16 * W, 2, 0),
+      grow(1.05 * W, 0.08 * H, Math.PI - 0.32, 0.3 * W, 3, 0),
+      grow(0.6 * W, -0.08 * H, Math.PI / 2 + 0.3, 0.13 * W, 2, 0),
+      grow(1.05 * W, 0.98 * H, Math.PI + 0.62, 0.2 * W, 2, 0),
+      grow(-0.06 * W, 0.78 * H, -0.22, 0.14 * W, 2, 0),
     ];
   };
 
@@ -1228,11 +1255,35 @@ export function startPond(
     cctx.stroke();
   };
 
+  const drawBloom = (x: number, y: number, b: Bloom, rot: number) => {
+    const k = canopy.width / W;
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
+    // five soft petals, a darker heart, a speck of pollen
+    cctx.fillStyle = `hsl(${b.hue} 85% ${b.light}%)`;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      cctx.beginPath();
+      cctx.ellipse(Math.cos(a) * b.r * 0.62, Math.sin(a) * b.r * 0.62, b.r * 0.62, b.r * 0.46, a, 0, Math.PI * 2);
+      cctx.fill();
+    }
+    cctx.fillStyle = `hsl(${b.hue - 4} 62% ${b.light - 22}%)`;
+    cctx.beginPath();
+    cctx.arc(0, 0, b.r * 0.34, 0, Math.PI * 2);
+    cctx.fill();
+    cctx.fillStyle = "hsl(48 80% 70%)";
+    cctx.beginPath();
+    cctx.arc(0, 0, b.r * 0.14, 0, Math.PI * 2);
+    cctx.fill();
+  };
+
   const drawVines = () => {
     const k = canopy.width / W;
     cctx.setTransform(1, 0, 0, 1, 0, 0);
     cctx.clearRect(0, 0, canopy.width, canopy.height);
     const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
+    bloomSpots = [];
 
     const draw = (br: Branch, x0: number, y0: number, baseAng: number) => {
       // the whole limb rocks a little from its base; tips move most
@@ -1245,18 +1296,24 @@ export function startPond(
         pts.push([x, y, a]);
         const u = i / segs;
         a += br.curve * (br.len / segs) + Math.sin(clock * 0.7 + br.phase - u * 1.4) * 0.008 * u;
-        // a gentle droop under its own weight
         a += wrapAngle(Math.PI / 2 - a) * 0.025 * u;
         x += Math.cos(a) * (br.len / segs);
         y += Math.sin(a) * (br.len / segs);
       }
-      const at = (t: number) => {
-        const f = t * segs;
+      const at = (t: number, off: number) => {
+        const f = Math.min(1, t) * segs;
         const i = Math.min(segs - 1, Math.floor(f));
         const u = f - i;
         const p0 = pts[i];
         const p1 = pts[i + 1];
-        return { x: p0[0] + (p1[0] - p0[0]) * u, y: p0[1] + (p1[1] - p0[1]) * u, a: p0[2] + (p1[2] - p0[2]) * u };
+        const ang = p0[2] + (p1[2] - p0[2]) * u;
+        // past the tip, keep going a little so clumps sit beyond the twig end
+        const over = Math.max(0, t - 1) * br.len;
+        return {
+          x: p0[0] + (p1[0] - p0[0]) * u + Math.cos(ang) * over - Math.sin(ang) * off,
+          y: p0[1] + (p1[1] - p0[1]) * u + Math.sin(ang) * over + Math.cos(ang) * off,
+          a: ang,
+        };
       };
 
       cctx.setTransform(k, 0, 0, k, 0, 0);
@@ -1270,19 +1327,106 @@ export function startPond(
         cctx.stroke();
       }
       for (const kid of br.kids) {
-        const q = at(kid.at);
+        const q = at(kid.at, 0);
         draw(kid, q.x, q.y, q.a + kid.ang);
       }
       for (const l of br.leaves) {
-        const q = at(l.t);
+        const q = at(l.t, l.off);
         const flutter = Math.sin(clock * 1.7 + l.flutter) * 0.12 + breeze * 0.05;
         let la = q.a + l.side * (0.85 + l.rot * 0.6) + flutter;
         la += wrapAngle(Math.PI / 2 - la) * 0.25;
         drawVineLeaf(q.x, q.y, l, la);
       }
+      for (const b of br.blooms) {
+        const q = at(b.t, b.off);
+        drawBloom(q.x, q.y, b, b.rot + Math.sin(clock * 1.2 + b.rot * 7) * 0.1);
+        if (q.x > -10 && q.x < W + 10 && q.y > -10 && q.y < H + 10) bloomSpots.push([q.x, q.y, b.hue]);
+      }
     };
     for (const br of branches) draw(br, br.bx, br.by, br.ang);
     cctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  /* ---------- falling petals ---------- */
+
+  type Petal = { x: number; y: number; z: number; vx: number; vy: number; a: number; va: number; size: number; hue: number; age: number; landed: boolean };
+  const petals: Petal[] = [];
+  let nextPetal = 1.5;
+
+  const updatePetals = (dt: number) => {
+    nextPetal -= dt;
+    if (nextPetal <= 0 && bloomSpots.length && petals.length < 34) {
+      const [x, y, hue] = bloomSpots[Math.floor(Math.random() * bloomSpots.length)];
+      petals.push({ x, y, z: 1, vx: rand(-4, 8) * scale, vy: rand(-2, 6) * scale, a: rand(0, Math.PI * 2), va: rand(-2, 2), size: rand(2.6, 3.8) * scale, hue, age: 0, landed: false });
+      nextPetal = rand(0.9, 2.8);
+    }
+    const ca = currentAngle();
+    for (let i = petals.length - 1; i >= 0; i--) {
+      const f = petals[i];
+      f.age += dt;
+      if (!f.landed) {
+        // tumbling on the air, drifting with the breeze
+        f.z -= dt * 0.22;
+        f.x += (f.vx + Math.sin(f.age * 2.1 + f.hue) * 9 * scale) * dt;
+        f.y += (f.vy + Math.cos(f.age * 1.7 + f.hue) * 5 * scale) * dt;
+        f.a += f.va * dt * 2.2;
+        if (f.z <= 0) {
+          f.z = 0;
+          f.landed = true;
+          f.age = 0;
+          addRipple(f.x, f.y, 0.07);
+        }
+      } else {
+        // afloat: carried by the current, nudged aside by swans
+        let tx = Math.cos(ca) * 6 * scale;
+        let ty = Math.sin(ca) * 6 * scale;
+        for (const s of swans) {
+          if (s.state === "away") continue;
+          const dx = f.x - s.x;
+          const dy = f.y - s.y;
+          const d = Math.hypot(dx, dy);
+          const R = L * s.size;
+          if (d < R && d > 0) {
+            const k = (1 - d / R) * (s.v + 20 * scale) * 1.6;
+            tx += (dx / d) * k;
+            ty += (dy / d) * k;
+          }
+        }
+        f.vx += (tx - f.vx) * (1 - Math.exp(-dt * 1.2));
+        f.vy += (ty - f.vy) * (1 - Math.exp(-dt * 1.2));
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+        f.va *= Math.exp(-dt * 0.8);
+        f.a += f.va * dt;
+        if (f.age > 40 || f.x < -30 || f.x > W + 30 || f.y < -30 || f.y > H + 30) petals.splice(i, 1);
+      }
+    }
+  };
+
+  const drawPetal = (c: CanvasRenderingContext2D, f: Petal) => {
+    // falling petals are nearer the eye, so drawn larger; floating ones fade in time
+    const sc = f.landed ? 1 : 1 + f.z * 0.9;
+    const alpha = f.landed ? Math.min(1, (40 - f.age) / 6) : 0.95;
+    const s = f.size * sc;
+    c.save();
+    c.globalAlpha = alpha;
+    c.translate(f.x, f.y);
+    c.rotate(f.a);
+    // tumbling: the petal foreshortens as it turns
+    if (!f.landed) c.scale(1, 0.45 + 0.55 * Math.abs(Math.sin(f.age * 3 + f.hue)));
+    const g = c.createLinearGradient(-s, 0, s, 0);
+    g.addColorStop(0, `hsl(${f.hue} 62% 72%)`);
+    g.addColorStop(1, `hsl(${f.hue} 75% 88%)`);
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(-s, 0);
+    c.bezierCurveTo(-s * 0.4, -s * 0.85, s * 0.7, -s * 0.8, s, -s * 0.15);
+    c.lineTo(s * 0.8, 0);
+    c.lineTo(s, s * 0.15);
+    c.bezierCurveTo(s * 0.7, s * 0.8, -s * 0.4, s * 0.85, -s, 0);
+    c.closePath();
+    c.fill();
+    c.restore();
   };
 
   /* ---------- sizing ---------- */
@@ -1307,49 +1451,65 @@ export function startPond(
     }
   };
 
+  // A softly torn edge, like the deckled border of watercolour paper. Built
+  // per pixel so it looks the same in every browser.
   const featherEdge = () => {
+    const mw = Math.max(1, Math.round(W / 2));
+    const mh = Math.max(1, Math.round(H / 2));
     const m = document.createElement("canvas");
-    m.width = Math.max(1, Math.round(W));
-    m.height = Math.max(1, Math.round(H));
+    m.width = mw;
+    m.height = mh;
     const mc = m.getContext("2d")!;
+    const img = mc.createImageData(mw, mh);
     const r = mulberry32(5);
-    const inset = 16 * scale;
-    const rad = 46 * scale;
-    // trace the rounded rect with a little wobble so the edge feels hand-torn
-    const pts: Array<[number, number]> = [];
-    const x0 = inset, y0 = inset, x1 = W - inset, y1 = H - inset;
-    const per = 2 * (x1 - x0 + y1 - y0);
-    const n = 160;
-    const ph = [r() * 10, r() * 10];
-    for (let i = 0; i < n; i++) {
-      let d = (i / n) * per;
-      let x: number, y: number, nx: number, ny: number;
-      const wTop = x1 - x0, hSide = y1 - y0;
-      if (d < wTop) { x = x0 + d; y = y0; nx = 0; ny = -1; }
-      else if ((d -= wTop) < hSide) { x = x1; y = y0 + d; nx = 1; ny = 0; }
-      else if ((d -= hSide) < wTop) { x = x1 - d; y = y1; nx = 0; ny = 1; }
-      else { d -= wTop; x = x0; y = y1 - d; nx = -1; ny = 0; }
-      // pull corners in along a circle
-      const cx = clamp(x, x0 + rad, x1 - rad);
-      const cy = clamp(y, y0 + rad, y1 - rad);
-      const dx = x - cx, dy = y - cy;
-      const dl = Math.hypot(dx, dy);
-      if (dl > rad) { x = cx + (dx / dl) * rad; y = cy + (dy / dl) * rad; }
-      const t = i / n;
-      const wob = (Math.sin(t * 37 + ph[0]) * 0.6 + Math.sin(t * 83 + ph[1]) * 0.4) * 5 * scale;
-      pts.push([x + nx * wob, y + ny * wob]);
+    const perm = Array.from({ length: 512 }, () => r());
+    const n1 = (x: number) => {
+      const i = Math.floor(x);
+      const f = x - i;
+      const u = f * f * (3 - 2 * f);
+      return perm[i & 511] * (1 - u) + perm[(i + 1) & 511] * u;
+    };
+    // ragged profile along the edge: big bites, then fibres
+    const rag = (t: number) => n1(t * 0.04) * 0.6 + n1(t * 0.13 + 40) * 0.28 + n1(t * 0.55 + 90) * 0.12;
+    const k = 2; // mask is half resolution
+    const inset = 9 * scale;
+    const rad = 34 * scale;
+    const depth = 12 * scale; // how far the tear wanders
+    const soft = 6 * scale; // the fuzz of torn fibres
+    for (let py = 0; py < mh; py++) {
+      for (let px = 0; px < mw; px++) {
+        const x = px * k;
+        const y = py * k;
+        // signed distance inside a rounded rectangle
+        const qx = Math.abs(x - W / 2) - (W / 2 - inset - rad);
+        const qy = Math.abs(y - H / 2) - (H / 2 - inset - rad);
+        const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rad;
+        const d = -outside;
+        // position along the perimeter picks the tear profile
+        const t = Math.atan2(y - H / 2, x - W / 2) * (W + H) * 0.32 / scale;
+        const edge = depth * rag(t + 1000);
+        // a soft fibrous fringe, then a gentle feather into the paper
+        let a = (d - edge) / soft;
+        a = a < 0 ? 0 : a > 1 ? 1 : a;
+        a = a * a * (3 - 2 * a);
+        let f = (d - edge) / (22 * scale);
+        f = f < 0 ? 0 : f > 1 ? 1 : f;
+        a *= 0.55 + 0.45 * f;
+        const o = (py * mw + px) * 4;
+        img.data[o] = 0;
+        img.data[o + 1] = 0;
+        img.data[o + 2] = 0;
+        img.data[o + 3] = Math.round(a * 255);
+      }
     }
-    if ("filter" in mc) mc.filter = `blur(${Math.round(13 * scale)}px)`;
-    mc.fillStyle = "#000";
-    mc.beginPath();
-    pts.forEach((p, i) => (i ? mc.lineTo(p[0], p[1]) : mc.moveTo(p[0], p[1])));
-    mc.closePath();
-    mc.fill();
+    mc.putImageData(img, 0, 0);
     const url = `url(${m.toDataURL("image/png")})`;
     host.style.setProperty("-webkit-mask-image", url);
     host.style.setProperty("mask-image", url);
     host.style.setProperty("-webkit-mask-size", "100% 100%");
     host.style.setProperty("mask-size", "100% 100%");
+    host.style.setProperty("-webkit-mask-repeat", "no-repeat");
+    host.style.setProperty("mask-repeat", "no-repeat");
     host.style.setProperty("-webkit-mask-composite", "source-over");
     host.style.setProperty("mask-composite", "add");
     host.style.borderRadius = "0";
@@ -2136,6 +2296,7 @@ export function startPond(
   let pageVisible = !document.hidden;
   let perfAcc = 0;
   let perfN = 0;
+  let canopyTick = 0;
 
   const frame = (now: number) => {
     raf = 0;
@@ -2167,6 +2328,7 @@ export function startPond(
     for (const s of swans) update(s, dt * motion);
     resolveOverlaps(dt * motion);
     updateLeaves(dt);
+    updatePetals(dt);
 
     for (let i = ripples.length - 1; i >= 0; i--) if (clock - ripples[i].t > 5.5) ripples.splice(i, 1);
 
@@ -2175,8 +2337,10 @@ export function startPond(
     pctx.setTransform(k, 0, 0, k, 0, 0);
     pctx.clearRect(0, 0, W, H);
     for (const f of leaves) drawLeaf(pctx, f);
+    for (const f of petals) if (f.landed) drawPetal(pctx, f);
     const live = swans.filter((s) => s.state !== "away").sort((a, b) => a.y - b.y);
     for (const s of live) drawSwan(pctx, s);
+    for (const f of petals) if (!f.landed) drawPetal(pctx, f);
 
     if (hasGL && gl && waterProg && postProg) {
       drawWeeds();
@@ -2186,8 +2350,11 @@ export function startPond(
       upload(1, tWeeds, weeds, true);
       upload(2, tSwans, paint, true);
       upload(3, tSurf, surf, false);
-      drawVines();
-      upload(5, tCanopy, canopy, true);
+      // the canopy only sways slowly, so it can be redrawn every other frame
+      if ((canopyTick++ & 1) === 0) {
+        drawVines();
+        upload(5, tCanopy, canopy, true);
+      }
 
       rippleData.fill(0);
       ripples.forEach((r, i) => {
