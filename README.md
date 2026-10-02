@@ -18,7 +18,9 @@ npm run dev     # http://localhost:3000
 | `app/dock.tsx` | Floating dock and theme toggle (client) |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
 | `app/swan-pond.tsx` | Interactive swan pond above the intro (client) |
-| `app/swan-pond-engine.ts` | Pond engine — WebGL water shader, swan steering and drawing |
+| `app/swan-pond-engine.ts` | Pond engine — water + Monet paint shaders, swan steering, weeds, leaves |
+| `app/swan-paint.ts` | How each swan is painted (proportions, plumage, wings, neck) |
+| `app/swan-pond-tuner.ts` | Colour panel — shown in dev or with `?tune` in the URL |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
 ## What was carried over exactly

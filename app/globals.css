@@ -667,6 +667,82 @@ html.is-theme-switching .theme-toggle-icon {
   .pond { aspect-ratio: 4 / 3; border-radius: 20px; }
 }
 
+/* pond-tuner:start — colour panel, shown in dev or with ?tune */
+.pond-tuner-slot { align-self: center; width: min(680px, calc(100vw - 32px)); }
+.pond-tuner-slot:empty { display: none; }
+.pond-tuner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 20px;
+}
+.pond-tuner-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pond-tuner-label { color: var(--text-muted); margin-right: 4px; }
+.pond-tuner-chip {
+  font: inherit;
+  color: var(--text-strong);
+  background: var(--bg-icon);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.pond-tuner-chip:hover { background: var(--bg-icon-hover); }
+.pond-tuner-chip[aria-pressed="true"] { border-color: var(--pond-swatch, var(--accent)); box-shadow: inset 0 0 0 1px var(--pond-swatch, var(--accent)); }
+.pond-tuner-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 20px; }
+.pond-tuner-group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pond-tuner-group legend { color: var(--text-muted); padding: 0; margin-bottom: 4px; }
+.pond-tuner-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 34px; align-items: center; gap: 10px; }
+.pond-tuner-row label { color: var(--text-strong); }
+.pond-tuner-row output { color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.pond-tuner-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--border-soft);
+  cursor: pointer;
+}
+.pond-tuner-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 3px #0000004d;
+}
+.pond-tuner-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 1px 3px #0000004d;
+}
+.pond-tuner-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.pond-tuner-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pond-tuner-button {
+  font: inherit;
+  color: var(--button-text);
+  background: var(--button-bg);
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.pond-tuner-button:hover { background: var(--button-bg-hover); }
+.pond-tuner-button.is-quiet { color: var(--text-strong); background: var(--bg-icon); border: 1px solid var(--border-soft); }
+.pond-tuner-button.is-quiet:hover { background: var(--bg-icon-hover); }
+.pond-tuner-status { color: var(--text-muted); }
+.pond-tuner-fallback { width: 100%; min-height: 60px; font: 12px/18px ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg-icon); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; }
+/* pond-tuner:end */
+
 /* ==========================================================================
    Entrance animation
    ========================================================================== */
