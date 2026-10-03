@@ -55,19 +55,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
