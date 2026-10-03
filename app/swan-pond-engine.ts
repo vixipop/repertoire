@@ -55,19 +55,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.2, feederBlur: 0.8, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -200,6 +200,7 @@ type Swan = {
   food: Kernel | null;
   feedUntil: number;
   begUntil: number;
+  begSpot: number; // which of the two waiting spots by the feeder
   lift: number;
 };
 
@@ -2022,6 +2023,7 @@ export function startPond(
       food: null,
       feedUntil: 0,
       begUntil: 0,
+      begSpot: 0,
       lift: 0,
     };
     s.v = glideSpeed(s);
@@ -2445,22 +2447,25 @@ export function startPond(
         s.nextAct = rand(7, 16);
       }
     } else if (s.state === "beg") {
-      // swim under the feeder, then wait there gazing up at it
+      // swim to a spot beside the feeder (to its left, or just below it),
+      // then turn to face it and gaze up
       const fb = feederBowl();
-      const hx = s.x + dirX * (0.2 + s.look.neckLen) * sz;
-      const hy = s.y + dirY * (0.2 + s.look.neckLen) * sz;
-      const hd = Math.hypot(fb.x - hx, fb.y - hy);
-      const off = wrapAngle(Math.atan2(fb.y - s.y, fb.x - s.x) - s.h);
-      const align = Math.max(0, Math.cos(off));
-      s.tx = fb.x;
-      s.ty = fb.y;
-      if (s.begUntil === 0 && hd < 0.55 * sz) s.begUntil = clock + rand(4, 6.5);
+      const R = FEED_R * scale;
+      const spot = s.begSpot === 0 ? { x: fb.x - 2.5 * R, y: fb.y + 0.6 * R } : { x: fb.x + 0.1 * R, y: fb.y + 2.7 * R };
+      const ds = Math.hypot(spot.x - s.x, spot.y - s.y);
+      if (s.begUntil === 0 && ds < 0.45 * sz) s.begUntil = clock + rand(4, 6.5);
       const waiting = s.begUntil > 0;
-      vTarget = waiting ? 0 : glideSpeed(s) * clamp(dl / (2.4 * sz), 0.12, 1) * (0.12 + 0.88 * align * align);
-      maxTurn = waiting ? 0.5 : 1.0;
+      // on the way, steer for the spot; once there, turn on the spot to face the bowl
+      const aim = waiting ? fb : spot;
+      s.tx = aim.x;
+      s.ty = aim.y;
+      const off = wrapAngle(Math.atan2(aim.y - s.y, aim.x - s.x) - s.h);
+      const align = Math.max(0, Math.cos(off));
+      vTarget = waiting ? 0 : glideSpeed(s) * clamp(ds / (2 * sz), 0.15, 1) * (0.15 + 0.85 * align * align);
+      maxTurn = waiting ? 0.55 : 1.0;
       angAcc = 1.2;
-      accel = waiting ? 2 : 1;
-      if (dl < 2.6 * sz) s.headYawTarget = clamp(off, -0.8, 0.8);
+      accel = waiting ? 2.2 : 1;
+      if (waiting) s.headYawTarget = clamp(wrapAngle(Math.atan2(fb.y - s.y, fb.x - s.x) - s.h), -0.8, 0.8);
       if (waiting && clock > s.begUntil) {
         s.state = "glide";
         s.begUntil = 0;
@@ -2896,6 +2901,12 @@ export function startPond(
         const s = idle[Math.random() < 0.6 ? 0 : Math.floor(Math.random() * idle.length)];
         s.state = "beg";
         s.begUntil = 0;
+        // whichever spot is nearer, now and then the other
+        const fb2 = feederBowl();
+        const R2 = FEED_R * scale;
+        const dLeft = Math.hypot(s.x - (fb2.x - 2.5 * R2), s.y - fb2.y);
+        const dBelow = Math.hypot(s.x - fb2.x, s.y - (fb2.y + 2.7 * R2));
+        s.begSpot = (dLeft < dBelow) !== Math.random() < 0.25 ? 0 : 1;
         s.loopTime = 0;
         s.act = "none";
       }
