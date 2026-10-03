@@ -2119,6 +2119,9 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let pageVisible = !document.hidden;
     let perfAcc = 0;
     let perfN = 0;
+    let perfWarm = 120; // frames to ignore at startup
+    let goodRun = 0; // consecutive windows fast enough to try a higher resolution
+    let sinceUp = Infinity; // windows since the last climb
     let canopyTick = 0;
     const frame = (now) => {
         raf = 0;
@@ -2126,18 +2129,42 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const dt = Math.min(0.05, real);
         last = now;
         clock += dt;
-        // if the machine is struggling, render at a lower resolution
-        perfAcc += real;
-        perfN++;
+        // if the machine is struggling, render at a lower resolution.
+        //
+        // Changed from the standalone version, which could only ever go down: it
+        // climbed back only above 80fps, which a 60Hz display cannot reach, and its
+        // first window counted startup (shader compile, floor painting, hydration),
+        // so one slow second on load left the pond blurry for good. Now the first
+        // ~2s are ignored, and it climbs back after three clean windows at >=54fps.
+        // If a climb immediately fails, that level is too much for this machine and
+        // it stops trying to go above the last one that held.
+        if (perfWarm > 0) {
+            perfWarm--;
+        }
+        else {
+            perfAcc += real;
+            perfN++;
+        }
         if (perfN >= 45) {
             const avg = perfAcc / perfN;
+            sinceUp++;
             if (hasGL && avg > 0.024 && wd > 0.6) {
                 wd = Math.max(0.6, wd - 0.2);
+                if (sinceUp <= 3)
+                    maxWd = Math.min(maxWd, wd + 0.1);
+                goodRun = 0;
                 sizeLayers();
             }
-            else if (hasGL && avg < 0.0125 && wd < maxWd) {
-                wd = Math.min(maxWd, wd + 0.1);
-                sizeLayers();
+            else if (hasGL && avg < 0.0185 && wd < maxWd) {
+                if (++goodRun >= 3) {
+                    wd = Math.min(maxWd, wd + 0.1);
+                    goodRun = 0;
+                    sinceUp = 0;
+                    sizeLayers();
+                }
+            }
+            else {
+                goodRun = 0;
             }
             perfAcc = 0;
             perfN = 0;
