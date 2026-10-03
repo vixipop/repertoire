@@ -94,7 +94,15 @@ JavaScript carrying a `// @ts-nocheck` pragma; the typed surface the app uses is
 `pond-hero.tsx` and `time-of-day.ts`.
 
 It pauses while off-screen or in a hidden tab, and steps its own render
-resolution down if frames start taking too long. The frame takes the column
+resolution down if frames start taking too long. One change from the standalone
+engine: that guard could only ever step *down* (it needed >80fps to climb back, which
+a 60Hz screen can't reach, and it counted startup stalls), so it now ignores the
+first ~2s and climbs back after three clean windows at >=54fps. The order of what
+it sheds, the steps, the floors and the threshold for shedding are unchanged.
+
+There is a hanging feeder at the top right: click the bowl to take a kernel (the
+cursor becomes corn), click the water to throw it, Escape or the bowl again to put
+it back. The frame takes the column
 width (or the mobile gutter); only the aspect ratio is set in CSS, because the
 engine scales everything to whatever size it is given. The torn edge is drawn by
 the engine as a generated mask.

@@ -54,7 +54,7 @@ export default function PondHero() {
       swans.remove();
       // The engine feathers the frame's edge with a generated mask; clear it so a
       // remount starts from the stylesheet again.
-      for (const prop of ["-webkit-mask-image", "mask-image", "-webkit-mask-size", "mask-size", "-webkit-mask-repeat", "mask-repeat", "-webkit-mask-composite", "mask-composite", "border-radius"]) {
+      for (const prop of ["-webkit-mask-image", "mask-image", "-webkit-mask-size", "mask-size", "-webkit-mask-repeat", "mask-repeat", "-webkit-mask-composite", "mask-composite", "border-radius", "cursor"]) {
         host.style.removeProperty(prop);
       }
     };
@@ -65,7 +65,7 @@ export default function PondHero() {
       className="pond-hero appear"
       ref={hostRef}
       role="img"
-      aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to startle the swans."
+      aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to startle the swans, or take corn from the hanging feeder and throw it in."
     />
   );
 }

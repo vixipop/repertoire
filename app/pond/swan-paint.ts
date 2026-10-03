@@ -1,7 +1,7 @@
 // @ts-nocheck
 /**
  * Lifted from the standalone Swan Pond artifact, with these changes only:
- * the tuner/sliders are gone, and the pieces the page needs are exported.
+ * the tuner/sliders/recorder are gone, and the pieces the page needs are exported.
  * It is plain JavaScript and is not type-checked here (hence the pragma above)
  * -- the typed surface the app uses is `pond-hero.tsx` and `time-of-day.ts`.
  */
@@ -447,6 +447,10 @@ export function paintSwan(ctx, look, pose) {
     ctx.save();
     ctx.translate(hx, hy);
     ctx.rotate(ha);
+    // a raised head is nearer the eye, so it reads a touch larger
+    const lift = pose.lift ?? 0;
+    if (lift > 0)
+        ctx.scale(1 + lift * 0.16, 1 + lift * 0.16);
     ctx.globalAlpha = 1 - pose.sink * 0.85;
     const hr = look.headR;
     const hlx = lx * Math.cos(-ha) - ly * Math.sin(-ha);
@@ -504,4 +508,3 @@ export function paintSwan(ctx, look, pose) {
     ctx.globalAlpha = 1;
     return { hx, hy, ha };
 }
-
