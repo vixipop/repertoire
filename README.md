@@ -17,11 +17,10 @@ npm run dev     # http://localhost:3000
 | `app/site-behaviour.tsx` | Staggered entrance (client) |
 | `app/dock.tsx` | Floating dock — social slots (client) |
 | `app/theme-toggle.tsx` | Top-right light/dark toggle (client) |
-| `app/pond/pond-hero.tsx` | The pond hero: WebGL2 setup, render loop, pointer input, lifecycle (client) |
-| `app/pond/shaders.ts` | The three GLSL passes: advected caustics, wave-equation ripples, composite |
-| `app/pond/swans.ts` | Swan steering + the ripple impulses their turns produce (pure maths, no DOM) |
-| `app/pond/time-of-day.ts` | Dawn / day / dusk / dark palettes and the clock that blends them |
-| `public/swans/` | The two swan cutouts |
+| `app/pond/pond-hero.tsx` | The hero's React frame: mounts the engine, follows the clock (client) |
+| `app/pond/engine.ts` | The pond engine, lifted from the standalone artifact: painted floor, weeds, vines, ripples, wakes, the water + brushwork shaders, swan behaviour, the four time-of-day looks |
+| `app/pond/swan-paint.ts` | The painted swans |
+| `app/pond/time-of-day.ts` | Keyframe hours and the blend between looks |
 | `app/about/` | About page with the Spline scene |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
@@ -88,29 +87,25 @@ const BASE_DELAY_MS = 40;  // delay before the first
 
 ## The pond hero
 
-Three fragment-shader passes per frame and no geometry beyond one full-screen
-triangle. It pauses while scrolled out of view, runs at up to 1.5x pixel density,
-and under `prefers-reduced-motion` draws a still frame and stops.
+The engine (`engine.ts`, `swan-paint.ts`) is lifted from the standalone Swan Pond
+artifact. The colours, shaders and swan behaviour are untouched — only the
+tuner panel was removed and the frame made responsive. Those two files are plain
+JavaScript carrying a `// @ts-nocheck` pragma; the typed surface the app uses is
+`pond-hero.tsx` and `time-of-day.ts`.
 
-**Time of day.** The water palette follows the visitor's local clock, blending
-continuously through dark → dawn → day → dusk → dark. "Day" is the pond exactly
-as it was tuned standalone. Everything lives in the `LOOKS` and `KEYS` tables at
-the top of `app/pond/time-of-day.ts`. To preview a phase without waiting:
+It pauses while off-screen or in a hidden tab, and steps its own render
+resolution down if frames start taking too long. The frame takes the column
+width (or the mobile gutter); only the aspect ratio is set in CSS, because the
+engine scales everything to whatever size it is given. The torn edge is drawn by
+the engine as a generated mask.
+
+**Time of day.** The look follows the *visitor's* local clock, read in their own
+browser, so someone in Mumbai at 7pm sees dusk while someone in Los Angeles at the
+same instant sees their morning. Windows (local time): dark until ~4:30, dawn
+~5:48–7:24, day ~8:30–16:48, dusk ~18:00–19:36, dark from ~20:48, crossfading
+between. The four looks are `TIMES` in `engine.ts`; the hours are `KEYS` in
+`time-of-day.ts`. To preview one without waiting:
 
 ```
 /?time=dawn   /?time=day   /?time=dusk   /?time=dark   /?hour=18.5
 ```
-
-**Sizing.** The hero takes the column width. Swan sprites are a percentage of
-the pond's width (`SWAN_SPECS` in `app/pond/swans.ts`), so they scale with it.
-
-**Not built.** The reference homepage also has an image collage
-(`.collage-item`, with separate light/dark variants), a footer collage, and a
-dock toast. Those are stubbed out or omitted — the collage in particular needs
-real images and a grid spec to be worth building. Say the word and I'll add it.
-
-**Dependency audit.** `npm audit` reports two transitive `postcss` advisories
-via Next 15. The only clean fix is Next 16, a breaking major, and the advisories
-require attacker-controlled CSS — which doesn't apply to a site whose CSS you
-author yourself. Left on 15 deliberately; upgrade when you're ready to take the
-major.
