@@ -14,8 +14,15 @@ npm run dev     # http://localhost:3000
 | `app/page.tsx` | Homepage — section order and element hierarchy |
 | `app/globals.css` | Design tokens, spacing, type scale, responsive rules |
 | `app/layout.tsx` | Root shell, `next/font` setup, pre-paint theme script |
-| `app/site-behaviour.tsx` | Scramble-on-hover + staggered entrance (client) |
-| `app/dock.tsx` | Floating dock and theme toggle (client) |
+| `app/site-behaviour.tsx` | Staggered entrance (client) |
+| `app/dock.tsx` | Floating dock — social slots (client) |
+| `app/theme-toggle.tsx` | Top-right light/dark toggle (client) |
+| `app/pond/pond-hero.tsx` | The pond hero: WebGL2 setup, render loop, pointer input, lifecycle (client) |
+| `app/pond/shaders.ts` | The three GLSL passes: advected caustics, wave-equation ripples, composite |
+| `app/pond/swans.ts` | Swan steering + the ripple impulses their turns produce (pure maths, no DOM) |
+| `app/pond/time-of-day.ts` | Dawn / day / dusk / dark palettes and the clock that blends them |
+| `public/swans/` | The two swan cutouts |
+| `app/about/` | About page with the Spline scene |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
@@ -69,16 +76,33 @@ which self-hosts it at build time (no runtime CDN request) and exposes it as
 `--font-inter`. `globals.css` feeds that into the `--font-sf` token, so the
 stack resolves the same way.
 
-**Scramble + entrance animations.** Driven by the reference site's compiled
-JavaScript, not its CSS — so these are written from scratch. The behaviour
-matches; exact timing/easing will differ. Tune the constants at the top of each
-block in `app/site-behaviour.tsx`:
+**Entrance animation.** Driven by the reference site's compiled JavaScript, not
+its CSS — so it's written from scratch. The behaviour matches; exact
+timing/easing will differ. Tune the constants at the top of
+`app/site-behaviour.tsx`:
 
 ```js
-var STAGGER_MS = 60;          // entrance stagger
-var FRAME_MS = 28;            // scramble churn rate
-var REVEAL_PER_FRAME = 0.34;  // scramble resolve speed
+const STAGGER_MS = 60;     // gap between successive elements
+const BASE_DELAY_MS = 40;  // delay before the first
 ```
+
+## The pond hero
+
+Three fragment-shader passes per frame and no geometry beyond one full-screen
+triangle. It pauses while scrolled out of view, runs at up to 1.5x pixel density,
+and under `prefers-reduced-motion` draws a still frame and stops.
+
+**Time of day.** The water palette follows the visitor's local clock, blending
+continuously through dark → dawn → day → dusk → dark. "Day" is the pond exactly
+as it was tuned standalone. Everything lives in the `LOOKS` and `KEYS` tables at
+the top of `app/pond/time-of-day.ts`. To preview a phase without waiting:
+
+```
+/?time=dawn   /?time=day   /?time=dusk   /?time=dark   /?hour=18.5
+```
+
+**Sizing.** The hero takes the column width. Swan sprites are a percentage of
+the pond's width (`SWAN_SPECS` in `app/pond/swans.ts`), so they scale with it.
 
 **Not built.** The reference homepage also has an image collage
 (`.collage-item`, with separate light/dark variants), a footer collage, and a
