@@ -8,6 +8,7 @@
 
 import { GLOBAL_KEYS, PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
+import { browserSave, mountRecorder, type SaveFile } from "./swan-pond-recorder";
 
 const STORAGE_KEY = "swan-pond-looks-v4";
 
@@ -45,7 +46,7 @@ export function initialParams(): PondParams {
 const hueTrack = (s: number, l: number) =>
   `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((h) => `hsl(${h} ${s}% ${l}%)`).join(", ")})`;
 
-export function mountTuner(container: HTMLElement, ctl: PondController): () => void {
+export function mountTuner(container: HTMLElement, ctl: PondController, opts: { save?: SaveFile } = {}): () => void {
   const state = loadSaved();
   let stopClock: (() => void) | null = null;
 
@@ -126,8 +127,17 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
   fallback.readOnly = true;
   fallback.hidden = true;
   fallback.setAttribute("aria-label", "Pond settings");
-  actions.append(copy, reset, status);
-  root.append(actions, fallback);
+  const beg = document.createElement("button");
+  beg.type = "button";
+  beg.className = "pond-tuner-button is-quiet";
+  beg.textContent = "Look up at feeder";
+  beg.title = "Send a swan to gaze up at the feeder";
+  beg.addEventListener("click", () => ctl.beg());
+  actions.append(copy, reset, beg, status);
+  const recRow = document.createElement("div");
+  recRow.className = "pond-tuner-actions";
+  const unmountRecorder = mountRecorder(recRow, ctl, opts.save ?? browserSave);
+  root.append(actions, recRow, fallback);
 
   copy.addEventListener("click", () => {
     const text = JSON.stringify(state.looks);
@@ -194,7 +204,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
       const ui = inputs.get(spec.key)!;
       const v = p[spec.key];
       ui.input.value = String(v);
-      ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : `${Math.round((v / spec.max) * 100)}`;
+      ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : spec.key === "feederBlur" ? `${v.toFixed(1)}px` : `${Math.round((v / spec.max) * 100)}`;
     }
     for (const [n, b] of chips) b.setAttribute("aria-pressed", String(n === state.mode));
     chips.get("Auto")!.textContent = state.mode === "Auto" ? `Auto · ${name}` : "Auto";
@@ -220,6 +230,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
   container.appendChild(root);
   return () => {
     stopClock?.();
+    unmountRecorder();
     root.remove();
   };
 }

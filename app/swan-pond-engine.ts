@@ -39,6 +39,8 @@ export type PondParams = {
   fog: number; // 0–1 mist drifting over the water
   bowlHue: number; // 0–360 glaze of the feeder bowl
   bowlLight: number; // 0–1
+  feederOpacity: number; // 0–1 how strongly the crisp feeder sits over the painted one
+  feederBlur: number; // px of softening on it
   swanHue: number; // 0–360
   swanTint: number; // 0–0.5
   glow: number; // 0–1
@@ -53,19 +55,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.72, feederBlur: 0.45, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -95,6 +97,8 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "fog", label: "Fog", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "bowlHue", label: "Bowl hue", group: "Feeder", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "bowlLight", label: "Bowl shade", group: "Feeder", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "feederOpacity", label: "Clarity", group: "Feeder", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "feederBlur", label: "Blur", group: "Feeder", min: 0, max: 3, step: 0.05, kind: "amount" },
   { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
   { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
@@ -106,7 +110,7 @@ export const PARAM_SPECS: ParamSpec[] = [
 const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue", "bowlHue"]);
 
 /** Settings that belong to the scene rather than to a time of day. */
-export const GLOBAL_KEYS = new Set<keyof PondParams>(["bowlHue", "bowlLight"]);
+export const GLOBAL_KEYS = new Set<keyof PondParams>(["bowlHue", "bowlLight", "feederOpacity", "feederBlur"]);
 
 /** Blend two looks; hues travel the short way round the wheel. */
 export function mixParams(a: PondParams, b: PondParams, t: number): PondParams {
@@ -127,6 +131,14 @@ export type PondController = {
   getParams(): PondParams;
   /** Holding corn: clicks on the water throw kernels instead of startling the swans. */
   setFeeding(on: boolean): void;
+  /** Send a swan over to gaze up at the feeder now. */
+  beg(): void;
+  /** CSS size of the pond. */
+  size(): { width: number; height: number };
+  /** Called at the end of every drawn frame (while the GL buffer is fresh). */
+  onFrame(cb: () => void): () => void;
+  /** Paint the finished pond (water, feeder, torn edge) into a 2D context. */
+  snapshot(c: CanvasRenderingContext2D, w: number, h: number): void;
   destroy(): void;
 };
 
@@ -1016,7 +1028,7 @@ export function startPond(
   feederCanvas.setAttribute("aria-hidden", "true");
   // ...but not so crisp it looks pasted on: a touch soft and partly see-through,
   // so the painted copy beneath lends it the brushwork
-  Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block", opacity: "0.72" });
+  Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block" });
   let feederFilter = "";
   host.appendChild(feederCanvas);
   const fctx = feederCanvas.getContext("2d")!;
@@ -1813,6 +1825,7 @@ export function startPond(
 
   // A softly torn edge, like the deckled border of watercolour paper. Built
   // per pixel so it looks the same in every browser.
+  let edgeMask: HTMLCanvasElement | null = null;
   const featherEdge = () => {
     const mw = Math.max(1, Math.round(W / 2));
     const mh = Math.max(1, Math.round(H / 2));
@@ -1863,6 +1876,7 @@ export function startPond(
       }
     }
     mc.putImageData(img, 0, 0);
+    edgeMask = m;
     const url = `url(${m.toDataURL("image/png")})`;
     host.style.setProperty("-webkit-mask-image", url);
     host.style.setProperty("mask-image", url);
@@ -2827,6 +2841,8 @@ export function startPond(
   let perfN = 0;
   let canopyTick = 0;
   let nextBeg = rand(40, 80);
+  let begNow = false;
+  const frameListeners = new Set<() => void>();
 
   const frame = (now: number) => {
     raf = 0;
@@ -2869,16 +2885,19 @@ export function startPond(
     updatePetals(dt);
     updateKernels(dt);
     updateFeeder(dt);
-    if (clock > nextBeg) {
+    if (clock > nextBeg || begNow) {
       nextBeg = clock + rand(100, 140);
-      const idle = swans.filter((s) => s.state === "glide" && s.act === "none" && s.noticeAt < 0);
-      if (idle.length && !kernels.length) {
+      const forced = begNow;
+      begNow = false;
+      const idle = swans.filter((s) => (s.state === "glide" || (forced && s.state === "return")) && s.noticeAt < 0);
+      if (idle.length && (forced || !kernels.length)) {
         const fb = feederBowl();
         idle.sort((a, b) => Math.hypot(a.x - fb.x, a.y - fb.y) - Math.hypot(b.x - fb.x, b.y - fb.y));
         const s = idle[Math.random() < 0.6 ? 0 : Math.floor(Math.random() * idle.length)];
         s.state = "beg";
         s.begUntil = 0;
         s.loopTime = 0;
+        s.act = "none";
       }
     }
 
@@ -2906,11 +2925,12 @@ export function startPond(
       fctx.globalCompositeOperation = "source-over";
       // and it takes the hour's light, like everything else in the scene
       const bright = (0.45 + 0.55 * Math.min(1, params.waterLight * 1.3 + params.moon * 0.1)).toFixed(2);
-      const f = `blur(0.45px) brightness(${bright}) saturate(0.92)`;
+      const f = `blur(${params.feederBlur.toFixed(2)}px) brightness(${bright}) saturate(0.92)`;
       if (f !== feederFilter) {
         feederFilter = f;
         feederCanvas.style.filter = f;
       }
+      feederCanvas.style.opacity = params.feederOpacity.toFixed(2);
     }
     for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
@@ -2969,6 +2989,7 @@ export function startPond(
       ctx.drawImage(paint, 0, 0, swanCanvas.width, swanCanvas.height);
     }
 
+    for (const cb of frameListeners) cb();
     scheduleFromFrame();
   };
 
@@ -3011,6 +3032,34 @@ export function startPond(
     },
     getParams() {
       return { ...target };
+    },
+    beg() {
+      begNow = true;
+    },
+    size() {
+      return { width: W, height: H };
+    },
+    onFrame(cb) {
+      frameListeners.add(cb);
+      return () => frameListeners.delete(cb);
+    },
+    snapshot(c, w, h) {
+      // the page behind shows through the torn edge
+      c.save();
+      c.globalCompositeOperation = "source-over";
+      c.clearRect(0, 0, w, h);
+      c.drawImage(hasGL ? waterCanvas : swanCanvas, 0, 0, w, h);
+      c.globalAlpha = Number(feederCanvas.style.opacity || 1);
+      if (hasGL) c.drawImage(feederCanvas, 0, 0, w, h);
+      c.globalAlpha = 1;
+      if (edgeMask) {
+        c.globalCompositeOperation = "destination-in";
+        c.drawImage(edgeMask, 0, 0, w, h);
+      }
+      c.globalCompositeOperation = "destination-over";
+      c.fillStyle = getComputedStyle(document.body).backgroundColor || "#fafafa";
+      c.fillRect(0, 0, w, h);
+      c.restore();
     },
     setFeeding(on) {
       setFeedingMode(on);
