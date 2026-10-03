@@ -6,7 +6,7 @@
  * sliders then edit that time's look. "Copy settings" copies all four looks.
  */
 
-import { PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
+import { GLOBAL_KEYS, PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 
 const STORAGE_KEY = "swan-pond-looks-v3";
@@ -77,7 +77,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
   const groups = document.createElement("div");
   groups.className = "pond-tuner-groups";
   const inputs = new Map<keyof PondParams, { input: HTMLInputElement; out: HTMLOutputElement }>();
-  for (const group of ["Water", "Light", "Swans", "Painting"] as const) {
+  for (const group of ["Water", "Light", "Swans", "Feeder", "Painting"] as const) {
     const fs = document.createElement("fieldset");
     fs.className = "pond-tuner-group";
     const lg = document.createElement("legend");
@@ -167,6 +167,14 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
   }
 
   function edit(key: keyof PondParams, v: number) {
+    // the feeder's colour is part of the scene, not the hour: change it everywhere
+    if (GLOBAL_KEYS.has(key)) {
+      for (const n of TIME_NAMES) state.looks[n][key] = v;
+      save(state);
+      ctl.setParams({ [key]: v } as Partial<PondParams>);
+      sync();
+      return;
+    }
     // editing while on Auto pins the time that's showing, so you see exactly what you change
     if (state.mode === "Auto") {
       state.mode = editing();
@@ -202,6 +210,8 @@ export function mountTuner(container: HTMLElement, ctl: PondController): () => v
     inputs.get("skyHue")!.input.style.background = hueTrack(55, 72);
     inputs.get("skySat")!.input.style.background = `linear-gradient(to right, hsl(${p.skyHue} 0% 72%), hsl(${p.skyHue} 80% 65%))`;
     inputs.get("swanHue")!.input.style.background = hueTrack(60, 78);
+    inputs.get("bowlHue")!.input.style.background = hueTrack(70, 45);
+    inputs.get("bowlLight")!.input.style.background = `linear-gradient(to right, hsl(${p.bowlHue} 70% 12%), hsl(${p.bowlHue} 70% 50%), hsl(${p.bowlHue} 70% 84%))`;
     inputs.get("swanTint")!.input.style.background = `linear-gradient(to right, #fbfaf7, hsl(${p.swanHue} 60% 72%))`;
     root.style.setProperty("--pond-swatch", `hsl(${p.waterHue} ${p.waterSat * 100}% ${waterL}%)`);
   }

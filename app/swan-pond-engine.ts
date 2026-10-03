@@ -37,6 +37,8 @@ export type PondParams = {
   skySat: number; // 0–1
   moon: number; // 0–1 moon on the water
   fog: number; // 0–1 mist drifting over the water
+  bowlHue: number; // 0–360 glaze of the feeder bowl
+  bowlLight: number; // 0–1
   swanHue: number; // 0–360
   swanTint: number; // 0–0.5
   glow: number; // 0–1
@@ -51,19 +53,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 226, bowlLight: 0.5, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -72,7 +74,7 @@ export const DEFAULT_PARAMS: PondParams = { ...TIMES[1].params };
 export type ParamSpec = {
   key: keyof PondParams;
   label: string;
-  group: "Water" | "Light" | "Swans" | "Painting";
+  group: "Water" | "Light" | "Swans" | "Feeder" | "Painting";
   min: number;
   max: number;
   step: number;
@@ -91,6 +93,8 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "skySat", label: "Sky colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "moon", label: "Moon", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "fog", label: "Fog", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
+  { key: "bowlHue", label: "Bowl hue", group: "Feeder", min: 0, max: 360, step: 1, kind: "hue" },
+  { key: "bowlLight", label: "Bowl shade", group: "Feeder", min: 0, max: 1, step: 0.01, kind: "amount" },
   { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
   { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
   { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
@@ -99,7 +103,10 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "bloom", label: "Bloom", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
 ];
 
-const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue"]);
+const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue", "bowlHue"]);
+
+/** Settings that belong to the scene rather than to a time of day. */
+export const GLOBAL_KEYS = new Set<keyof PondParams>(["bowlHue", "bowlLight"]);
 
 /** Blend two looks; hues travel the short way round the wheel. */
 export function mixParams(a: PondParams, b: PondParams, t: number): PondParams {
@@ -466,7 +473,7 @@ float swanShadow(vec2 p, float depth) {
 }
 
 vec4 swanSoft(vec2 p) {
-  float r = 1.3 * uScale;
+  float r = 0.8 * uScale;
   vec4 s = swanTex(p) * 0.4;
   for (int i = 0; i < 8; i++) {
     float an = float(i) * 0.785398 + 0.3;
@@ -1377,20 +1384,20 @@ export function startPond(
   const buildFeeder = () => {
     const r = mulberry32(77);
     ropeDeco = [];
-    for (let rope = 0; rope < 3; rope++) {
-      const n = rope === 0 ? 7 : 11;
-      for (let i = 0; i < n; i++) {
-        const leaf = r() < 0.62;
+    for (let rope = 0; rope < ROPES.length; rope++) {
+      // leaves and flowers all the way down each rope, on a vine wrapped round it
+      for (let t = 0.06 + r() * 0.04; t < 0.96; t += 0.06 + r() * 0.05) {
+        const bloom = r() < 0.32;
+        const white = r() < 0.5;
         ropeDeco.push({
           rope,
-          // clustered toward the top, thinning as the vine climbs down
-          t: Math.pow(r(), 1.4) * 0.62,
-          side: r() < 0.5 ? -1 : 1,
-          kind: leaf ? "leaf" : "bloom",
-          r: leaf ? 4.2 + r() * 2.4 : 2.4 + r() * 1.3,
+          t,
+          side: Math.sin(t * VINE_TURNS * Math.PI * 2 + rope) > 0 ? 1 : -1,
+          kind: bloom ? "bloom" : "leaf",
+          r: bloom ? 2.6 + r() * 1.2 : 3.6 + r() * 2,
           rot: r() * Math.PI * 2,
-          hue: 342 + r() * 14,
-          light: 86 + r() * 8,
+          hue: white ? 30 : 342 + r() * 14,
+          light: white ? 96 : 84 + r() * 8,
           ...leafColour(r),
         });
       }
@@ -1402,11 +1409,15 @@ export function startPond(
     });
   };
 
-  const FEED_R = 27; // bowl mouth radius, design px
-  const feederPivot = () => ({ x: W * 0.875, y: -40 * scale });
+  // four ropes tied round the ring, meeting at one knot at the top
+  const ROPES = [-Math.PI / 2, Math.PI, 0, Math.PI / 2];
+  const VINE_TURNS = 5;
+
+  const FEED_R = 34; // bowl mouth radius, design px
+  const feederPivot = () => ({ x: W * 0.87, y: H * 0.035 });
   const feederBowl = () => {
     const pv = feederPivot();
-    const len = H * 0.66 - pv.y;
+    const len = H * 0.68 - pv.y;
     return { x: pv.x + Math.sin(feeder.ang) * len, y: pv.y + Math.cos(feeder.ang) * len };
   };
   const overFeeder = (p: { x: number; y: number }) => {
@@ -1429,75 +1440,122 @@ export function startPond(
     const b = feederBowl();
     const R = FEED_R * s;
     const q = 0.82; // nearly face-on: we're looking down into it
+    const ringRx = R * 1.06;
+    const ringRy = R * q * 1.06;
     c.setTransform(k, 0, 0, k, 0, 0);
     c.lineCap = "round";
     c.lineJoin = "round";
 
-    // three ropes, from the ring up to where they meet above the frame
-    const anchors = [-Math.PI / 2, Math.PI * 0.83, Math.PI * 0.17].map((a) => ({
-      x: b.x + Math.cos(a) * R * 1.06,
-      y: b.y + Math.sin(a) * R * 1.06 * q,
-    }));
-    const ropePath = (i: number, t: number) => {
-      const a = anchors[i];
-      const top = { x: pv.x + (i === 0 ? 0 : i === 1 ? -7 : 7) * s, y: pv.y };
-      // t: 0 at the top, 1 at the ring; a slight sag
-      const sag = Math.sin(t * Math.PI) * (i === 0 ? 0 : i === 1 ? -3 : 3) * s;
-      return { x: top.x + (a.x - top.x) * t + sag, y: top.y + (a.y - top.y) * t };
+    const anchor = (i: number) => ({ x: b.x + Math.cos(ROPES[i]) * ringRx, y: b.y + Math.sin(ROPES[i]) * ringRy });
+    // a point on rope i: t = 0 at the top knot, 1 at the ring
+    const ropeAt = (i: number, t: number) => {
+      const a = anchor(i);
+      return { x: pv.x + (a.x - pv.x) * t, y: pv.y + (a.y - pv.y) * t };
     };
     const drawRope = (i: number) => {
-      c.strokeStyle = "rgba(196,142,138,0.95)";
-      c.lineWidth = 1.7 * s;
+      const a = anchor(i);
+      c.strokeStyle = "rgba(150,98,92,1)";
+      c.lineWidth = 2.6 * s;
       c.beginPath();
-      for (let t = 0; t <= 1.0001; t += 0.1) {
-        const p = ropePath(i, t);
-        if (t === 0) c.moveTo(p.x, p.y);
-        else c.lineTo(p.x, p.y);
+      c.moveTo(pv.x, pv.y);
+      c.lineTo(a.x, a.y);
+      c.stroke();
+      c.strokeStyle = "rgba(232,186,176,1)";
+      c.lineWidth = 1.3 * s;
+      c.beginPath();
+      c.moveTo(pv.x, pv.y);
+      c.lineTo(a.x, a.y);
+      c.stroke();
+      // the vine wound round it
+      const dx = a.x - pv.x;
+      const dy = a.y - pv.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      c.strokeStyle = "rgba(58,104,48,0.95)";
+      c.lineWidth = 1.1 * s;
+      c.beginPath();
+      for (let t = 0; t <= 1.0001; t += 0.01) {
+        const p = ropeAt(i, t);
+        const w = Math.sin(t * VINE_TURNS * Math.PI * 2 + i) * 2.6 * s;
+        if (t === 0) c.moveTo(p.x + nx * w, p.y + ny * w);
+        else c.lineTo(p.x + nx * w, p.y + ny * w);
       }
       c.stroke();
-      // twist marks
-      c.strokeStyle = "rgba(240,200,190,0.6)";
-      c.lineWidth = 0.7 * s;
-      for (let t = 0.04; t < 1; t += 0.06) {
-        const p = ropePath(i, t);
-        c.beginPath();
-        c.moveTo(p.x - 1.1 * s, p.y - 0.6 * s);
-        c.lineTo(p.x + 1.1 * s, p.y + 0.6 * s);
-        c.stroke();
+      for (const d of ropeDeco) {
+        if (d.rope !== i) continue;
+        const p = ropeAt(i, d.t);
+        const w = Math.sin(d.t * VINE_TURNS * Math.PI * 2 + i) * 2.6 * s;
+        const x = p.x + nx * w;
+        const y = p.y + ny * w;
+        const rot = d.rot + Math.sin(clock * 1.3 + d.rot * 4) * 0.12;
+        c.setTransform(k * Math.cos(rot), k * Math.sin(rot), -k * Math.sin(rot), k * Math.cos(rot), x * k, y * k);
+        if (d.kind === "leaf") {
+          const lr = d.r * s;
+          c.fillStyle = d.hi;
+          c.beginPath();
+          c.moveTo(0, 0);
+          c.bezierCurveTo(lr * 0.4, -lr * 0.8, lr * 1.5, -lr * 0.6, lr * 2, 0);
+          c.lineTo(0, 0);
+          c.fill();
+          c.fillStyle = d.col;
+          c.beginPath();
+          c.moveTo(0, 0);
+          c.bezierCurveTo(lr * 0.4, lr * 0.8, lr * 1.5, lr * 0.6, lr * 2, 0);
+          c.lineTo(0, 0);
+          c.fill();
+        } else {
+          const br = d.r * s;
+          c.fillStyle = d.light > 94 ? "hsl(40 60% 96%)" : `hsl(${d.hue} 85% ${d.light}%)`;
+          for (let n = 0; n < 5; n++) {
+            const an = (n / 5) * Math.PI * 2;
+            c.beginPath();
+            c.ellipse(Math.cos(an) * br * 0.62, Math.sin(an) * br * 0.62, br * 0.62, br * 0.46, an, 0, Math.PI * 2);
+            c.fill();
+          }
+          c.fillStyle = "hsl(46 85% 60%)";
+          c.beginPath();
+          c.arc(0, 0, br * 0.3, 0, Math.PI * 2);
+          c.fill();
+        }
+        c.setTransform(k, 0, 0, k, 0, 0);
       }
     };
-    drawRope(0); // the back rope sits behind the bowl
 
-    // the bowl: a sliver of glazed ultramarine body below the rim...
+    // the back rope passes behind the bowl
+    drawRope(0);
+
+    // the bowl, in whatever glaze is chosen (ultramarine by default)
+    const hue = params.bowlHue;
+    const L0 = params.bowlLight;
+    const glaze = (dl: number, sat = 70) => `hsl(${hue} ${sat}% ${Math.max(4, Math.min(92, (L0 * 0.8 + 0.1) * 100 + dl))}%)`;
     const body = c.createLinearGradient(b.x - R, b.y, b.x + R, b.y + R * 0.5);
-    body.addColorStop(0, "#4d72e3");
-    body.addColorStop(0.5, "#2546c0");
-    body.addColorStop(1, "#122680");
+    body.addColorStop(0, glaze(16));
+    body.addColorStop(0.5, glaze(0));
+    body.addColorStop(1, glaze(-22));
     c.fillStyle = body;
     c.beginPath();
-    c.ellipse(b.x, b.y + R * 0.16, R * 1.0, R * q * 1.02, 0, 0, Math.PI * 2);
+    c.ellipse(b.x, b.y + R * 0.16, R, R * q * 1.02, 0, 0, Math.PI * 2);
     c.fill();
-    // ...the rim, catching the light...
-    c.strokeStyle = "#b9c9f8";
-    c.lineWidth = 2 * s;
-    c.beginPath();
-    c.ellipse(b.x, b.y, R * 0.97, R * q * 0.97, 0, 0, Math.PI * 2);
-    c.stroke();
-    c.strokeStyle = "rgba(255,255,255,0.75)";
-    c.lineWidth = 1.2 * s;
-    c.beginPath();
-    c.ellipse(b.x, b.y, R * 0.97, R * q * 0.97, 0, Math.PI * 1.05, Math.PI * 1.45);
-    c.stroke();
-    // ...the glazed inner wall, light on the far side, deep blue in the near...
     const wall = c.createLinearGradient(b.x, b.y - R * q, b.x, b.y + R * q);
-    wall.addColorStop(0, "#6f8ff0");
-    wall.addColorStop(0.5, "#2f55d0");
-    wall.addColorStop(1, "#16308f");
+    wall.addColorStop(0, glaze(22));
+    wall.addColorStop(0.5, glaze(4));
+    wall.addColorStop(1, glaze(-18));
     c.fillStyle = wall;
     c.beginPath();
     c.ellipse(b.x, b.y, R * 0.93, R * q * 0.93, 0, 0, Math.PI * 2);
     c.fill();
-    // ...and the corn heaped in the bottom of it
+    c.strokeStyle = glaze(36, 60);
+    c.lineWidth = 2 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, R * 0.95, R * q * 0.95, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.strokeStyle = "rgba(255,255,255,0.8)";
+    c.lineWidth = 1.4 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, R * 0.95, R * q * 0.95, 0, Math.PI * 1.05, Math.PI * 1.45);
+    c.stroke();
+    // corn heaped in the bottom
     const cr = 0.66;
     c.fillStyle = "#b8862a";
     c.beginPath();
@@ -1510,86 +1568,45 @@ export function startPond(
       c.fill();
     }
 
-    // the twine ring, snug around the rim: it's what holds the bowl
-    const ringRx = R * 1.06;
-    const ringRy = R * q * 1.06;
-    c.strokeStyle = "rgba(186,130,126,1)";
-    c.lineWidth = 2.6 * s;
+    // the twine ring, snug round the rim: it's what holds the bowl
+    c.strokeStyle = "rgba(150,98,92,1)";
+    c.lineWidth = 3.4 * s;
     c.beginPath();
     c.ellipse(b.x, b.y, ringRx, ringRy, 0, 0, Math.PI * 2);
     c.stroke();
-    c.strokeStyle = "rgba(242,204,194,0.75)";
-    c.lineWidth = 0.9 * s;
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * Math.PI * 2;
+    c.strokeStyle = "rgba(240,198,188,0.9)";
+    c.lineWidth = 1 * s;
+    for (let n = 0; n < 48; n++) {
+      const a = (n / 48) * Math.PI * 2;
       const x = b.x + Math.cos(a) * ringRx;
       const y = b.y + Math.sin(a) * ringRy;
       const tx = -Math.sin(a);
       const ty = Math.cos(a) * q;
       c.beginPath();
-      c.moveTo(x - tx * 1.4 * s + Math.cos(a) * 1.1 * s, y - ty * 1.4 * s + Math.sin(a) * 1.1 * s);
-      c.lineTo(x + tx * 1.4 * s - Math.cos(a) * 1.1 * s, y + ty * 1.4 * s - Math.sin(a) * 1.1 * s);
+      c.moveTo(x - tx * 1.6 * s + Math.cos(a) * 1.3 * s, y - ty * 1.6 * s + Math.sin(a) * 1.3 * s);
+      c.lineTo(x + tx * 1.6 * s - Math.cos(a) * 1.3 * s, y + ty * 1.6 * s - Math.sin(a) * 1.3 * s);
       c.stroke();
     }
     // a slow warm shimmer on the ring, a hint that it can be touched
     const pulse = 0.5 + 0.5 * Math.sin(clock * 1.6);
     c.strokeStyle = `rgba(255,232,170,${(feeding ? 0.25 : 0.35) + pulse * (feeding ? 0.1 : 0.4)})`;
-    c.lineWidth = 1.3 * s;
+    c.lineWidth = 1.4 * s;
     c.beginPath();
-    c.ellipse(b.x, b.y, ringRx + 1.6 * s, ringRy + 1.6 * s, 0, Math.PI * 0.9, Math.PI * 1.9);
+    c.ellipse(b.x, b.y, ringRx + 2 * s, ringRy + 2 * s, 0, Math.PI * 0.9, Math.PI * 1.9);
     c.stroke();
 
-    // knots where the ropes tie on
-    c.fillStyle = "rgba(170,116,112,1)";
-    for (const a of anchors) {
+    // the remaining ropes in front, then the knot where they all meet
+    for (let i = 1; i < ROPES.length; i++) drawRope(i);
+    c.fillStyle = "rgba(150,98,92,1)";
+    for (let i = 0; i < ROPES.length; i++) {
+      const a = anchor(i);
       c.beginPath();
-      c.arc(a.x, a.y, 2.2 * s, 0, Math.PI * 2);
+      c.arc(a.x, a.y, 2.6 * s, 0, Math.PI * 2);
       c.fill();
     }
-
-    drawRope(1);
-    drawRope(2);
-
-    // blossom and leaves twining down the ropes from the top
-    for (const d of ropeDeco) {
-      const p = ropePath(d.rope, d.t);
-      const sway = Math.sin(clock * 1.3 + d.rot * 4) * 0.12;
-      const rot = d.rot + sway;
-      c.setTransform(k * Math.cos(rot), k * Math.sin(rot), -k * Math.sin(rot), k * Math.cos(rot), (p.x + d.side * 2 * s) * k, p.y * k);
-      if (d.kind === "leaf") {
-        const lr = d.r * s;
-        c.fillStyle = d.hi;
-        c.beginPath();
-        c.moveTo(0, 0);
-        c.bezierCurveTo(lr * 0.4, -lr * 0.8, lr * 1.5, -lr * 0.6, lr * 2, 0);
-        c.lineTo(0, 0);
-        c.fill();
-        c.fillStyle = d.col;
-        c.beginPath();
-        c.moveTo(0, 0);
-        c.bezierCurveTo(lr * 0.4, lr * 0.8, lr * 1.5, lr * 0.6, lr * 2, 0);
-        c.lineTo(0, 0);
-        c.fill();
-      } else {
-        const br = d.r * s;
-        c.fillStyle = `hsl(${d.hue} 85% ${d.light}%)`;
-        for (let i = 0; i < 5; i++) {
-          const a = (i / 5) * Math.PI * 2;
-          c.beginPath();
-          c.ellipse(Math.cos(a) * br * 0.62, Math.sin(a) * br * 0.62, br * 0.62, br * 0.46, a, 0, Math.PI * 2);
-          c.fill();
-        }
-        c.fillStyle = `hsl(${d.hue - 4} 62% ${d.light - 22}%)`;
-        c.beginPath();
-        c.arc(0, 0, br * 0.34, 0, Math.PI * 2);
-        c.fill();
-        c.fillStyle = "hsl(48 80% 70%)";
-        c.beginPath();
-        c.arc(0, 0, br * 0.14, 0, Math.PI * 2);
-        c.fill();
-      }
-    }
-    c.setTransform(k, 0, 0, k, 0, 0);
+    c.beginPath();
+    c.arc(pv.x, pv.y, 3.4 * s, 0, Math.PI * 2);
+    c.fill();
   };
 
   /* ---------- corn ---------- */
@@ -1740,11 +1757,14 @@ export function startPond(
   /* ---------- sizing ---------- */
 
   let sceneW = 1;
+  let sceneK = 0.7; // water pass resolution, relative to the output
   let sceneH = 1;
 
   const sizeLayers = () => {
-    paint.width = Math.round(W * (hasGL ? Math.min(wd, 1) : dpr));
-    paint.height = Math.round(H * (hasGL ? Math.min(wd, 1) : dpr));
+    // the swans and feeder stay sharp even when the water is rendered small
+    const pr = hasGL ? Math.min(window.devicePixelRatio || 1, 1.5) : dpr;
+    paint.width = Math.round(W * pr);
+    paint.height = Math.round(H * pr);
     weeds.width = Math.round(W * 0.75);
     weeds.height = Math.round(H * 0.75);
     canopy.width = Math.round(W * Math.min(wd, 1));
@@ -1755,8 +1775,8 @@ export function startPond(
       waterCanvas.width = Math.round(W * wd);
       waterCanvas.height = Math.round(H * wd);
       // the heavy water pass runs at ~70% resolution; the paint pass upsamples it
-      sceneW = Math.max(1, Math.round(waterCanvas.width * 0.7));
-      sceneH = Math.max(1, Math.round(waterCanvas.height * 0.7));
+      sceneW = Math.max(1, Math.round(waterCanvas.width * sceneK));
+      sceneH = Math.max(1, Math.round(waterCanvas.height * sceneK));
       gl.bindTexture(gl.TEXTURE_2D, tScene);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -2794,11 +2814,19 @@ export function startPond(
     perfN++;
     if (perfN >= 45) {
       const avg = perfAcc / perfN;
-      if (hasGL && avg > 0.024 && wd > 0.6) {
-        wd = Math.max(0.6, wd - 0.2);
+      // shed load from the water first (the brushwork hides it), and only
+      // then soften the whole picture
+      if (hasGL && avg > 0.024 && sceneK > 0.42) {
+        sceneK = Math.max(0.42, sceneK - 0.1);
+        sizeLayers();
+      } else if (hasGL && avg > 0.024 && wd > 0.85) {
+        wd = Math.max(0.85, wd - 0.15);
         sizeLayers();
       } else if (hasGL && avg < 0.0125 && wd < maxWd) {
         wd = Math.min(maxWd, wd + 0.1);
+        sizeLayers();
+      } else if (hasGL && avg < 0.0125 && sceneK < 0.7) {
+        sceneK = Math.min(0.7, sceneK + 0.1);
         sizeLayers();
       }
       perfAcc = 0;
