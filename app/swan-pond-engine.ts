@@ -2040,20 +2040,26 @@ export function startPond(
     }
     if (s.state === "feed") {
       if (s.food && !edible(s.food)) s.food = null;
-      if (!s.food && s.ate < s.appetite) {
+      if (s.ate < s.appetite) {
+        // keep looking: if fresh corn lands nearer, change course for it
+        const cost = (k: Kernel) => {
+          let d = Math.hypot(k.x - s.x, k.y - s.y);
+          // happy to compete, but prefers corn no one else is heading for
+          if (swans.some((o) => o !== s && o.food === k)) d *= 1.8;
+          return d;
+        };
         let best: Kernel | null = null;
         let bestD = Infinity;
         for (const k of kernels) {
           if (!edible(k)) continue;
-          let d = Math.hypot(k.x - s.x, k.y - s.y);
-          // happy to compete, but prefers corn no one else is heading for
-          if (swans.some((o) => o !== s && o.food === k)) d *= 1.8;
+          const d = cost(k);
           if (d < bestD) {
             bestD = d;
             best = k;
           }
         }
-        s.food = best;
+        // a little reluctance to switch, so it doesn't dither between two
+        if (!s.food || (best && best !== s.food && bestD < cost(s.food) * 0.75)) s.food = best;
       }
       if (!s.food || s.ate >= s.appetite || clock > s.feedUntil) {
         s.state = "glide";

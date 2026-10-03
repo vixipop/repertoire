@@ -6,91 +6,156 @@
 
 import type { PondController } from "./swan-pond-engine";
 
-function paintBowl(c: HTMLCanvasElement, w: number, h: number) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  c.width = Math.round(w * dpr);
-  c.height = Math.round(h * dpr);
-  c.style.width = `${w}px`;
-  c.style.height = `${h}px`;
-  const ctx = c.getContext("2d")!;
-  ctx.scale(dpr, dpr);
-  let seed = 9;
-  const r = () => {
-    seed = (seed * 16807) % 2147483647;
-    return seed / 2147483647;
-  };
+/** The bowl as plain shapes: only an underpainting, repainted in dabs below. */
+function underpainting(ctx: CanvasRenderingContext2D, w: number, h: number, r: () => number) {
   const cx = w / 2;
-  const cy = h * 0.5;
-  const rx = w * 0.42;
-  const ry = h * 0.36;
+  const cy = h * 0.48;
+  const rx = w * 0.4;
+  const ry = h * 0.34;
 
-  // soft shadow on the ground
-  const sh = ctx.createRadialGradient(cx + 3, cy + ry * 0.55, 0, cx + 3, cy + ry * 0.55, rx * 1.1);
-  sh.addColorStop(0, "rgba(40,30,30,0.28)");
-  sh.addColorStop(1, "rgba(40,30,30,0)");
+  // violet shadow pooling on the ground, Monet never painted grey ones
+  const sh = ctx.createRadialGradient(cx + w * 0.05, cy + ry * 0.75, 0, cx + w * 0.05, cy + ry * 0.75, rx * 1.15);
+  sh.addColorStop(0, "rgba(96,78,140,0.45)");
+  sh.addColorStop(1, "rgba(96,78,140,0)");
   ctx.fillStyle = sh;
   ctx.fillRect(0, 0, w, h);
 
-  // glazed bowl: outer body, then rim
-  const body = ctx.createLinearGradient(cx - rx, cy, cx + rx, cy + ry);
-  body.addColorStop(0, "#c9d8d2");
-  body.addColorStop(0.55, "#8faaa3");
-  body.addColorStop(1, "#5d7a74");
+  // glazed earthenware: blue-green body, pale rim catching the light
+  const body = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx, cy + ry * 1.3);
+  body.addColorStop(0, "#b9d3d6");
+  body.addColorStop(0.5, "#6f9aa6");
+  body.addColorStop(1, "#3f5f7a");
   ctx.fillStyle = body;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + ry * 0.18, rx, ry * 1.05, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + ry * 0.2, rx, ry * 1.05, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#e9efe9";
+  ctx.fillStyle = "#eef0e2";
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx * 0.97, ry * 0.92, 0, 0, Math.PI * 2);
   ctx.fill();
-  // inside of the bowl
-  const inner = ctx.createRadialGradient(cx - rx * 0.2, cy - ry * 0.3, 0, cx, cy, rx * 0.9);
-  inner.addColorStop(0, "#7d9a92");
-  inner.addColorStop(1, "#4c675f");
+  const inner = ctx.createRadialGradient(cx - rx * 0.25, cy - ry * 0.35, 0, cx, cy, rx * 0.95);
+  inner.addColorStop(0, "#86a9a6");
+  inner.addColorStop(1, "#3e5866");
   ctx.fillStyle = inner;
   ctx.beginPath();
   ctx.ellipse(cx, cy + 1, rx * 0.86, ry * 0.8, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // a heap of kernels, brighter on top
-  for (let i = 0; i < 70; i++) {
+  // the heap of corn: gold on top, ochre and orange in the hollows
+  for (let i = 0; i < 160; i++) {
     const a = r() * Math.PI * 2;
     const d = Math.sqrt(r());
-    const x = cx + Math.cos(a) * rx * 0.74 * d;
-    const y = cy + 1 + Math.sin(a) * ry * 0.66 * d;
-    const s = 2.1 + r() * 0.9;
-    const hue = 40 + r() * 10;
-    const light = 52 + (1 - d) * 16 + r() * 6;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(r() * Math.PI);
-    ctx.fillStyle = `hsl(${hue} 88% ${light}%)`;
+    const x = cx + Math.cos(a) * rx * 0.76 * d;
+    const y = cy + 1 + Math.sin(a) * ry * 0.68 * d - (1 - d) * ry * 0.2;
+    const s = (2.2 + r() * 1.2) * (w / 84);
+    const hue = 36 + r() * 16;
+    const light = 46 + (1 - d) * 22 + r() * 8;
+    ctx.fillStyle = `hsl(${hue} 90% ${light}%)`;
     ctx.beginPath();
-    ctx.ellipse(0, 0, s, s * 0.75, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y, s, s * 0.75, r() * Math.PI, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "rgba(255,250,220,0.55)";
-    ctx.beginPath();
-    ctx.ellipse(-s * 0.35, -s * 0.2, s * 0.35, s * 0.25, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+  }
+}
+
+/**
+ * Painted like the pond: a soft wash of the underpainting, then layers of
+ * loose dabs that each carry one colour picked from beneath, nudged warm or
+ * cool, with ragged edges and paper grain instead of outlines.
+ */
+function paintBowl(c: HTMLCanvasElement, w: number, h: number) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = Math.round(w * dpr);
+  const H = Math.round(h * dpr);
+  c.width = W;
+  c.height = H;
+  c.style.width = `${w}px`;
+  c.style.height = `${h}px`;
+  let seed = 9;
+  const r = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+
+  const base = document.createElement("canvas");
+  base.width = W;
+  base.height = H;
+  const bctx = base.getContext("2d")!;
+  bctx.scale(dpr, dpr);
+  underpainting(bctx, w, h, r);
+  const px = bctx.getImageData(0, 0, W, H).data;
+  const at = (x: number, y: number) => {
+    const ix = Math.max(0, Math.min(W - 1, Math.round(x)));
+    const iy = Math.max(0, Math.min(H - 1, Math.round(y)));
+    const o = (iy * W + ix) * 4;
+    return [px[o], px[o + 1], px[o + 2], px[o + 3]];
+  };
+
+  const ctx = c.getContext("2d")!;
+  // a thin wash first, so the dabs sit on colour rather than on nothing
+  ctx.globalAlpha = 0.45;
+  ctx.drawImage(base, 0, 0);
+  ctx.globalAlpha = 1;
+
+  const cx = W / 2;
+  const cy = H * 0.48;
+  const layers: Array<[number, number]> = [
+    [5.2 * dpr * (w / 84), 0.75],
+    [3.4 * dpr * (w / 84), 0.85],
+    [2.2 * dpr * (w / 84), 0.9],
+  ];
+  for (const [size, opacity] of layers) {
+    for (let gy = 0; gy < H; gy += size * 0.8) {
+      for (let gx = 0; gx < W; gx += size * 0.8) {
+        const x = gx + (r() - 0.5) * size;
+        const y = gy + (r() - 0.5) * size;
+        const [cr, cg, cb, ca] = at(x, y);
+        if (ca < 24) continue;
+        // strokes follow the curve of the bowl
+        const ang = Math.atan2(y - cy, x - cx) + Math.PI / 2 + (r() - 0.5) * 0.7;
+        const k = r();
+        const shift = k < 0.3 ? [-10, -2, 16] : k > 0.72 ? [14, 10, -10] : [0, 0, 0];
+        const v = 0.92 + r() * 0.16;
+        const col = `rgba(${Math.round(cr * v + shift[0])},${Math.round(cg * v + shift[1])},${Math.round(cb * v + shift[2])},${((ca / 255) * opacity).toFixed(3)})`;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, size * (0.8 + r() * 0.6), size * (0.3 + r() * 0.2), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 
-  // painterly finish: a few loose glaze strokes and a highlight on the rim
-  ctx.strokeStyle = "rgba(255,255,255,0.55)";
-  ctx.lineWidth = 1.4;
+  // light catching the rim, laid on with two quick strokes
+  ctx.strokeStyle = "rgba(255,248,226,0.7)";
   ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx * 0.95, ry * 0.9, 0, Math.PI * 1.08, Math.PI * 1.55);
-  ctx.stroke();
-  for (let i = 0; i < 14; i++) {
-    ctx.strokeStyle = `rgba(${r() > 0.5 ? "255,255,255" : "40,70,64"},${0.08 + r() * 0.1})`;
-    ctx.lineWidth = 1 + r() * 1.5;
-    const a = Math.PI * (0.1 + r() * 0.8);
+  for (let i = 0; i < 2; i++) {
+    ctx.lineWidth = (1.6 - i * 0.6) * dpr;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + ry * 0.18, rx * (0.93 + r() * 0.06), ry * (1.0 + r() * 0.04), 0, a, a + 0.3 + r() * 0.3);
+    ctx.ellipse(cx, cy, W * 0.38, H * 0.31, 0, Math.PI * (1.05 + i * 0.08), Math.PI * (1.45 + i * 0.1));
     ctx.stroke();
   }
+
+  // paper grain, only where there is paint
+  ctx.globalCompositeOperation = "source-atop";
+  for (let i = 0; i < W * H * 0.04; i++) {
+    ctx.fillStyle = r() > 0.5 ? "rgba(255,250,235,0.12)" : "rgba(40,30,60,0.1)";
+    ctx.fillRect(r() * W, r() * H, dpr, dpr);
+  }
+  // let the painting fade out at its edges, never a hard border
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.save();
+  ctx.translate(cx, H * 0.52);
+  ctx.scale(1, H / W);
+  const fade = ctx.createRadialGradient(0, 0, W * 0.3, 0, 0, W * 0.5);
+  fade.addColorStop(0, "rgba(0,0,0,1)");
+  fade.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = fade;
+  ctx.fillRect(-W, -W, W * 2, W * 2);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 /** A single kernel, drawn for the cursor. */
@@ -132,7 +197,7 @@ export function mountBowl(container: HTMLElement, pond: HTMLElement, ctl: PondCo
   btn.setAttribute("aria-label", "Pick up some corn to feed the swans");
   btn.title = "Feed the swans";
   const art = document.createElement("canvas");
-  paintBowl(art, 64, 46);
+  paintBowl(art, 84, 60);
   const label = document.createElement("span");
   label.className = "pond-bowl-label";
   label.textContent = "Feed the swans";
