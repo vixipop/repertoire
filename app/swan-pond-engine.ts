@@ -53,19 +53,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 226, bowlLight: 0.5, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 226, bowlLight: 0.5, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
   },
 ];
 
@@ -1009,6 +1009,14 @@ export function startPond(
   const surf = document.createElement("canvas"); // wake height map
   const canopy = document.createElement("canvas"); // overhanging vines
   const cctx = canopy.getContext("2d")!;
+  // the feeder gets its own canvas over everything, at full pixel density, so
+  // nothing in the painting passes can soften it
+  const feederCanvas = document.createElement("canvas");
+  feederCanvas.className = "pond-feeder";
+  feederCanvas.setAttribute("aria-hidden", "true");
+  Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block" });
+  host.appendChild(feederCanvas);
+  const fctx = feederCanvas.getContext("2d")!;
   const sctx = surf.getContext("2d")!;
 
   /* ---------- WebGL ---------- */
@@ -1402,7 +1410,7 @@ export function startPond(
         });
       }
     }
-    cornBits = Array.from({ length: 70 }, () => {
+    cornBits = Array.from({ length: 120 }, () => {
       const a = r() * Math.PI * 2;
       const d = Math.sqrt(r());
       return { x: Math.cos(a) * d * 0.86, y: Math.sin(a) * d * 0.86, r: 0.09 + r() * 0.035, rot: r() * Math.PI, l: 50 + (1 - d) * 18 + r() * 8 };
@@ -1434,7 +1442,7 @@ export function startPond(
   };
 
   const drawFeeder = (c: CanvasRenderingContext2D) => {
-    const k = paint.width / W;
+    const k = c.canvas.width / W;
     const s = scale;
     const pv = feederPivot();
     const b = feederBowl();
@@ -1556,15 +1564,27 @@ export function startPond(
     c.ellipse(b.x, b.y, R * 0.95, R * q * 0.95, 0, Math.PI * 1.05, Math.PI * 1.45);
     c.stroke();
     // corn heaped in the bottom
-    const cr = 0.66;
-    c.fillStyle = "#b8862a";
+    // a generous heap, filling most of the bowl
+    const cr = 0.8;
+    const cy0 = b.y + R * q * 0.06;
+    c.fillStyle = "#a8771f";
     c.beginPath();
-    c.ellipse(b.x, b.y + R * q * 0.12, R * cr, R * q * cr, 0, 0, Math.PI * 2);
+    c.ellipse(b.x, cy0, R * cr, R * q * cr, 0, 0, Math.PI * 2);
     c.fill();
+    c.lineWidth = 0.6 * s;
+    c.strokeStyle = "rgba(120,72,10,0.7)";
     for (const cb of cornBits) {
-      c.fillStyle = `hsl(44 92% ${cb.l}%)`;
+      const x = b.x + cb.x * R * cr;
+      const y = cy0 + cb.y * R * q * cr;
+      const kr = cb.r * R * 0.95;
+      c.fillStyle = `hsl(43 95% ${cb.l}%)`;
       c.beginPath();
-      c.ellipse(b.x + cb.x * R * cr, b.y + R * q * 0.12 + cb.y * R * q * cr, cb.r * R * 1.3, cb.r * R, cb.rot, 0, Math.PI * 2);
+      c.ellipse(x, y, kr * 1.25, kr, cb.rot, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.fillStyle = "rgba(255,250,215,0.85)";
+      c.beginPath();
+      c.ellipse(x - kr * 0.35, y - kr * 0.3, kr * 0.4, kr * 0.28, cb.rot, 0, Math.PI * 2);
       c.fill();
     }
 
@@ -1765,6 +1785,9 @@ export function startPond(
     const pr = hasGL ? Math.min(window.devicePixelRatio || 1, 1.5) : dpr;
     paint.width = Math.round(W * pr);
     paint.height = Math.round(H * pr);
+    const fr = Math.min(window.devicePixelRatio || 1, 2);
+    feederCanvas.width = Math.round(W * fr);
+    feederCanvas.height = Math.round(H * fr);
     weeds.width = Math.round(W * 0.75);
     weeds.height = Math.round(H * 0.75);
     canopy.width = Math.round(W * Math.min(wd, 1));
@@ -2869,7 +2892,10 @@ export function startPond(
     for (const s of live) drawSwan(pctx, s);
     for (const f of petals) if (!f.landed) drawPetal(pctx, f);
     // the feeder hangs above everything on the water
-    drawFeeder(pctx);
+    drawFeeder(pctx); // underneath: gives it a shadow and a soft halo on the water
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.clearRect(0, 0, feederCanvas.width, feederCanvas.height);
+    if (hasGL) drawFeeder(fctx); // on top: crisp
     for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
     if (hasGL && gl && waterProg && postProg) {
@@ -2974,6 +3000,7 @@ export function startPond(
       setFeedingMode(on);
     },
     destroy() {
+      feederCanvas.remove();
       if (raf) cancelAnimationFrame(raf);
       io.disconnect();
       ro.disconnect();
