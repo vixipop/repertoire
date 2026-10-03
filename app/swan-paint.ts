@@ -66,6 +66,7 @@ export type Pose = {
   headTurn: number;
   stretch: number;
   sink: number; // 0 … 1 head under water
+  lift?: number; // 0 … 1 head raised toward the viewer (gazing up)
   lx: number; // sun direction in local space
   ly: number;
   px: number; // one CSS pixel in local units
@@ -500,6 +501,9 @@ export function paintSwan(ctx: CanvasRenderingContext2D, look: Look, pose: Pose)
   ctx.save();
   ctx.translate(hx, hy);
   ctx.rotate(ha);
+  // a raised head is nearer the eye, so it reads a touch larger
+  const lift = pose.lift ?? 0;
+  if (lift > 0) ctx.scale(1 + lift * 0.16, 1 + lift * 0.16);
   ctx.globalAlpha = 1 - pose.sink * 0.85;
   const hr = look.headR;
   const hlx = lx * Math.cos(-ha) - ly * Math.sin(-ha);

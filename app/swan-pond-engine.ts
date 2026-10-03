@@ -129,7 +129,7 @@ export type PondController = {
 
 type Ripple = { x: number; y: number; t: number; a: number };
 type TrailPoint = { x: number; y: number; h: number; v: number; t: number };
-type SwanState = "glide" | "flee" | "away" | "return" | "feed";
+type SwanState = "glide" | "flee" | "away" | "return" | "feed" | "beg";
 
 type Swan = {
   x: number;
@@ -180,6 +180,8 @@ type Swan = {
   ate: number;
   food: Kernel | null;
   feedUntil: number;
+  begUntil: number;
+  lift: number;
 };
 
 type Kernel = { x: number; y: number; z: number; delay: number; vx: number; vy: number; a: number; age: number; landed: boolean; eatenAt: number };
@@ -580,7 +582,8 @@ void main() {
   float halo = swanHalo(p);
   vec3 srgb = sw.rgb;
   float grey = dot(srgb, vec3(0.3333));
-  srgb = mix(srgb, grey * uTint * 1.1, uTintAmt);
+  float satv = (max(srgb.r, max(srgb.g, srgb.b)) - min(srgb.r, min(srgb.g, srgb.b))) / max(sw.a, 0.001);
+  srgb = mix(srgb, grey * uTint * 1.1, uTintAmt * (1.0 - smoothstep(0.12, 0.4, satv)));
   vec3 glowCol = mix(vec3(1.0, 0.98, 0.94), uTint, 0.35 + uTintAmt);
   col += glowCol * halo * uGlow * 0.6 * (1.0 - sw.a);
   col = col * (1.0 - sw.a) + srgb * (1.0 + uGlow * 0.12);
@@ -1357,173 +1360,236 @@ export function startPond(
       }
     };
     for (const br of branches) draw(br, br.bx, br.by, br.ang);
-    drawFeeder();
     cctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
   /* ---------- the hanging feeder ---------- */
 
-  // a twig wreath cradling an ultramarine bowl of corn, hung on twine from
-  // above the frame; it swings like a pendulum and nudges when touched
+  // Seen from high above, as everything in the pond is: we look down into an
+  // ultramarine bowl of corn, held snug in a ring of twine, its three ropes
+  // rising toward us and out past the top of the frame. Pink blossom and
+  // leaves twine up the ropes. It swings like a pendulum when touched.
   const feeder = { ang: 0, vel: 0 };
-  type Twig = { t: number; j: number; len: number; w: number; col: string };
-  type Posy = { t: number; j: number; r: number; col: string; kind: "flower" | "leaf"; rot: number };
-  let twigs: Twig[] = [];
-  let posies: Posy[] = [];
+  type RopeDeco = { rope: number; t: number; side: number; kind: "leaf" | "bloom"; r: number; rot: number; hue: number; light: number; col: string; hi: string };
+  let ropeDeco: RopeDeco[] = [];
   let cornBits: Array<{ x: number; y: number; r: number; rot: number; l: number }> = [];
 
   const buildFeeder = () => {
     const r = mulberry32(77);
-    twigs = Array.from({ length: 150 }, () => ({
-      t: r() * Math.PI * 2,
-      j: (r() - 0.5) * 0.35,
-      len: 0.25 + r() * 0.3,
-      w: 0.9 + r() * 1.1,
-      col: `hsl(${26 + r() * 16} ${30 + r() * 25}% ${22 + r() * 26}%)`,
-    }));
-    const flowerCols = ["hsl(338 72% 80%)", "hsl(275 55% 78%)", "hsl(48 85% 70%)", "hsl(330 60% 88%)", "hsl(290 45% 72%)"];
-    posies = [];
-    for (let i = 0; i < 14; i++) {
-      const leaf = i % 3 === 2;
-      posies.push({
-        t: Math.PI * (0.05 + r() * 0.9) + (r() < 0.3 ? Math.PI : 0),
-        j: (r() - 0.5) * 0.25,
-        r: leaf ? 4 + r() * 2 : 2.4 + r() * 1.4,
-        col: leaf ? `hsl(${100 + r() * 30} 40% ${30 + r() * 15}%)` : flowerCols[Math.floor(r() * flowerCols.length)],
-        kind: leaf ? "leaf" : "flower",
-        rot: r() * Math.PI,
-      });
+    ropeDeco = [];
+    for (let rope = 0; rope < 3; rope++) {
+      const n = rope === 0 ? 7 : 11;
+      for (let i = 0; i < n; i++) {
+        const leaf = r() < 0.62;
+        ropeDeco.push({
+          rope,
+          // clustered toward the top, thinning as the vine climbs down
+          t: Math.pow(r(), 1.4) * 0.62,
+          side: r() < 0.5 ? -1 : 1,
+          kind: leaf ? "leaf" : "bloom",
+          r: leaf ? 4.2 + r() * 2.4 : 2.4 + r() * 1.3,
+          rot: r() * Math.PI * 2,
+          hue: 342 + r() * 14,
+          light: 86 + r() * 8,
+          ...leafColour(r),
+        });
+      }
     }
-    cornBits = Array.from({ length: 46 }, () => {
+    cornBits = Array.from({ length: 70 }, () => {
       const a = r() * Math.PI * 2;
       const d = Math.sqrt(r());
-      return { x: Math.cos(a) * d * 22, y: Math.sin(a) * d * 5.5 - (1 - d) * 3.5, r: 2 + r() * 0.9, rot: r() * Math.PI, l: 50 + (1 - d) * 18 + r() * 8 };
+      return { x: Math.cos(a) * d * 0.86, y: Math.sin(a) * d * 0.86, r: 0.09 + r() * 0.035, rot: r() * Math.PI, l: 50 + (1 - d) * 18 + r() * 8 };
     });
   };
 
-  const feederPivot = () => ({ x: W * 0.875, y: -30 * scale });
+  const FEED_R = 27; // bowl mouth radius, design px
+  const feederPivot = () => ({ x: W * 0.875, y: -40 * scale });
   const feederBowl = () => {
     const pv = feederPivot();
-    const len = H * 0.64 - pv.y;
+    const len = H * 0.66 - pv.y;
     return { x: pv.x + Math.sin(feeder.ang) * len, y: pv.y + Math.cos(feeder.ang) * len };
   };
   const overFeeder = (p: { x: number; y: number }) => {
     const b = feederBowl();
-    return Math.abs(p.x - b.x) < 62 * scale && p.y > b.y - 30 * scale && p.y < b.y + 46 * scale;
+    const R = FEED_R * scale;
+    return Math.hypot((p.x - b.x) / 1.35, (p.y - b.y) / 1.15) < R * 1.25;
   };
 
   const updateFeeder = (dt: number) => {
     const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
-    const acc = -2.1 * feeder.ang - 0.35 * feeder.vel + breeze * 0.012;
+    const acc = -2.1 * feeder.ang - 0.5 * feeder.vel + breeze * 0.008;
     feeder.vel += acc * dt;
     feeder.ang += feeder.vel * dt;
   };
 
-  const drawFeeder = () => {
-    const k = canopy.width / W;
-    const s = scale * 1.35;
+  const drawFeeder = (c: CanvasRenderingContext2D) => {
+    const k = paint.width / W;
+    const s = scale;
     const pv = feederPivot();
     const b = feederBowl();
-    const rx = 38 * s;
-    const ry = 12 * s;
-    const ring = (t: number, j: number) => ({ x: b.x + Math.cos(t) * rx * (1 + j), y: b.y + Math.sin(t) * ry * (1 + j) });
-    cctx.setTransform(k, 0, 0, k, 0, 0);
-    cctx.lineCap = "round";
+    const R = FEED_R * s;
+    const q = 0.82; // nearly face-on: we're looking down into it
+    c.setTransform(k, 0, 0, k, 0, 0);
+    c.lineCap = "round";
+    c.lineJoin = "round";
 
-    // twine: two ropes down to either side of the wreath
-    const ropes = (front: boolean) => {
-      cctx.strokeStyle = front ? "rgba(214,160,156,0.95)" : "rgba(170,122,120,0.85)";
-      cctx.lineWidth = 1.6 * s;
-      for (const side of front ? [-1, 1] : [0]) {
-        const end = side === 0 ? ring(-Math.PI / 2, 0) : ring(side > 0 ? -0.15 : Math.PI + 0.15, 0);
-        cctx.beginPath();
-        cctx.moveTo(pv.x + side * 5 * s, pv.y);
-        cctx.quadraticCurveTo((pv.x + end.x) / 2 + side * 2 * s, (pv.y + end.y) / 2, end.x, end.y);
-        cctx.stroke();
+    // three ropes, from the ring up to where they meet above the frame
+    const anchors = [-Math.PI / 2, Math.PI * 0.83, Math.PI * 0.17].map((a) => ({
+      x: b.x + Math.cos(a) * R * 1.06,
+      y: b.y + Math.sin(a) * R * 1.06 * q,
+    }));
+    const ropePath = (i: number, t: number) => {
+      const a = anchors[i];
+      const top = { x: pv.x + (i === 0 ? 0 : i === 1 ? -7 : 7) * s, y: pv.y };
+      // t: 0 at the top, 1 at the ring; a slight sag
+      const sag = Math.sin(t * Math.PI) * (i === 0 ? 0 : i === 1 ? -3 : 3) * s;
+      return { x: top.x + (a.x - top.x) * t + sag, y: top.y + (a.y - top.y) * t };
+    };
+    const drawRope = (i: number) => {
+      c.strokeStyle = "rgba(196,142,138,0.95)";
+      c.lineWidth = 1.7 * s;
+      c.beginPath();
+      for (let t = 0; t <= 1.0001; t += 0.1) {
+        const p = ropePath(i, t);
+        if (t === 0) c.moveTo(p.x, p.y);
+        else c.lineTo(p.x, p.y);
+      }
+      c.stroke();
+      // twist marks
+      c.strokeStyle = "rgba(240,200,190,0.6)";
+      c.lineWidth = 0.7 * s;
+      for (let t = 0.04; t < 1; t += 0.06) {
+        const p = ropePath(i, t);
+        c.beginPath();
+        c.moveTo(p.x - 1.1 * s, p.y - 0.6 * s);
+        c.lineTo(p.x + 1.1 * s, p.y + 0.6 * s);
+        c.stroke();
       }
     };
-    const twigPass = (back: boolean) => {
-      for (const tw of twigs) {
-        const isBack = Math.sin(tw.t) < 0;
-        if (isBack !== back) continue;
-        const p0 = ring(tw.t, tw.j);
-        const p1 = ring(tw.t + tw.len, tw.j * 0.6);
-        cctx.strokeStyle = tw.col;
-        cctx.lineWidth = tw.w * s;
-        cctx.beginPath();
-        cctx.moveTo(p0.x, p0.y);
-        cctx.quadraticCurveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2 + (back ? -1 : 1) * 1.5 * s, p1.x, p1.y);
-        cctx.stroke();
-      }
-    };
+    drawRope(0); // the back rope sits behind the bowl
 
-    ropes(false);
-    twigPass(true);
-
-    // the bowl: lapis-blue glaze, light catching its left shoulder
-    const bw = 27 * s;
-    const body = cctx.createLinearGradient(b.x - bw, b.y - 4 * s, b.x + bw, b.y + 16 * s);
-    body.addColorStop(0, "#5b7fe6");
-    body.addColorStop(0.45, "#2a4fc4");
-    body.addColorStop(1, "#13277a");
-    cctx.fillStyle = body;
-    cctx.beginPath();
-    cctx.moveTo(b.x - bw, b.y);
-    cctx.bezierCurveTo(b.x - bw * 0.95, b.y + 24 * s, b.x + bw * 0.95, b.y + 24 * s, b.x + bw, b.y);
-    cctx.ellipse(b.x, b.y, bw, 7.5 * s, 0, 0, Math.PI, true);
-    cctx.closePath();
-    cctx.fill();
-    cctx.strokeStyle = "rgba(190,210,255,0.65)";
-    cctx.lineWidth = 1.4 * s;
-    cctx.beginPath();
-    cctx.moveTo(b.x - bw * 0.82, b.y + 4 * s);
-    cctx.quadraticCurveTo(b.x - bw * 0.6, b.y + 15 * s, b.x - bw * 0.25, b.y + 18 * s);
-    cctx.stroke();
-    // rim and the heap of corn inside
-    cctx.fillStyle = "#c79a2e";
-    cctx.beginPath();
-    cctx.ellipse(b.x, b.y, bw * 0.92, 6.5 * s, 0, 0, Math.PI * 2);
-    cctx.fill();
-    for (const c of cornBits) {
-      cctx.fillStyle = `hsl(44 90% ${c.l}%)`;
-      cctx.beginPath();
-      cctx.ellipse(b.x + c.x * s, b.y + c.y * s, c.r * s, c.r * 0.75 * s, c.rot, 0, Math.PI * 2);
-      cctx.fill();
+    // the bowl: a sliver of glazed ultramarine body below the rim...
+    const body = c.createLinearGradient(b.x - R, b.y, b.x + R, b.y + R * 0.5);
+    body.addColorStop(0, "#4d72e3");
+    body.addColorStop(0.5, "#2546c0");
+    body.addColorStop(1, "#122680");
+    c.fillStyle = body;
+    c.beginPath();
+    c.ellipse(b.x, b.y + R * 0.16, R * 1.0, R * q * 1.02, 0, 0, Math.PI * 2);
+    c.fill();
+    // ...the rim, catching the light...
+    c.strokeStyle = "#b9c9f8";
+    c.lineWidth = 2 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, R * 0.97, R * q * 0.97, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.strokeStyle = "rgba(255,255,255,0.75)";
+    c.lineWidth = 1.2 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, R * 0.97, R * q * 0.97, 0, Math.PI * 1.05, Math.PI * 1.45);
+    c.stroke();
+    // ...the glazed inner wall, light on the far side, deep blue in the near...
+    const wall = c.createLinearGradient(b.x, b.y - R * q, b.x, b.y + R * q);
+    wall.addColorStop(0, "#6f8ff0");
+    wall.addColorStop(0.5, "#2f55d0");
+    wall.addColorStop(1, "#16308f");
+    c.fillStyle = wall;
+    c.beginPath();
+    c.ellipse(b.x, b.y, R * 0.93, R * q * 0.93, 0, 0, Math.PI * 2);
+    c.fill();
+    // ...and the corn heaped in the bottom of it
+    const cr = 0.66;
+    c.fillStyle = "#b8862a";
+    c.beginPath();
+    c.ellipse(b.x, b.y + R * q * 0.12, R * cr, R * q * cr, 0, 0, Math.PI * 2);
+    c.fill();
+    for (const cb of cornBits) {
+      c.fillStyle = `hsl(44 92% ${cb.l}%)`;
+      c.beginPath();
+      c.ellipse(b.x + cb.x * R * cr, b.y + R * q * 0.12 + cb.y * R * q * cr, cb.r * R * 1.3, cb.r * R, cb.rot, 0, Math.PI * 2);
+      c.fill();
     }
-    cctx.strokeStyle = "#a8bdf5";
-    cctx.lineWidth = 1.5 * s;
-    cctx.beginPath();
-    cctx.ellipse(b.x, b.y, bw, 7.5 * s, 0, 0, Math.PI * 2);
-    cctx.stroke();
 
-    twigPass(false);
-    ropes(true);
+    // the twine ring, snug around the rim: it's what holds the bowl
+    const ringRx = R * 1.06;
+    const ringRy = R * q * 1.06;
+    c.strokeStyle = "rgba(186,130,126,1)";
+    c.lineWidth = 2.6 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, ringRx, ringRy, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.strokeStyle = "rgba(242,204,194,0.75)";
+    c.lineWidth = 0.9 * s;
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2;
+      const x = b.x + Math.cos(a) * ringRx;
+      const y = b.y + Math.sin(a) * ringRy;
+      const tx = -Math.sin(a);
+      const ty = Math.cos(a) * q;
+      c.beginPath();
+      c.moveTo(x - tx * 1.4 * s + Math.cos(a) * 1.1 * s, y - ty * 1.4 * s + Math.sin(a) * 1.1 * s);
+      c.lineTo(x + tx * 1.4 * s - Math.cos(a) * 1.1 * s, y + ty * 1.4 * s - Math.sin(a) * 1.1 * s);
+      c.stroke();
+    }
+    // a slow warm shimmer on the ring, a hint that it can be touched
+    const pulse = 0.5 + 0.5 * Math.sin(clock * 1.6);
+    c.strokeStyle = `rgba(255,232,170,${(feeding ? 0.25 : 0.35) + pulse * (feeding ? 0.1 : 0.4)})`;
+    c.lineWidth = 1.3 * s;
+    c.beginPath();
+    c.ellipse(b.x, b.y, ringRx + 1.6 * s, ringRy + 1.6 * s, 0, Math.PI * 0.9, Math.PI * 1.9);
+    c.stroke();
 
-    // little flowers and leaves woven into the wreath
-    for (const f of posies) {
-      const p = ring(f.t, f.j);
-      cctx.setTransform(k, 0, 0, k, p.x * k, p.y * k);
-      cctx.rotate(f.rot + Math.sin(clock * 1.3 + f.rot * 5) * 0.08);
-      if (f.kind === "leaf") {
-        cctx.fillStyle = f.col;
-        cctx.beginPath();
-        cctx.ellipse(f.r * s * 0.6, 0, f.r * s, f.r * s * 0.45, 0, 0, Math.PI * 2);
-        cctx.fill();
+    // knots where the ropes tie on
+    c.fillStyle = "rgba(170,116,112,1)";
+    for (const a of anchors) {
+      c.beginPath();
+      c.arc(a.x, a.y, 2.2 * s, 0, Math.PI * 2);
+      c.fill();
+    }
+
+    drawRope(1);
+    drawRope(2);
+
+    // blossom and leaves twining down the ropes from the top
+    for (const d of ropeDeco) {
+      const p = ropePath(d.rope, d.t);
+      const sway = Math.sin(clock * 1.3 + d.rot * 4) * 0.12;
+      const rot = d.rot + sway;
+      c.setTransform(k * Math.cos(rot), k * Math.sin(rot), -k * Math.sin(rot), k * Math.cos(rot), (p.x + d.side * 2 * s) * k, p.y * k);
+      if (d.kind === "leaf") {
+        const lr = d.r * s;
+        c.fillStyle = d.hi;
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.bezierCurveTo(lr * 0.4, -lr * 0.8, lr * 1.5, -lr * 0.6, lr * 2, 0);
+        c.lineTo(0, 0);
+        c.fill();
+        c.fillStyle = d.col;
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.bezierCurveTo(lr * 0.4, lr * 0.8, lr * 1.5, lr * 0.6, lr * 2, 0);
+        c.lineTo(0, 0);
+        c.fill();
       } else {
-        cctx.fillStyle = f.col;
+        const br = d.r * s;
+        c.fillStyle = `hsl(${d.hue} 85% ${d.light}%)`;
         for (let i = 0; i < 5; i++) {
           const a = (i / 5) * Math.PI * 2;
-          cctx.beginPath();
-          cctx.ellipse(Math.cos(a) * f.r * s * 0.6, Math.sin(a) * f.r * s * 0.6, f.r * s * 0.6, f.r * s * 0.45, a, 0, Math.PI * 2);
-          cctx.fill();
+          c.beginPath();
+          c.ellipse(Math.cos(a) * br * 0.62, Math.sin(a) * br * 0.62, br * 0.62, br * 0.46, a, 0, Math.PI * 2);
+          c.fill();
         }
-        cctx.fillStyle = "hsl(45 85% 62%)";
-        cctx.beginPath();
-        cctx.arc(0, 0, f.r * s * 0.3, 0, Math.PI * 2);
-        cctx.fill();
+        c.fillStyle = `hsl(${d.hue - 4} 62% ${d.light - 22}%)`;
+        c.beginPath();
+        c.arc(0, 0, br * 0.34, 0, Math.PI * 2);
+        c.fill();
+        c.fillStyle = "hsl(48 80% 70%)";
+        c.beginPath();
+        c.arc(0, 0, br * 0.14, 0, Math.PI * 2);
+        c.fill();
       }
     }
-    cctx.setTransform(k, 0, 0, k, 0, 0);
+    c.setTransform(k, 0, 0, k, 0, 0);
   };
 
   /* ---------- corn ---------- */
@@ -1895,6 +1961,8 @@ export function startPond(
       ate: 0,
       food: null,
       feedUntil: 0,
+      begUntil: 0,
+      lift: 0,
     };
     s.v = glideSpeed(s);
     return s;
@@ -2140,7 +2208,7 @@ export function startPond(
     const p = local(e);
     // the feeder: take a kernel, or put it back
     if (overFeeder(p)) {
-      feeder.vel += (p.x < feederBowl().x ? 1 : -1) * 0.18;
+      feeder.vel += (p.x < feederBowl().x ? 1 : -1) * 0.045;
       setFeedingMode(!feeding);
       return;
     }
@@ -2207,6 +2275,7 @@ export function startPond(
       s.act = "none";
       s.food = null;
       s.noticeAt = -1;
+      s.begUntil = 0;
       if (Math.random() < 0.6) startFlap(s, true);
     }
 
@@ -2218,7 +2287,7 @@ export function startPond(
 
     // corn on the water: notice it, then swim for the nearest kernel nobody's taken
     const edible = (k: Kernel) => k.eatenAt < 0 && k.delay <= 0;
-    if (s.noticeAt >= 0 && clock >= s.noticeAt && (s.state === "glide" || s.state === "return")) {
+    if (s.noticeAt >= 0 && clock >= s.noticeAt && (s.state === "glide" || s.state === "return" || s.state === "beg")) {
       s.noticeAt = -1;
       if (kernels.some(edible)) {
         s.state = "feed";
@@ -2314,6 +2383,29 @@ export function startPond(
         s.actDur = s.act === "dip" ? rand(2.2, 3.6) : rand(2.6, 4.2);
         s.actSide = Math.random() < 0.5 ? -1 : 1;
         s.nextAct = rand(7, 16);
+      }
+    } else if (s.state === "beg") {
+      // swim under the feeder, then wait there gazing up at it
+      const fb = feederBowl();
+      const hx = s.x + dirX * (0.2 + s.look.neckLen) * sz;
+      const hy = s.y + dirY * (0.2 + s.look.neckLen) * sz;
+      const hd = Math.hypot(fb.x - hx, fb.y - hy);
+      const off = wrapAngle(Math.atan2(fb.y - s.y, fb.x - s.x) - s.h);
+      const align = Math.max(0, Math.cos(off));
+      s.tx = fb.x;
+      s.ty = fb.y;
+      if (s.begUntil === 0 && hd < 0.55 * sz) s.begUntil = clock + rand(4, 6.5);
+      const waiting = s.begUntil > 0;
+      vTarget = waiting ? 0 : glideSpeed(s) * clamp(dl / (2.4 * sz), 0.12, 1) * (0.12 + 0.88 * align * align);
+      maxTurn = waiting ? 0.5 : 1.0;
+      angAcc = 1.2;
+      accel = waiting ? 2 : 1;
+      if (dl < 2.6 * sz) s.headYawTarget = clamp(off, -0.8, 0.8);
+      if (waiting && clock > s.begUntil) {
+        s.state = "glide";
+        s.begUntil = 0;
+        s.headYawTarget = 0;
+        pickWaypoint(s);
       }
     } else if (s.state === "feed" && s.food) {
       // eager at first, then gentle as it arrives
@@ -2481,6 +2573,10 @@ export function startPond(
       if (s.actT >= s.actDur) s.act = "none";
     }
 
+    // gazing up: the head lifts toward us while it waits under the feeder
+    const liftTarget = s.state === "beg" && s.begUntil > 0 ? 1 : 0;
+    s.lift += (liftTarget - s.lift) * (1 - Math.exp(-dt * 2.2));
+
     // the neck is sprung: it leans into turns, overshoots a touch and settles
     const env = actionEnvelope(s);
     let bendTarget = s.w * 1.1 + s.headYaw * 0.6 + Math.sin(clock * 0.37 + s.swayPhase) * 0.1;
@@ -2567,7 +2663,8 @@ export function startPond(
       speedRatio,
       bend: clamp(s.bend, -2.5, 2.5),
       headTurn: s.headYaw * 0.4 + (s.act === "preen" ? Math.sin(s.actT * 9) * 0.16 * env : 0),
-      stretch: (fleeing ? 1.12 : 1) + (s.act === "dip" ? env * 0.2 : 0) + Math.sin(s.paddle * 2) * 0.015,
+      stretch: (fleeing ? 1.12 : 1) + s.lift * 0.12 + (s.act === "dip" ? env * 0.2 : 0) + Math.sin(s.paddle * 2) * 0.015,
+      lift: s.lift,
       sink: s.act === "dip" ? clamp((env - 0.35) / 0.45, 0, 1) : 0,
       lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
       ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
@@ -2683,6 +2780,7 @@ export function startPond(
   let perfAcc = 0;
   let perfN = 0;
   let canopyTick = 0;
+  let nextBeg = rand(40, 80);
 
   const frame = (now: number) => {
     raf = 0;
@@ -2717,6 +2815,18 @@ export function startPond(
     updatePetals(dt);
     updateKernels(dt);
     updateFeeder(dt);
+    if (clock > nextBeg) {
+      nextBeg = clock + rand(100, 140);
+      const idle = swans.filter((s) => s.state === "glide" && s.act === "none" && s.noticeAt < 0);
+      if (idle.length && !kernels.length) {
+        const fb = feederBowl();
+        idle.sort((a, b) => Math.hypot(a.x - fb.x, a.y - fb.y) - Math.hypot(b.x - fb.x, b.y - fb.y));
+        const s = idle[Math.random() < 0.6 ? 0 : Math.floor(Math.random() * idle.length)];
+        s.state = "beg";
+        s.begUntil = 0;
+        s.loopTime = 0;
+      }
+    }
 
     for (let i = ripples.length - 1; i >= 0; i--) if (clock - ripples[i].t > 5.5) ripples.splice(i, 1);
 
@@ -2730,6 +2840,8 @@ export function startPond(
     const live = swans.filter((s) => s.state !== "away").sort((a, b) => a.y - b.y);
     for (const s of live) drawSwan(pctx, s);
     for (const f of petals) if (!f.landed) drawPetal(pctx, f);
+    // the feeder hangs above everything on the water
+    drawFeeder(pctx);
     for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
     if (hasGL && gl && waterProg && postProg) {
