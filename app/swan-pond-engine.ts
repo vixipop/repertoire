@@ -14,6 +14,7 @@
  */
 
 import { makeLook, paintSwan, type Look } from "./swan-paint";
+import { kernelCursor } from "./swan-pond-feed";
 
 const MAX_RIPPLES = 20;
 const DESIGN_WIDTH = 680;
@@ -1356,7 +1357,173 @@ export function startPond(
       }
     };
     for (const br of branches) draw(br, br.bx, br.by, br.ang);
+    drawFeeder();
     cctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  /* ---------- the hanging feeder ---------- */
+
+  // a twig wreath cradling an ultramarine bowl of corn, hung on twine from
+  // above the frame; it swings like a pendulum and nudges when touched
+  const feeder = { ang: 0, vel: 0 };
+  type Twig = { t: number; j: number; len: number; w: number; col: string };
+  type Posy = { t: number; j: number; r: number; col: string; kind: "flower" | "leaf"; rot: number };
+  let twigs: Twig[] = [];
+  let posies: Posy[] = [];
+  let cornBits: Array<{ x: number; y: number; r: number; rot: number; l: number }> = [];
+
+  const buildFeeder = () => {
+    const r = mulberry32(77);
+    twigs = Array.from({ length: 150 }, () => ({
+      t: r() * Math.PI * 2,
+      j: (r() - 0.5) * 0.35,
+      len: 0.25 + r() * 0.3,
+      w: 0.9 + r() * 1.1,
+      col: `hsl(${26 + r() * 16} ${30 + r() * 25}% ${22 + r() * 26}%)`,
+    }));
+    const flowerCols = ["hsl(338 72% 80%)", "hsl(275 55% 78%)", "hsl(48 85% 70%)", "hsl(330 60% 88%)", "hsl(290 45% 72%)"];
+    posies = [];
+    for (let i = 0; i < 14; i++) {
+      const leaf = i % 3 === 2;
+      posies.push({
+        t: Math.PI * (0.05 + r() * 0.9) + (r() < 0.3 ? Math.PI : 0),
+        j: (r() - 0.5) * 0.25,
+        r: leaf ? 4 + r() * 2 : 2.4 + r() * 1.4,
+        col: leaf ? `hsl(${100 + r() * 30} 40% ${30 + r() * 15}%)` : flowerCols[Math.floor(r() * flowerCols.length)],
+        kind: leaf ? "leaf" : "flower",
+        rot: r() * Math.PI,
+      });
+    }
+    cornBits = Array.from({ length: 46 }, () => {
+      const a = r() * Math.PI * 2;
+      const d = Math.sqrt(r());
+      return { x: Math.cos(a) * d * 22, y: Math.sin(a) * d * 5.5 - (1 - d) * 3.5, r: 2 + r() * 0.9, rot: r() * Math.PI, l: 50 + (1 - d) * 18 + r() * 8 };
+    });
+  };
+
+  const feederPivot = () => ({ x: W * 0.875, y: -30 * scale });
+  const feederBowl = () => {
+    const pv = feederPivot();
+    const len = H * 0.64 - pv.y;
+    return { x: pv.x + Math.sin(feeder.ang) * len, y: pv.y + Math.cos(feeder.ang) * len };
+  };
+  const overFeeder = (p: { x: number; y: number }) => {
+    const b = feederBowl();
+    return Math.abs(p.x - b.x) < 62 * scale && p.y > b.y - 30 * scale && p.y < b.y + 46 * scale;
+  };
+
+  const updateFeeder = (dt: number) => {
+    const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
+    const acc = -2.1 * feeder.ang - 0.35 * feeder.vel + breeze * 0.012;
+    feeder.vel += acc * dt;
+    feeder.ang += feeder.vel * dt;
+  };
+
+  const drawFeeder = () => {
+    const k = canopy.width / W;
+    const s = scale * 1.35;
+    const pv = feederPivot();
+    const b = feederBowl();
+    const rx = 38 * s;
+    const ry = 12 * s;
+    const ring = (t: number, j: number) => ({ x: b.x + Math.cos(t) * rx * (1 + j), y: b.y + Math.sin(t) * ry * (1 + j) });
+    cctx.setTransform(k, 0, 0, k, 0, 0);
+    cctx.lineCap = "round";
+
+    // twine: two ropes down to either side of the wreath
+    const ropes = (front: boolean) => {
+      cctx.strokeStyle = front ? "rgba(214,160,156,0.95)" : "rgba(170,122,120,0.85)";
+      cctx.lineWidth = 1.6 * s;
+      for (const side of front ? [-1, 1] : [0]) {
+        const end = side === 0 ? ring(-Math.PI / 2, 0) : ring(side > 0 ? -0.15 : Math.PI + 0.15, 0);
+        cctx.beginPath();
+        cctx.moveTo(pv.x + side * 5 * s, pv.y);
+        cctx.quadraticCurveTo((pv.x + end.x) / 2 + side * 2 * s, (pv.y + end.y) / 2, end.x, end.y);
+        cctx.stroke();
+      }
+    };
+    const twigPass = (back: boolean) => {
+      for (const tw of twigs) {
+        const isBack = Math.sin(tw.t) < 0;
+        if (isBack !== back) continue;
+        const p0 = ring(tw.t, tw.j);
+        const p1 = ring(tw.t + tw.len, tw.j * 0.6);
+        cctx.strokeStyle = tw.col;
+        cctx.lineWidth = tw.w * s;
+        cctx.beginPath();
+        cctx.moveTo(p0.x, p0.y);
+        cctx.quadraticCurveTo((p0.x + p1.x) / 2, (p0.y + p1.y) / 2 + (back ? -1 : 1) * 1.5 * s, p1.x, p1.y);
+        cctx.stroke();
+      }
+    };
+
+    ropes(false);
+    twigPass(true);
+
+    // the bowl: lapis-blue glaze, light catching its left shoulder
+    const bw = 27 * s;
+    const body = cctx.createLinearGradient(b.x - bw, b.y - 4 * s, b.x + bw, b.y + 16 * s);
+    body.addColorStop(0, "#5b7fe6");
+    body.addColorStop(0.45, "#2a4fc4");
+    body.addColorStop(1, "#13277a");
+    cctx.fillStyle = body;
+    cctx.beginPath();
+    cctx.moveTo(b.x - bw, b.y);
+    cctx.bezierCurveTo(b.x - bw * 0.95, b.y + 24 * s, b.x + bw * 0.95, b.y + 24 * s, b.x + bw, b.y);
+    cctx.ellipse(b.x, b.y, bw, 7.5 * s, 0, 0, Math.PI, true);
+    cctx.closePath();
+    cctx.fill();
+    cctx.strokeStyle = "rgba(190,210,255,0.65)";
+    cctx.lineWidth = 1.4 * s;
+    cctx.beginPath();
+    cctx.moveTo(b.x - bw * 0.82, b.y + 4 * s);
+    cctx.quadraticCurveTo(b.x - bw * 0.6, b.y + 15 * s, b.x - bw * 0.25, b.y + 18 * s);
+    cctx.stroke();
+    // rim and the heap of corn inside
+    cctx.fillStyle = "#c79a2e";
+    cctx.beginPath();
+    cctx.ellipse(b.x, b.y, bw * 0.92, 6.5 * s, 0, 0, Math.PI * 2);
+    cctx.fill();
+    for (const c of cornBits) {
+      cctx.fillStyle = `hsl(44 90% ${c.l}%)`;
+      cctx.beginPath();
+      cctx.ellipse(b.x + c.x * s, b.y + c.y * s, c.r * s, c.r * 0.75 * s, c.rot, 0, Math.PI * 2);
+      cctx.fill();
+    }
+    cctx.strokeStyle = "#a8bdf5";
+    cctx.lineWidth = 1.5 * s;
+    cctx.beginPath();
+    cctx.ellipse(b.x, b.y, bw, 7.5 * s, 0, 0, Math.PI * 2);
+    cctx.stroke();
+
+    twigPass(false);
+    ropes(true);
+
+    // little flowers and leaves woven into the wreath
+    for (const f of posies) {
+      const p = ring(f.t, f.j);
+      cctx.setTransform(k, 0, 0, k, p.x * k, p.y * k);
+      cctx.rotate(f.rot + Math.sin(clock * 1.3 + f.rot * 5) * 0.08);
+      if (f.kind === "leaf") {
+        cctx.fillStyle = f.col;
+        cctx.beginPath();
+        cctx.ellipse(f.r * s * 0.6, 0, f.r * s, f.r * s * 0.45, 0, 0, Math.PI * 2);
+        cctx.fill();
+      } else {
+        cctx.fillStyle = f.col;
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          cctx.beginPath();
+          cctx.ellipse(Math.cos(a) * f.r * s * 0.6, Math.sin(a) * f.r * s * 0.6, f.r * s * 0.6, f.r * s * 0.45, a, 0, Math.PI * 2);
+          cctx.fill();
+        }
+        cctx.fillStyle = "hsl(45 85% 62%)";
+        cctx.beginPath();
+        cctx.arc(0, 0, f.r * s * 0.3, 0, Math.PI * 2);
+        cctx.fill();
+      }
+    }
+    cctx.setTransform(k, 0, 0, k, 0, 0);
   };
 
   /* ---------- corn ---------- */
@@ -1627,6 +1794,7 @@ export function startPond(
     sizeLayers();
     buildWeeds();
     buildVines();
+    buildFeeder();
     featherEdge();
     if (hasGL && gl) {
       gl.bindTexture(gl.TEXTURE_2D, tBed);
@@ -1905,9 +2073,24 @@ export function startPond(
     return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
   };
 
+  const corn = kernelCursor();
+  const setCursor = (p: { x: number; y: number } | null) => {
+    host.style.cursor = feeding ? corn : p && overFeeder(p) ? "grab" : "";
+  };
+  const setFeedingMode = (on: boolean) => {
+    feeding = on;
+    host.dataset.feeding = on ? "true" : "false";
+    setCursor(pointer);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && feeding) setFeedingMode(false);
+  };
+  window.addEventListener("keydown", onKey);
+
   const onMove = (e: PointerEvent) => {
     const p = local(e);
     pointer = p;
+    setCursor(p);
     const d = Math.hypot(p.x - lastHover.x, p.y - lastHover.y);
     if (d > 26 * scale && clock - lastHover.t > 0.08) {
       addRipple(p.x, p.y, clamp(0.12 + d / (160 * scale), 0.14, 0.34));
@@ -1955,6 +2138,12 @@ export function startPond(
 
   const onDown = (e: PointerEvent) => {
     const p = local(e);
+    // the feeder: take a kernel, or put it back
+    if (overFeeder(p)) {
+      feeder.vel += (p.x < feederBowl().x ? 1 : -1) * 0.18;
+      setFeedingMode(!feeding);
+      return;
+    }
     if (feeding) {
       throwCorn(p.x, p.y);
       return;
@@ -2527,6 +2716,7 @@ export function startPond(
     updateLeaves(dt);
     updatePetals(dt);
     updateKernels(dt);
+    updateFeeder(dt);
 
     for (let i = ripples.length - 1; i >= 0; i--) if (clock - ripples[i].t > 5.5) ripples.splice(i, 1);
 
@@ -2641,8 +2831,7 @@ export function startPond(
       return { ...target };
     },
     setFeeding(on) {
-      feeding = on;
-      host.dataset.feeding = on ? "true" : "false";
+      setFeedingMode(on);
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);
@@ -2652,6 +2841,7 @@ export function startPond(
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerleave", onLeave);
       host.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };

@@ -667,29 +667,6 @@ html.is-theme-switching .theme-toggle-icon {
   .pond { aspect-ratio: 4 / 3; border-radius: 20px; }
 }
 
-/* the bowl of corn, tucked under the pond's right-hand edge */
-.pond-feed-slot { align-self: center; width: min(680px, calc(100vw - 32px)); display: flex; justify-content: flex-end; margin-top: -14px; }
-.pond-feed-slot:empty { display: none; }
-.pond-bowl {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 4px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  transition: transform .2s cubic-bezier(.22,.61,.36,1), color .2s;
-}
-.pond-bowl canvas { display: block; transition: transform .25s cubic-bezier(.22,.61,.36,1); }
-.pond-bowl:hover { color: var(--text-strong); }
-.pond-bowl:hover canvas { transform: translateY(-2px) rotate(-3deg); }
-.pond-bowl[aria-pressed="true"] { color: var(--text-strong); }
-.pond-bowl[aria-pressed="true"] canvas { transform: translateY(-3px) rotate(-6deg); filter: drop-shadow(0 4px 6px #00000030); }
-
 /* pond-tuner:start — colour panel, shown in dev or with ?tune */
 .pond-tuner-slot { align-self: center; width: min(680px, calc(100vw - 32px)); }
 .pond-tuner-slot:empty { display: none; }
