@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { startPond } from "./swan-pond-engine";
 import { defaultLooks, followClock, lookAt } from "./swan-pond-time";
 import { initialParams, mountTuner } from "./swan-pond-tuner";
+import { mountBowl } from "./swan-pond-feed";
 
 /**
  * Interactive pond — swans drift in long loops; hovering stirs the water,
@@ -19,6 +20,7 @@ export default function SwanPond() {
   const waterRef = useRef<HTMLCanvasElement>(null);
   const swansRef = useRef<HTMLCanvasElement>(null);
   const tunerRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -31,7 +33,9 @@ export default function SwanPond() {
     const ctl = startPond(host, water, swans, tune ? initialParams() : lookAt(defaultLooks()).params);
     const stop =
       tune && tunerRef.current ? mountTuner(tunerRef.current, ctl) : followClock(ctl, defaultLooks);
+    const unmountBowl = feedRef.current ? mountBowl(feedRef.current, host, ctl) : undefined;
     return () => {
+      unmountBowl?.();
       stop();
       ctl.destroy();
     };
@@ -48,6 +52,7 @@ export default function SwanPond() {
         <canvas className="pond-water" ref={waterRef} />
         <canvas className="pond-swans" ref={swansRef} />
       </div>
+      <div className="pond-feed-slot" ref={feedRef} />
       <div className="pond-tuner-slot" ref={tunerRef} />
     </>
   );

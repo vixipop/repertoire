@@ -117,6 +117,8 @@ export function mixParams(a: PondParams, b: PondParams, t: number): PondParams {
 export type PondController = {
   setParams(p: Partial<PondParams>, instant?: boolean): void;
   getParams(): PondParams;
+  /** Holding corn: clicks on the water throw kernels instead of startling the swans. */
+  setFeeding(on: boolean): void;
   destroy(): void;
 };
 
@@ -126,7 +128,7 @@ export type PondController = {
 
 type Ripple = { x: number; y: number; t: number; a: number };
 type TrailPoint = { x: number; y: number; h: number; v: number; t: number };
-type SwanState = "glide" | "flee" | "away" | "return";
+type SwanState = "glide" | "flee" | "away" | "return" | "feed";
 
 type Swan = {
   x: number;
@@ -171,7 +173,15 @@ type Swan = {
   actDur: number;
   actSide: number;
   nextAct: number;
+  // feeding: how hungry this swan is this time, and what it's swimming for
+  noticeAt: number;
+  appetite: number;
+  ate: number;
+  food: Kernel | null;
+  feedUntil: number;
 };
+
+type Kernel = { x: number; y: number; z: number; delay: number; vx: number; vy: number; a: number; age: number; landed: boolean; eatenAt: number };
 
 type Leaf = { x: number; y: number; a: number; va: number; vx: number; vy: number; size: number; hue: number; curl: number };
 
@@ -1349,6 +1359,69 @@ export function startPond(
     cctx.setTransform(1, 0, 0, 1, 0, 0);
   };
 
+  /* ---------- corn ---------- */
+
+  const updateKernels = (dt: number) => {
+    const ca = currentAngle();
+    for (let i = kernels.length - 1; i >= 0; i--) {
+      const k = kernels[i];
+      if (k.delay > 0) {
+        k.delay -= dt;
+        continue;
+      }
+      k.age += dt;
+      if (!k.landed) {
+        k.z -= dt * 2.4;
+        k.x += k.vx * dt;
+        k.y += k.vy * dt;
+        k.a += dt * 6;
+        if (k.z <= 0) {
+          k.z = 0;
+          k.landed = true;
+          k.age = 0;
+          addRipple(k.x, k.y, 0.09);
+        }
+      } else {
+        // bobbing a moment on the surface, drifting with the current
+        k.vx += (Math.cos(ca) * 3 * scale - k.vx) * (1 - Math.exp(-dt * 1.5));
+        k.vy += (Math.sin(ca) * 3 * scale - k.vy) * (1 - Math.exp(-dt * 1.5));
+        k.x += k.vx * dt;
+        k.y += k.vy * dt;
+      }
+      if ((k.eatenAt >= 0 && clock >= k.eatenAt) || k.age > 26) kernels.splice(i, 1);
+    }
+  };
+
+  const drawKernel = (c: CanvasRenderingContext2D, k: Kernel) => {
+    if (k.delay > 0) return;
+    const sc = k.landed ? 1 : 1 + k.z * 1.2;
+    // uneaten corn slowly sinks out of sight
+    const alpha = k.landed ? clamp((26 - k.age) / 8, 0, 1) : 1;
+    const s = 2.6 * scale * sc;
+    c.save();
+    c.globalAlpha = alpha;
+    c.translate(k.x, k.y);
+    c.rotate(k.a);
+    const g = c.createRadialGradient(-s * 0.3, -s * 0.3, 0, 0, 0, s * 1.3);
+    g.addColorStop(0, "#fff1b0");
+    g.addColorStop(0.45, "#f3c440");
+    g.addColorStop(1, "#c98a1c");
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(-s * 1.05, -s * 0.15);
+    c.quadraticCurveTo(-s * 0.9, -s * 0.95, s * 0.2, -s * 0.85);
+    c.quadraticCurveTo(s * 1.1, -s * 0.5, s * 1.0, 0);
+    c.quadraticCurveTo(s * 1.1, s * 0.5, s * 0.2, s * 0.85);
+    c.quadraticCurveTo(-s * 0.9, s * 0.95, -s * 1.05, s * 0.15);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "rgba(255,250,225,0.7)";
+    c.beginPath();
+    c.ellipse(-s * 0.55, 0, s * 0.3, s * 0.2, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  };
+
   /* ---------- falling petals ---------- */
 
   type Petal = { x: number; y: number; z: number; vx: number; vy: number; a: number; va: number; size: number; hue: number; age: number; landed: boolean };
@@ -1649,6 +1722,11 @@ export function startPond(
       actDur: 0,
       actSide: 1,
       nextAct: rand(4, 12),
+      noticeAt: -1,
+      appetite: 0,
+      ate: 0,
+      food: null,
+      feedUntil: 0,
     };
     s.v = glideSpeed(s);
     return s;
@@ -1839,8 +1917,48 @@ export function startPond(
   const onLeave = () => {
     pointer = null;
   };
+  let feeding = false;
+  const kernels: Kernel[] = [];
+
+  // a small handful: 4–8 kernels, scattered as they leave the hand
+  const throwCorn = (px: number, py: number) => {
+    const n = 4 + Math.floor(Math.random() * 5);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 26 * scale;
+      kernels.push({
+        x: px + Math.cos(a) * r * 0.3,
+        y: py + Math.sin(a) * r * 0.3,
+        z: 1,
+        delay: Math.random() * 0.22,
+        vx: Math.cos(a) * r * 1.6,
+        vy: Math.sin(a) * r * 1.6,
+        a: Math.random() * Math.PI * 2,
+        age: 0,
+        landed: false,
+        eatenAt: -1,
+      });
+    }
+    // each swan decides how hungry it is; most take one or two, a greedy one more
+    for (const s of swans) {
+      if (s.state === "away" || s.state === "flee" || s.fleeAt >= 0) continue;
+      const d = Math.hypot(s.x - px, s.y - py);
+      if (s.state !== "feed") {
+        s.appetite = [1, 1, 2, 2, 2, 3][Math.floor(Math.random() * 6)];
+        s.ate = 0;
+        s.noticeAt = clock + 0.35 + d / (W * 0.9) + rand(0, 0.5);
+      } else {
+        s.appetite += Math.random() < 0.5 ? 1 : 0;
+      }
+    }
+  };
+
   const onDown = (e: PointerEvent) => {
     const p = local(e);
+    if (feeding) {
+      throwCorn(p.x, p.y);
+      return;
+    }
     addRipple(p.x, p.y, 1.0);
     addRipple(p.x, p.y, 0.45, 0.22);
     for (const f of leaves) {
@@ -1898,6 +2016,8 @@ export function startPond(
       s.ty = s.y + (by / bl) * (W + H);
       s.headYawTarget = 0;
       s.act = "none";
+      s.food = null;
+      s.noticeAt = -1;
       if (Math.random() < 0.6) startFlap(s, true);
     }
 
@@ -1906,6 +2026,44 @@ export function startPond(
     let angAcc = 0.45;
     let accel = 0.8;
     let loopOverride: number | null = null;
+
+    // corn on the water: notice it, then swim for the nearest kernel nobody's taken
+    const edible = (k: Kernel) => k.eatenAt < 0 && k.delay <= 0;
+    if (s.noticeAt >= 0 && clock >= s.noticeAt && (s.state === "glide" || s.state === "return")) {
+      s.noticeAt = -1;
+      if (kernels.some(edible)) {
+        s.state = "feed";
+        s.loopTime = 0;
+        s.act = "none";
+        s.feedUntil = clock + rand(9, 13);
+      }
+    }
+    if (s.state === "feed") {
+      if (s.food && !edible(s.food)) s.food = null;
+      if (!s.food && s.ate < s.appetite) {
+        let best: Kernel | null = null;
+        let bestD = Infinity;
+        for (const k of kernels) {
+          if (!edible(k)) continue;
+          let d = Math.hypot(k.x - s.x, k.y - s.y);
+          // happy to compete, but prefers corn no one else is heading for
+          if (swans.some((o) => o !== s && o.food === k)) d *= 1.8;
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        }
+        s.food = best;
+      }
+      if (!s.food || s.ate >= s.appetite || clock > s.feedUntil) {
+        s.state = "glide";
+        s.food = null;
+        pickWaypoint(s);
+      } else {
+        s.tx = s.food.x;
+        s.ty = s.food.y;
+      }
+    }
 
     const dx = s.tx - s.x;
     const dy = s.ty - s.y;
@@ -1962,6 +2120,30 @@ export function startPond(
         s.actSide = Math.random() < 0.5 ? -1 : 1;
         s.nextAct = rand(7, 16);
       }
+    } else if (s.state === "feed" && s.food) {
+      // eager at first, then gentle as it arrives
+      const hx = s.x + dirX * (0.2 + s.look.neckLen) * sz;
+      const hy = s.y + dirY * (0.2 + s.look.neckLen) * sz;
+      const hd = Math.hypot(s.food.x - hx, s.food.y - hy);
+      // if the corn is off to one side, ease right down and turn to it
+      // rather than circling it forever
+      const off = wrapAngle(Math.atan2(s.food.y - s.y, s.food.x - s.x) - s.h);
+      const align = Math.max(0, Math.cos(off));
+      vTarget = glideSpeed(s) * 1.55 * clamp(dl / (2.2 * sz), 0.12, 1) * (0.12 + 0.88 * align * align);
+      maxTurn = 1.15;
+      angAcc = 1.7;
+      accel = 1.4;
+      // and the neck reaches toward it
+      if (dl < 2.5 * sz) s.headYawTarget = clamp(off, -0.9, 0.9);
+      // close enough: dip and peck it up
+      if (hd < 0.42 * sz && s.food.landed && s.act === "none") {
+        s.act = "dip";
+        s.actT = 0;
+        s.actDur = rand(0.8, 1.1);
+        s.food.eatenAt = clock + s.actDur * 0.45;
+        s.ate++;
+        s.food = null;
+      }
     } else if (s.state === "flee") {
       vTarget = glideSpeed(s) * 2.3;
       maxTurn = 0.95;
@@ -2005,7 +2187,8 @@ export function startPond(
       const cy = ry + vy * tc;
       const cd = Math.hypot(cx, cy);
       const span = (s.size + o.size) / 2;
-      const safe = 2.0 * L * span;
+      const jostle = s.state === "feed" && o.state === "feed";
+      const safe = (jostle ? 0.75 : 2.0) * L * span;
       if (cd < safe) {
         const u = (1 - cd / safe) * (1 - tc / 4.5);
         let ax = -cx;
@@ -2023,9 +2206,9 @@ export function startPond(
         s.loopTime = 0;
       }
       // and plain personal space at close range
-      const R = 2.6 * L * span;
+      const R = (jostle ? 0.95 : 2.6) * L * span;
       if (od > 0 && od < R) {
-        const f = ((R - od) / R) * 2.2;
+        const f = ((R - od) / R) * (jostle ? 1.0 : 2.2);
         wantX -= (rx / od) * f;
         wantY -= (ry / od) * f;
       }
@@ -2033,7 +2216,7 @@ export function startPond(
     maxTurn *= 1 + urgent * 0.5;
     angAcc *= 1 + urgent * 0.6;
 
-    if (pointer && s.state !== "flee") {
+    if (pointer && s.state !== "flee" && s.state !== "feed" && !feeding) {
       const px = s.x - pointer.x;
       const py = s.y - pointer.y;
       const pd = Math.hypot(px, py);
@@ -2337,6 +2520,7 @@ export function startPond(
     resolveOverlaps(dt * motion);
     updateLeaves(dt);
     updatePetals(dt);
+    updateKernels(dt);
 
     for (let i = ripples.length - 1; i >= 0; i--) if (clock - ripples[i].t > 5.5) ripples.splice(i, 1);
 
@@ -2346,9 +2530,11 @@ export function startPond(
     pctx.clearRect(0, 0, W, H);
     for (const f of leaves) drawLeaf(pctx, f);
     for (const f of petals) if (f.landed) drawPetal(pctx, f);
+    for (const k of kernels) if (k.landed) drawKernel(pctx, k);
     const live = swans.filter((s) => s.state !== "away").sort((a, b) => a.y - b.y);
     for (const s of live) drawSwan(pctx, s);
     for (const f of petals) if (!f.landed) drawPetal(pctx, f);
+    for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
     if (hasGL && gl && waterProg && postProg) {
       drawWeeds();
@@ -2447,6 +2633,10 @@ export function startPond(
     },
     getParams() {
       return { ...target };
+    },
+    setFeeding(on) {
+      feeding = on;
+      host.dataset.feeding = on ? "true" : "false";
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);
