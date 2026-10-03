@@ -1014,7 +1014,10 @@ export function startPond(
   const feederCanvas = document.createElement("canvas");
   feederCanvas.className = "pond-feeder";
   feederCanvas.setAttribute("aria-hidden", "true");
-  Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block" });
+  // ...but not so crisp it looks pasted on: a touch soft and partly see-through,
+  // so the painted copy beneath lends it the brushwork
+  Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block", opacity: "0.72" });
+  let feederFilter = "";
   host.appendChild(feederCanvas);
   const fctx = feederCanvas.getContext("2d")!;
   const sctx = surf.getContext("2d")!;
@@ -2895,7 +2898,20 @@ export function startPond(
     drawFeeder(pctx); // underneath: gives it a shadow and a soft halo on the water
     fctx.setTransform(1, 0, 0, 1, 0, 0);
     fctx.clearRect(0, 0, feederCanvas.width, feederCanvas.height);
-    if (hasGL) drawFeeder(fctx); // on top: crisp
+    if (hasGL) {
+      drawFeeder(fctx); // on top: clear
+      // the branches hang in front of the ropes: cut the sharp layer away under leaves
+      fctx.globalCompositeOperation = "destination-out";
+      fctx.drawImage(canopy, 0, 0, feederCanvas.width, feederCanvas.height);
+      fctx.globalCompositeOperation = "source-over";
+      // and it takes the hour's light, like everything else in the scene
+      const bright = (0.45 + 0.55 * Math.min(1, params.waterLight * 1.3 + params.moon * 0.1)).toFixed(2);
+      const f = `blur(0.45px) brightness(${bright}) saturate(0.92)`;
+      if (f !== feederFilter) {
+        feederFilter = f;
+        feederCanvas.style.filter = f;
+      }
+    }
     for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
     if (hasGL && gl && waterProg && postProg) {
