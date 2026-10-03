@@ -2069,7 +2069,7 @@ export function startPond(
 
   const spawnReturn = (s: Swan) => {
     const b = inner(2.2 * L);
-    const out = 1.3 * L * s.size;
+    const out = 0.75 * L * s.size;
     const perim = 2 * (W + H);
     const along = (t: number, len: number) => len * (0.15 + 0.7 * t);
     // try a few entry points; take the one furthest from everyone else
@@ -2105,7 +2105,7 @@ export function startPond(
     s.ty = rand(b.y0, b.y1);
     s.h = Math.atan2(s.ty - s.y, s.tx - s.x) + rand(-0.45, 0.45);
     s.w = 0;
-    s.v = glideSpeed(s) * 1.6;
+    s.v = glideSpeed(s) * 2;
     s.state = "return";
     s.trail.length = 0;
     s.flapT = -1;
@@ -2289,9 +2289,26 @@ export function startPond(
       f.vy += (dy / d) * k;
       f.va += (Math.random() - 0.5) * 2;
     }
+    let stays = 0;
     for (const s of swans) {
       if (s.state === "away" || s.state === "flee" || s.fleeAt >= 0) continue;
       const d = Math.hypot(s.x - p.x, s.y - p.y);
+      // a swan far from the splash is often only startled: it flaps and hurries
+      // off across the pond rather than leaving, so the pond is rarely empty
+      if (d > W * 0.42 && stays === 0 && Math.random() < 0.6) {
+        stays++;
+        startFlap(s, true);
+        const b = inner(1.8 * L);
+        const ax = (s.x - p.x) / (d || 1);
+        const ay = (s.y - p.y) / (d || 1);
+        s.tx = clamp(s.x + ax * W * 0.35, b.x0, b.x1);
+        s.ty = clamp(s.y + ay * W * 0.35, b.y0, b.y1);
+        s.targetTimer = rand(5, 8);
+        s.v = Math.max(s.v, glideSpeed(s) * 1.9);
+        s.act = "none";
+        s.state = "glide";
+        continue;
+      }
       s.fleeAt = clock + 0.1 + d / (W * 1.4) + rand(0, 0.25);
       s.fleeX = p.x;
       s.fleeY = p.y;
@@ -2501,10 +2518,12 @@ export function startPond(
       maxTurn = 0.95;
       angAcc = 1.7;
       accel = 1.6;
-      const out = 1.4 * sz;
+      const out = 0.8 * sz;
       if (s.x < -out || s.x > W + out || s.y < -out || s.y > H + out) {
         s.state = "away";
-        s.awayUntil = clock + rand(1.6, 4.4);
+        // the last one out comes back first, so the pond is never empty for long
+        const othersHere = swans.some((o) => o !== s && o.state !== "away");
+        s.awayUntil = clock + (othersHere ? rand(1.6, 4.4) : rand(0.3, 0.8));
         s.trail.length = 0;
         return;
       }
@@ -2883,6 +2902,16 @@ export function startPond(
     // looks change like light does: gradually
     params = mixParams(params, target, 1 - Math.exp(-dt * 1.4));
     uploadParams();
+
+    // safety net: if every swan is off-frame, call the next one back now
+    // (a swan already swimming off past the edge counts as gone)
+    const m = 20 * scale;
+    const inView = (s: Swan) => s.state !== "away" && s.x > m && s.x < W - m && s.y > m && s.y < H - m;
+    const away = swans.filter((s) => s.state === "away");
+    if (away.length && !swans.some(inView) && !swans.some((s) => s.state === "return")) {
+      const next = away.reduce((a, b) => (a.awayUntil < b.awayUntil ? a : b));
+      next.awayUntil = Math.min(next.awayUntil, clock + 0.25);
+    }
 
     for (const s of swans) update(s, dt * motion);
     resolveOverlaps(dt * motion);
