@@ -10,7 +10,7 @@ import { GLOBAL_KEYS, PARAM_SPECS, type PondController, type PondParams, type Ti
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 import { browserSave, mountRecorder, type SaveFile } from "./swan-pond-recorder";
 
-const STORAGE_KEY = "swan-pond-looks-v6";
+const STORAGE_KEY = "swan-pond-looks-v7";
 
 type Saved = { looks: Looks; mode: "Auto" | TimeName };
 
@@ -78,7 +78,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   const groups = document.createElement("div");
   groups.className = "pond-tuner-groups";
   const inputs = new Map<keyof PondParams, { input: HTMLInputElement; out: HTMLOutputElement }>();
-  for (const group of ["Water", "Light", "Swans", "Feeder", "Painting"] as const) {
+  for (const group of ["Water", "Light", "Swans", "Painting"] as const) {
     const fs = document.createElement("fieldset");
     fs.className = "pond-tuner-group";
     const lg = document.createElement("legend");
@@ -127,13 +127,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   fallback.readOnly = true;
   fallback.hidden = true;
   fallback.setAttribute("aria-label", "Pond settings");
-  const beg = document.createElement("button");
-  beg.type = "button";
-  beg.className = "pond-tuner-button is-quiet";
-  beg.textContent = "Look up at feeder";
-  beg.title = "Send a swan to gaze up at the feeder";
-  beg.addEventListener("click", () => ctl.beg());
-  actions.append(copy, reset, beg, status);
+  actions.append(copy, reset, status);
   const recRow = document.createElement("div");
   recRow.className = "pond-tuner-actions";
   const unmountRecorder = mountRecorder(recRow, ctl, opts.save ?? browserSave);
@@ -204,7 +198,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
       const ui = inputs.get(spec.key)!;
       const v = p[spec.key];
       ui.input.value = String(v);
-      ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : spec.key === "feederBlur" ? `${v.toFixed(1)}px` : `${Math.round((v / spec.max) * 100)}`;
+      ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : `${Math.round((v / spec.max) * 100)}`;
     }
     for (const [n, b] of chips) b.setAttribute("aria-pressed", String(n === state.mode));
     chips.get("Auto")!.textContent = state.mode === "Auto" ? `Auto · ${name}` : "Auto";
@@ -220,8 +214,6 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
     inputs.get("skyHue")!.input.style.background = hueTrack(55, 72);
     inputs.get("skySat")!.input.style.background = `linear-gradient(to right, hsl(${p.skyHue} 0% 72%), hsl(${p.skyHue} 80% 65%))`;
     inputs.get("swanHue")!.input.style.background = hueTrack(60, 78);
-    inputs.get("bowlHue")!.input.style.background = hueTrack(70, 45);
-    inputs.get("bowlLight")!.input.style.background = `linear-gradient(to right, hsl(${p.bowlHue} 70% 12%), hsl(${p.bowlHue} 70% 50%), hsl(${p.bowlHue} 70% 84%))`;
     inputs.get("swanTint")!.input.style.background = `linear-gradient(to right, #fbfaf7, hsl(${p.swanHue} 60% 72%))`;
     root.style.setProperty("--pond-swatch", `hsl(${p.waterHue} ${p.waterSat * 100}% ${waterL}%)`);
   }

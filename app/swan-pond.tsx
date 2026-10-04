@@ -43,7 +43,7 @@ export default function SwanPond() {
         className="pond appear"
         ref={hostRef}
         role="img"
-        aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to startle the swans, or take corn from the hanging feeder and throw it in."
+        aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to make a splash that startles the swans, or right-click to toss them some corn."
       >
         <canvas className="pond-water" ref={waterRef} />
         <canvas className="pond-swans" ref={swansRef} />

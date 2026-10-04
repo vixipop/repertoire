@@ -667,6 +667,33 @@ html.is-theme-switching .theme-toggle-icon {
   .pond { aspect-ratio: 4 / 3; border-radius: 20px; }
 }
 
+/* the little note by the cursor: how to splash and how to feed */
+.pond { -webkit-touch-callout: none; }
+.pond-hint {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 9px;
+  border-radius: 14px 14px 14px 4px;
+  background: rgba(253, 250, 243, 0.94);
+  color: #3d3a34;
+  box-shadow: 0 1px 1px rgba(60, 50, 40, 0.06), 0 8px 24px rgba(40, 60, 70, 0.18);
+  font-size: 12px;
+  line-height: 17px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transform-origin: top left;
+  transition: opacity .35s ease, transform .35s cubic-bezier(.22,.61,.36,1);
+}
+.pond-hint.is-on { opacity: 1; transform: none; }
+.pond-hint-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.pond-hint-row svg { color: #4f8a8b; flex: none; }
+.pond-hint b { font-weight: 500; color: #24221e; }
+@media (prefers-reduced-motion: reduce) { .pond-hint { transition: opacity .2s; transform: none; } }
+
 /* pond-tuner:start — colour panel, shown in dev or with ?tune */
 .pond-tuner-slot { align-self: center; width: min(680px, calc(100vw - 32px)); }
 .pond-tuner-slot:empty { display: none; }
