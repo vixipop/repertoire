@@ -675,8 +675,10 @@ html.is-theme-switching .theme-toggle-icon {
   left: 0;
   top: 0;
   will-change: transform;
-  font-family: var(--font-hand, "Homemade Apple"), cursive;
-  font-size: 13px;
+  /* the tuner can try other lettering through these */
+  font-family: var(--say-font, var(--font-hand, "Homemade Apple")), cursive;
+  font-size: var(--say-size, 13px);
+  font-style: var(--say-style, normal);
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -687,8 +689,8 @@ html.is-theme-switching .theme-toggle-icon {
   transform: translate(-50%, -100%) rotate(var(--tilt, 0deg));
   animation: pond-say linear forwards;
 }
-.pond-say b { font-weight: 400; }
-.pond-say i { display: inline-block; font-style: normal; }
+.pond-say b { font-weight: var(--say-weight, 400); }
+.pond-say i { display: inline-block; font-style: inherit; }
 .pond-say svg {
   display: block;
   margin: 1px 0 0 -12px;
@@ -786,6 +788,20 @@ html.is-theme-switching .theme-toggle-icon {
 .pond-tuner-button.is-quiet { color: var(--text-strong); background: var(--bg-icon); border: 1px solid var(--border-soft); }
 .pond-tuner-button.is-quiet:hover { background: var(--bg-icon-hover); }
 .pond-tuner-status { color: var(--text-muted); }
+.pond-tuner-fonts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pond-tuner-select {
+  font: inherit;
+  color: var(--text-strong);
+  background: var(--bg-icon);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 4px 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.pond-tuner-size { display: grid; grid-template-columns: auto 120px 40px; align-items: center; gap: 8px; }
+.pond-tuner-size output { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pond-tuner-sample { font-size: 18px; color: var(--text-strong); flex-basis: 100%; min-height: 30px; }
 .pond-tuner-fallback { width: 100%; min-height: 60px; font: 12px/18px ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg-icon); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; }
 .pond-tuner-button.is-record { background: #b3261e; color: #fff; }
 .pond-tuner-button.is-record:hover { background: #8f1d17; }

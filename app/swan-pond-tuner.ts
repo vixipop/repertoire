@@ -1,18 +1,58 @@
 /**
- * Time-of-day and colour controls for the pond. Plain DOM so the same panel
- * works in the React component and in the standalone preview page.
+ * Tuning panel for the pond. Plain DOM so the same panel works in the React
+ * component and in the standalone preview page.
  *
- * "Auto" follows the viewer's clock. Picking a time previews it, and the
- * sliders then edit that time's look. "Copy settings" copies all four looks.
+ * "Auto" follows the viewer's clock; picking a time previews it. The lettering
+ * controls try out fonts for what the swans say; "Copy settings" copies the
+ * chosen lettering so it can be made the default.
  */
 
-import { GLOBAL_KEYS, PARAM_SPECS, type PondController, type PondParams, type TimeName } from "./swan-pond-engine";
+import type { PondController, PondParams, TimeName } from "./swan-pond-engine";
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 import { browserSave, mountRecorder, type SaveFile } from "./swan-pond-recorder";
 
 const STORAGE_KEY = "swan-pond-looks-v7";
 
-type Saved = { looks: Looks; mode: "Auto" | TimeName };
+/** Handwritten Google fonts to try for the swans' remarks. */
+export const HAND_FONTS = [
+  "Homemade Apple",
+  "Caveat",
+  "Nothing You Could Do",
+  "La Belle Aurore",
+  "Reenie Beanie",
+  "Shadows Into Light",
+  "Indie Flower",
+  "Gochi Hand",
+  "Patrick Hand",
+  "Kalam",
+  "Gaegu",
+  "Nanum Pen Script",
+  "Covered By Your Grace",
+  "Just Another Hand",
+  "Gloria Hallelujah",
+  "Architects Daughter",
+  "Annie Use Your Telescope",
+  "Loved by the King",
+  "Over the Rainbow",
+  "Dawning of a New Day",
+  "Waiting for the Sunrise",
+  "Sue Ellen Francisco",
+  "Zeyada",
+  "Cedarville Cursive",
+  "Mynerve",
+  "Schoolbell",
+  "Coming Soon",
+  "Short Stack",
+  "Swanky and Moo Moo",
+  "Sedgwick Ave",
+  "Rock Salt",
+  "Pangolin",
+];
+
+export type Lettering = { font: string; size: number; bold: boolean; italic: boolean };
+export const DEFAULT_LETTERING: Lettering = { font: "Homemade Apple", size: 13, bold: false, italic: false };
+
+type Saved = { looks: Looks; mode: "Auto" | TimeName; lettering?: Lettering };
 
 export function loadSaved(): Saved {
   const base = defaultLooks();
@@ -20,13 +60,13 @@ export function loadSaved(): Saved {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>;
-      for (const n of TIME_NAMES) if (s.looks?.[n]) base[n] = { ...base[n], ...s.looks[n] };
-      return { looks: base, mode: s.mode ?? "Auto" };
+      // the colour sliders are gone, so the looks are always the locked-in defaults
+      return { looks: base, mode: s.mode ?? "Auto", lettering: { ...DEFAULT_LETTERING, ...s.lettering } };
     }
   } catch {
     /* storage blocked: start from the defaults */
   }
-  return { looks: base, mode: "Auto" };
+  return { looks: base, mode: "Auto", lettering: { ...DEFAULT_LETTERING } };
 }
 
 function save(s: Saved) {
@@ -43,8 +83,28 @@ export function initialParams(): PondParams {
   return s.mode === "Auto" ? lookAt(s.looks).params : { ...s.looks[s.mode] };
 }
 
-const hueTrack = (s: number, l: number) =>
-  `linear-gradient(to right, ${[0, 60, 120, 180, 240, 300, 360].map((h) => `hsl(${h} ${s}% ${l}%)`).join(", ")})`;
+let fontsLoaded = false;
+/** Fetch every font on the list at once (tuner only), so switching is instant. */
+function loadFonts() {
+  if (fontsLoaded) return;
+  fontsLoaded = true;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?${HAND_FONTS.map((f) => `family=${f.replace(/ /g, "+")}`).join("&")}&display=swap`;
+  document.head.appendChild(link);
+}
+
+/** Point the swans' lettering at a font, size and style. */
+export function applyLettering(l: Lettering) {
+  const root = document.documentElement.style;
+  loadFonts();
+  // the default font is bundled with the site, so leave it to the stylesheet
+  if (l.font === DEFAULT_LETTERING.font) root.removeProperty("--say-font");
+  else root.setProperty("--say-font", `"${l.font}"`);
+  root.setProperty("--say-size", `${l.size}px`);
+  root.setProperty("--say-weight", l.bold ? "700" : "400");
+  root.setProperty("--say-style", l.italic ? "italic" : "normal");
+}
 
 export function mountTuner(container: HTMLElement, ctl: PondController, opts: { save?: SaveFile } = {}): () => void {
   const state = loadSaved();
@@ -75,39 +135,82 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   head.appendChild(note);
   root.appendChild(head);
 
-  const groups = document.createElement("div");
-  groups.className = "pond-tuner-groups";
-  const inputs = new Map<keyof PondParams, { input: HTMLInputElement; out: HTMLOutputElement }>();
-  for (const group of ["Water", "Light", "Swans", "Painting"] as const) {
-    const fs = document.createElement("fieldset");
-    fs.className = "pond-tuner-group";
-    const lg = document.createElement("legend");
-    lg.textContent = group;
-    fs.appendChild(lg);
-    for (const spec of PARAM_SPECS.filter((s) => s.group === group)) {
-      const row = document.createElement("div");
-      row.className = "pond-tuner-row";
-      const id = `pond-${spec.key}`;
-      const label = document.createElement("label");
-      label.htmlFor = id;
-      label.textContent = spec.label;
-      const input = document.createElement("input");
-      input.type = "range";
-      input.id = id;
-      input.min = String(spec.min);
-      input.max = String(spec.max);
-      input.step = String(spec.step);
-      input.className = "pond-tuner-range";
-      const out = document.createElement("output");
-      out.htmlFor.add(id);
-      input.addEventListener("input", () => edit(spec.key, Number(input.value)));
-      row.append(label, input, out);
-      fs.appendChild(row);
-      inputs.set(spec.key, { input, out });
-    }
-    groups.appendChild(fs);
+  const lettering: Lettering = state.lettering ?? { ...DEFAULT_LETTERING };
+  state.lettering = lettering;
+  const fonts = document.createElement("div");
+  fonts.className = "pond-tuner-fonts";
+  const fontLabel = document.createElement("label");
+  fontLabel.className = "pond-tuner-label";
+  fontLabel.textContent = "Lettering";
+  fontLabel.htmlFor = "pond-font";
+  const select = document.createElement("select");
+  select.id = "pond-font";
+  select.className = "pond-tuner-select";
+  for (const f of HAND_FONTS) {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = f;
+    o.style.fontFamily = `"${f}", cursive`;
+    select.appendChild(o);
   }
-  root.appendChild(groups);
+  const size = document.createElement("label");
+  size.className = "pond-tuner-size";
+  const sizeText = document.createElement("span");
+  sizeText.textContent = "Size";
+  const sizeInput = document.createElement("input");
+  sizeInput.type = "range";
+  sizeInput.className = "pond-tuner-range";
+  sizeInput.min = "8";
+  sizeInput.max = "30";
+  sizeInput.step = "1";
+  const sizeOut = document.createElement("output");
+  size.append(sizeText, sizeInput, sizeOut);
+  const toggle = (text: string, style: string) => {
+    const t = document.createElement("button");
+    t.type = "button";
+    t.className = "pond-tuner-chip";
+    t.innerHTML = `<span style="${style}">${text}</span>`;
+    return t;
+  };
+  const boldBtn = toggle("B", "font-weight:700");
+  boldBtn.setAttribute("aria-label", "Bold");
+  const italicBtn = toggle("I", "font-style:italic");
+  italicBtn.setAttribute("aria-label", "Italic");
+  const speak = document.createElement("button");
+  speak.type = "button";
+  speak.className = "pond-tuner-button is-quiet";
+  speak.textContent = "Make them talk";
+  const sample = document.createElement("div");
+  sample.className = "pond-tuner-sample";
+  sample.textContent = "corn pls <3 · bruh! · dibs! · glutton! · yummm";
+  fonts.append(fontLabel, select, size, boldBtn, italicBtn, speak, sample);
+  root.appendChild(fonts);
+
+  const setLettering = (patch: Partial<Lettering>, talk = true) => {
+    Object.assign(lettering, patch);
+    save(state);
+    applyLettering(lettering);
+    syncLettering();
+    if (talk) ctl.chatter();
+  };
+  const syncLettering = () => {
+    select.value = lettering.font;
+    sizeInput.value = String(lettering.size);
+    sizeOut.textContent = `${lettering.size}px`;
+    boldBtn.setAttribute("aria-pressed", String(lettering.bold));
+    italicBtn.setAttribute("aria-pressed", String(lettering.italic));
+    sample.style.fontFamily = `"${lettering.font}", cursive`;
+    sample.style.fontWeight = lettering.bold ? "700" : "400";
+    sample.style.fontStyle = lettering.italic ? "italic" : "normal";
+  };
+  select.addEventListener("change", () => setLettering({ font: select.value }));
+  sizeInput.addEventListener("input", () => setLettering({ size: Number(sizeInput.value) }, false));
+  sizeInput.addEventListener("change", () => ctl.chatter());
+  boldBtn.addEventListener("click", () => setLettering({ bold: !lettering.bold }));
+  italicBtn.addEventListener("click", () => setLettering({ italic: !lettering.italic }));
+  speak.addEventListener("click", () => ctl.chatter());
+  applyLettering(lettering);
+  syncLettering();
 
   const actions = document.createElement("div");
   actions.className = "pond-tuner-actions";
@@ -134,9 +237,9 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   root.append(actions, recRow, fallback);
 
   copy.addEventListener("click", () => {
-    const text = JSON.stringify(state.looks);
+    const text = JSON.stringify({ lettering });
     const done = () => {
-      status.textContent = "Copied all four times of day";
+      status.textContent = "Copied the lettering";
       setTimeout(() => (status.textContent = ""), 1800);
     };
     const manual = () => {
@@ -151,13 +254,9 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
       manual();
     }
   });
-  reset.addEventListener("click", () => {
-    state.looks = defaultLooks();
-    save(state);
-    setMode(state.mode);
-  });
+  reset.addEventListener("click", () => setLettering({ ...DEFAULT_LETTERING }));
 
-  /** The look the sliders are editing right now. */
+  /** The time of day showing right now. */
   const editing = (): TimeName => (state.mode === "Auto" ? lookAt(state.looks).name : state.mode);
 
   function setMode(mode: "Auto" | TimeName) {
@@ -170,52 +269,11 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
     sync();
   }
 
-  function edit(key: keyof PondParams, v: number) {
-    // the feeder's colour is part of the scene, not the hour: change it everywhere
-    if (GLOBAL_KEYS.has(key)) {
-      for (const n of TIME_NAMES) state.looks[n][key] = v;
-      save(state);
-      ctl.setParams({ [key]: v } as Partial<PondParams>);
-      sync();
-      return;
-    }
-    // editing while on Auto pins the time that's showing, so you see exactly what you change
-    if (state.mode === "Auto") {
-      state.mode = editing();
-      stopClock?.();
-      stopClock = null;
-    }
-    state.looks[state.mode as TimeName][key] = v;
-    save(state);
-    ctl.setParams({ [key]: v } as Partial<PondParams>);
-    sync();
-  }
-
   function sync() {
     const name = editing();
-    const p = state.mode === "Auto" ? lookAt(state.looks).params : state.looks[name];
-    for (const spec of PARAM_SPECS) {
-      const ui = inputs.get(spec.key)!;
-      const v = p[spec.key];
-      ui.input.value = String(v);
-      ui.out.textContent = spec.kind === "hue" ? `${Math.round(v)}°` : `${Math.round((v / spec.max) * 100)}`;
-    }
     for (const [n, b] of chips) b.setAttribute("aria-pressed", String(n === state.mode));
     chips.get("Auto")!.textContent = state.mode === "Auto" ? `Auto · ${name}` : "Auto";
-    note.textContent = state.mode === "Auto" ? "follows your clock" : `editing ${name} (${TIME_HOURS[name]})`;
-
-    // tracks preview the colour you're choosing
-    const waterL = Math.round(28 + p.waterLight * 30);
-    inputs.get("waterHue")!.input.style.background = hueTrack(Math.round(p.waterSat * 100), waterL);
-    inputs.get("waterSat")!.input.style.background = `linear-gradient(to right, hsl(${p.waterHue} 0% ${waterL}%), hsl(${p.waterHue} 100% ${waterL}%))`;
-    inputs.get("waterLight")!.input.style.background = `linear-gradient(to right, hsl(${p.waterHue} ${p.waterSat * 100}% 6%), hsl(${p.waterHue} ${p.waterSat * 100}% 60%))`;
-    inputs.get("lightHue")!.input.style.background = hueTrack(70, 70);
-    inputs.get("lightSat")!.input.style.background = `linear-gradient(to right, hsl(${p.lightHue} 0% 78%), hsl(${p.lightHue} 90% 70%))`;
-    inputs.get("skyHue")!.input.style.background = hueTrack(55, 72);
-    inputs.get("skySat")!.input.style.background = `linear-gradient(to right, hsl(${p.skyHue} 0% 72%), hsl(${p.skyHue} 80% 65%))`;
-    inputs.get("swanHue")!.input.style.background = hueTrack(60, 78);
-    inputs.get("swanTint")!.input.style.background = `linear-gradient(to right, #fbfaf7, hsl(${p.swanHue} 60% 72%))`;
-    root.style.setProperty("--pond-swatch", `hsl(${p.waterHue} ${p.waterSat * 100}% ${waterL}%)`);
+    note.textContent = state.mode === "Auto" ? "follows your clock" : `showing ${name} (${TIME_HOURS[name]})`;
   }
 
   setMode(state.mode);

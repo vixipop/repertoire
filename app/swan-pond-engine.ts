@@ -126,6 +126,8 @@ export type PondController = {
   onFrame(cb: () => void): () => void;
   /** Paint the finished pond (water and torn edge) into a 2D context. */
   snapshot(c: CanvasRenderingContext2D, w: number, h: number): void;
+  /** Have a swan or two say something now (for previewing the lettering). */
+  chatter(): void;
   destroy(): void;
 };
 
@@ -1974,16 +1976,18 @@ export function startPond(
       }
     }
     // the nearest one calls dibs, and another has an opinion about that
-    if (clock - lastDibs > 3) {
+    // ...but not every time: at least three handfuls go by before it happens again
+    feedsSinceDibs++;
+    if (feedsSinceDibs > 3) {
       const near = swans
         .filter((s) => s.state !== "away" && s.state !== "flee" && s.fleeAt < 0 && s.x > 0 && s.x < W && s.y > 0 && s.y < H)
         .sort((a, b) => Math.hypot(a.x - px, a.y - py) - Math.hypot(b.x - px, b.y - py));
       if (near.length) {
-        lastDibs = clock;
+        feedsSinceDibs = 0;
         const first = near[0];
         const at = Math.max(clock + 0.15, first.noticeAt) + 0.05;
         sayLater(first, "dibs!", "calm", 1.1, at);
-        if (near.length > 1) sayLater(near[1], "glutton!", "calm", 1.2, at + rand(0.45, 0.75));
+        if (near.length > 1) sayLater(near[1], "glutton!", "calm", 1.2, at + rand(1.0, 1.3));
       }
     }
   };
@@ -2045,7 +2049,7 @@ export function startPond(
   type Bubble = { el: HTMLSpanElement; swan: Swan; until: number };
   const bubbles: Bubble[] = [];
   let nextChirp = 0;
-  let lastDibs = -99;
+  let feedsSinceDibs = 3;
   let inkLight = -1;
   const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
 
@@ -2873,6 +2877,14 @@ export function startPond(
     onFrame(cb) {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
+    },
+    chatter() {
+      const here = swans.filter((s) => s.state !== "away" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
+      const all = [...CROSS, ...HUNGRY, ...FULL, ...MORE, "dibs!", "glutton!"];
+      for (const s of here.sort(() => Math.random() - 0.5).slice(0, 2)) {
+        const text = pick(all);
+        say(s, text, CROSS.includes(text) ? "cross" : "calm", 2.2);
+      }
     },
     snapshot(c, w, h) {
       // the page behind shows through the torn edge
