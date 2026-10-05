@@ -185,6 +185,9 @@ type Swan = {
   appetite: number;
   ate: number;
   food: Kernel | null;
+  // something to say shortly (set when startled)
+  sayAt: number;
+  sayText: string;
   feedUntil: number;
 };
 
@@ -1739,6 +1742,8 @@ export function startPond(
       appetite: 0,
       ate: 0,
       food: null,
+      sayAt: -1,
+      sayText: "",
       feedUntil: 0,
     };
     s.v = glideSpeed(s);
@@ -1966,53 +1971,7 @@ export function startPond(
     }
   };
 
-  // a friendly note by the cursor, until both have been tried
-  const HINT_KEY = "swan-pond-hint-done";
-  const used = { splash: false, feed: false };
-  let hintDone = false;
-  try {
-    hintDone = localStorage.getItem(HINT_KEY) === "1";
-  } catch {
-    /* storage blocked: just show it this visit */
-  }
   const touchy = window.matchMedia("(hover: none)").matches;
-  const hint = document.createElement("div");
-  hint.className = "pond-hint";
-  hint.setAttribute("role", "note");
-  const mouse = (side: "l" | "r") =>
-    `<svg viewBox="0 0 14 20" width="12" height="17" aria-hidden="true"><rect x="1" y="1" width="12" height="18" rx="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M${side === "l" ? "1 8V7a6 6 0 0 1 6-6v7Z" : "13 8V7a6 6 0 0 0-6-6v7Z"}" fill="currentColor"/></svg>`;
-  hint.innerHTML = touchy
-    ? `<span class="pond-hint-row"><b>Tap</b> to make a splash</span><span class="pond-hint-row"><b>Press &amp; hold</b> to toss some corn</span>`
-    : `<span class="pond-hint-row">${mouse("l")}<span><b>Click</b> to make a splash</span></span><span class="pond-hint-row">${mouse("r")}<span><b>Right-click</b> to toss some corn</span></span>`;
-  document.body.appendChild(hint);
-  let hintTimer = 0;
-  const showHint = (cx: number, cy: number) => {
-    if (hintDone) return;
-    hint.style.left = `${cx + 16}px`;
-    hint.style.top = `${cy + 18}px`;
-    hint.classList.add("is-on");
-    clearTimeout(hintTimer);
-    hintTimer = window.setTimeout(() => hint.classList.remove("is-on"), touchy ? 3500 : 6000);
-  };
-  const markUsed = (k: "splash" | "feed") => {
-    used[k] = true;
-    if (used.splash && used.feed && !hintDone) {
-      hintDone = true;
-      hint.classList.remove("is-on");
-      try {
-        localStorage.setItem(HINT_KEY, "1");
-      } catch {
-        /* fine */
-      }
-    }
-  };
-  const onEnter = (e: PointerEvent) => showHint(e.clientX, e.clientY);
-  const onHintMove = (e: PointerEvent) => {
-    if (hint.classList.contains("is-on")) {
-      hint.style.left = `${e.clientX + 16}px`;
-      hint.style.top = `${e.clientY + 18}px`;
-    }
-  };
   const onCtx = (e: Event) => e.preventDefault(); // right-click feeds instead of opening a menu
 
   let holdTimer = 0;
@@ -2020,11 +1979,9 @@ export function startPond(
   const onUp = () => clearTimeout(holdTimer);
 
   const splash = (p: { x: number; y: number }) => {
-    markUsed("splash");
     startle(p);
   };
   const feed = (p: { x: number; y: number }) => {
-    markUsed("feed");
     throwCorn(p.x, p.y);
   };
 
@@ -2036,7 +1993,6 @@ export function startPond(
       return;
     }
     // touch: a quick tap splashes, a press-and-hold tosses corn
-    showHint(e.clientX, e.clientY);
     holdFed = false;
     clearTimeout(holdTimer);
     holdTimer = window.setTimeout(() => {
@@ -2056,6 +2012,70 @@ export function startPond(
     };
     host.addEventListener("pointerup", release);
     host.addEventListener("pointercancel", cancel);
+  };
+
+  /* ---------- talking ---------- */
+
+  // little handwritten remarks above their heads
+  const CROSS = ["ugh", "watch it!", "rude", "hey!!", "excuse me?!", "right click instead!", "use right click!", "not cool", "rude!!"];
+  const HUNGRY = ["corn pls", "right click!", "hungry…", "snack?", "feed me", "right click = corn", "corn??"];
+  const talk = document.createElement("div");
+  talk.className = "pond-talk";
+  talk.setAttribute("aria-hidden", "true");
+  host.appendChild(talk);
+  type Bubble = { el: HTMLSpanElement; swan: Swan; until: number };
+  const bubbles: Bubble[] = [];
+  let nextChirp = 0;
+  const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
+
+  const say = (s: Swan, text: string, mood: "cross" | "hungry") => {
+    if (bubbles.some((b) => b.swan === s)) return;
+    const life = mood === "cross" ? 0.6 : 1.6;
+    const el = document.createElement("span");
+    el.className = `pond-say is-${mood}`;
+    const inner = document.createElement("span");
+    inner.style.animationDuration = `${life}s`;
+    // every letter on its own, so they can tremble or bob independently
+    for (const ch of text) {
+      const l = document.createElement("i");
+      l.textContent = ch === " " ? "\u00a0" : ch;
+      l.style.animationDelay = `${(-Math.random() * 0.4).toFixed(2)}s`;
+      inner.appendChild(l);
+    }
+    el.appendChild(inner);
+    talk.appendChild(el);
+    bubbles.push({ el, swan: s, until: clock + life });
+  };
+
+  const updateTalk = () => {
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i];
+      const s = b.swan;
+      if (clock > b.until || s.state === "away") {
+        b.el.remove();
+        bubbles.splice(i, 1);
+        continue;
+      }
+      const sz = L * s.size;
+      const reach = (0.2 + s.look.neckLen) * sz;
+      const hx = s.x + Math.cos(s.h) * reach;
+      const hy = s.y + Math.sin(s.h) * reach;
+      b.el.style.transform = `translate(${hx.toFixed(1)}px, ${(hy - 12 * scale).toFixed(1)}px)`;
+    }
+    // hovering over the pond, an idle swan asks for food now and then
+    if (pointer && !touchy && clock > nextChirp && !kernels.length) {
+      nextChirp = clock + rand(2.6, 5);
+      const idle = swans.filter((s) => s.state === "glide" && s.act === "none" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
+      if (idle.length) {
+        const pt = pointer;
+        idle.sort((a, b) => Math.hypot(a.x - pt.x, a.y - pt.y) - Math.hypot(b.x - pt.x, b.y - pt.y));
+        const s = Math.random() < 0.7 ? idle[0] : idle[Math.floor(Math.random() * idle.length)];
+        say(s, pick(HUNGRY), "hungry");
+        // and looks over at you while it asks
+        s.headYawTarget = clamp(wrapAngle(Math.atan2(pt.y - s.y, pt.x - s.x) - s.h), -0.7, 0.7);
+        s.nextLook = 2;
+      }
+    }
   };
 
   const startle = (p: { x: number; y: number }) => {
@@ -2094,13 +2114,18 @@ export function startPond(
       s.fleeX = p.x;
       s.fleeY = p.y;
     }
+    // one or two of them have something to say about it (sometimes nobody does)
+    const startled = swans.filter((s) => s.state !== "away");
+    const n = Math.random() < 0.12 ? 0 : Math.random() < 0.65 ? 1 : 2;
+    for (const s of startled.sort(() => Math.random() - 0.5).slice(0, n)) {
+      s.sayAt = (s.fleeAt >= 0 ? s.fleeAt : clock) + rand(0.05, 0.3);
+      s.sayText = pick(CROSS);
+    }
   };
 
   host.addEventListener("pointermove", onMove);
   host.addEventListener("pointerleave", onLeave);
   host.addEventListener("pointerdown", onDown);
-  host.addEventListener("pointerenter", onEnter);
-  host.addEventListener("pointermove", onHintMove);
   host.addEventListener("contextmenu", onCtx);
   host.addEventListener("pointerup", onUp);
 
@@ -2115,6 +2140,11 @@ export function startPond(
     const sz = L * s.size;
     const dirX = Math.cos(s.h);
     const dirY = Math.sin(s.h);
+
+    if (s.sayAt >= 0 && clock >= s.sayAt) {
+      s.sayAt = -1;
+      say(s, s.sayText, "cross");
+    }
 
     if (s.fleeAt >= 0 && clock >= s.fleeAt) {
       s.fleeAt = -1;
@@ -2738,6 +2768,7 @@ export function startPond(
       ctx.drawImage(paint, 0, 0, swanCanvas.width, swanCanvas.height);
     }
 
+    updateTalk();
     for (const cb of frameListeners) cb();
     scheduleFromFrame();
   };
@@ -2812,13 +2843,10 @@ export function startPond(
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerleave", onLeave);
       host.removeEventListener("pointerdown", onDown);
-      host.removeEventListener("pointerenter", onEnter);
-      host.removeEventListener("pointermove", onHintMove);
       host.removeEventListener("contextmenu", onCtx);
       host.removeEventListener("pointerup", onUp);
-      clearTimeout(hintTimer);
       clearTimeout(holdTimer);
-      hint.remove();
+      talk.remove();
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };

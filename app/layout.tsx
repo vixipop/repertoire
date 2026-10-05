@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
+import { Gochi_Hand, Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
@@ -28,6 +28,14 @@ const arabic = Noto_Naskh_Arabic({
   weight: ["400"],
   display: "swap",
   variable: "--font-arabic",
+});
+
+// The swans' handwriting.
+const hand = Gochi_Hand({
+  subsets: ["latin"],
+  weight: ["400"],
+  display: "swap",
+  variable: "--font-hand",
 });
 
 export const metadata: Metadata = {
@@ -66,7 +74,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${devanagari.variable} ${arabic.variable}`}
+      className={`${inter.variable} ${devanagari.variable} ${arabic.variable} ${hand.variable}`}
       suppressHydrationWarning
     >
       <head>

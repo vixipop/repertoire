@@ -667,32 +667,49 @@ html.is-theme-switching .theme-toggle-icon {
   .pond { aspect-ratio: 4 / 3; border-radius: 20px; }
 }
 
-/* the little note by the cursor: how to splash and how to feed */
+/* swans talking: tiny handwritten remarks over their heads */
 .pond { -webkit-touch-callout: none; }
-.pond-hint {
-  position: fixed;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px 9px;
-  border-radius: 14px 14px 14px 4px;
-  background: rgba(253, 250, 243, 0.94);
-  color: #3d3a34;
-  box-shadow: 0 1px 1px rgba(60, 50, 40, 0.06), 0 8px 24px rgba(40, 60, 70, 0.18);
-  font-size: 12px;
-  line-height: 17px;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(4px) scale(0.98);
-  transform-origin: top left;
-  transition: opacity .35s ease, transform .35s cubic-bezier(.22,.61,.36,1);
+.pond-talk { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
+.pond-say {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  font-family: var(--font-hand), "Gochi Hand", "Comic Sans MS", cursive;
+  font-size: 16px;
+  line-height: 1;
+  color: #2f2a26;
+  white-space: nowrap;
+  text-shadow: 0 0 2px #fffaf0, 0 0 5px #fffaf0, 0 0 9px rgba(255, 250, 240, 0.8);
 }
-.pond-hint.is-on { opacity: 1; transform: none; }
-.pond-hint-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-.pond-hint-row svg { color: #4f8a8b; flex: none; }
-.pond-hint b { font-weight: 500; color: #24221e; }
-@media (prefers-reduced-motion: reduce) { .pond-hint { transition: opacity .2s; transform: none; } }
+.pond-say > span {
+  display: inline-block;
+  transform: translate(-50%, -100%);
+  animation: pond-say linear forwards;
+}
+.pond-say i { display: inline-block; font-style: normal; }
+/* cross: every letter trembles */
+.pond-say.is-cross { color: #3a1f1c; }
+.pond-say.is-cross i { animation: pond-shake 0.09s steps(2) infinite alternate; }
+/* hungry: a gentle hopeful bob */
+.pond-say.is-hungry i { animation: pond-bob 0.7s ease-in-out infinite alternate; }
+@keyframes pond-say {
+  0% { opacity: 0; transform: translate(-50%, -80%) scale(0.85); }
+  14% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -125%) scale(1); }
+}
+@keyframes pond-shake {
+  0% { transform: translate(-0.6px, 0.4px) rotate(-5deg); }
+  100% { transform: translate(0.7px, -0.5px) rotate(5deg); }
+}
+@keyframes pond-bob {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pond-say i { animation: none !important; }
+}
 
 /* pond-tuner:start — colour panel, shown in dev or with ?tune */
 .pond-tuner-slot { align-self: center; width: min(680px, calc(100vw - 32px)); }
