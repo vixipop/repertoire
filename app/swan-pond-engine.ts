@@ -188,6 +188,8 @@ type Swan = {
   // something to say shortly (set when startled)
   sayAt: number;
   sayText: string;
+  sayMood: "cross" | "calm";
+  sayLife: number;
   feedUntil: number;
 };
 
@@ -1744,6 +1746,8 @@ export function startPond(
       food: null,
       sayAt: -1,
       sayText: "",
+      sayMood: "calm",
+      sayLife: 1,
       feedUntil: 0,
     };
     s.v = glideSpeed(s);
@@ -1969,6 +1973,19 @@ export function startPond(
         s.appetite += Math.random() < 0.5 ? 1 : 0;
       }
     }
+    // the nearest one calls dibs, and another has an opinion about that
+    if (clock - lastDibs > 3) {
+      const near = swans
+        .filter((s) => s.state !== "away" && s.state !== "flee" && s.fleeAt < 0 && s.x > 0 && s.x < W && s.y > 0 && s.y < H)
+        .sort((a, b) => Math.hypot(a.x - px, a.y - py) - Math.hypot(b.x - px, b.y - py));
+      if (near.length) {
+        lastDibs = clock;
+        const first = near[0];
+        const at = Math.max(clock + 0.15, first.noticeAt) + 0.05;
+        sayLater(first, "dibs!", "calm", 1.1, at);
+        if (near.length > 1) sayLater(near[1], "glutton!", "calm", 1.2, at + rand(0.45, 0.75));
+      }
+    }
   };
 
   const touchy = window.matchMedia("(hover: none)").matches;
@@ -2017,8 +2034,10 @@ export function startPond(
   /* ---------- talking ---------- */
 
   // little handwritten remarks above their heads
-  const CROSS = ["ugh", "watch it!", "rude", "hey!!", "excuse me?!", "right click instead!", "use right click!", "not cool", "rude!!"];
-  const HUNGRY = ["corn pls", "right click!", "hungry…", "snack?", "feed me", "right click = corn", "corn??"];
+  const CROSS = ["bruh!", "excuse me?", "rude!", "watch it!", "hey!", "ugh!"];
+  const HUNGRY = ["corn pls <3", "right click!", "bro gib corn"];
+  const FULL = ["yummm", "yummm!", "yummm"];
+  const MORE = ["more!", "more!!", "yummm… more!"];
   const talk = document.createElement("div");
   talk.className = "pond-talk";
   talk.setAttribute("aria-hidden", "true");
@@ -2026,28 +2045,52 @@ export function startPond(
   type Bubble = { el: HTMLSpanElement; swan: Swan; until: number };
   const bubbles: Bubble[] = [];
   let nextChirp = 0;
+  let lastDibs = -99;
+  let inkLight = -1;
   const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
 
-  const say = (s: Swan, text: string, mood: "cross" | "hungry") => {
+  type Mood = "cross" | "calm";
+  const say = (s: Swan, text: string, mood: Mood, life: number) => {
     if (bubbles.some((b) => b.swan === s)) return;
-    const life = mood === "cross" ? 0.6 : 1.6;
     const el = document.createElement("span");
     el.className = `pond-say is-${mood}`;
     const inner = document.createElement("span");
     inner.style.animationDuration = `${life}s`;
-    // every letter on its own, so they can tremble or bob independently
+    inner.style.setProperty("--tilt", `${rand(-7, 5).toFixed(1)}deg`);
+    const words = document.createElement("b");
+    // every letter on its own, so a cross one can tremble
     for (const ch of text) {
       const l = document.createElement("i");
       l.textContent = ch === " " ? "\u00a0" : ch;
       l.style.animationDelay = `${(-Math.random() * 0.4).toFixed(2)}s`;
-      inner.appendChild(l);
+      words.appendChild(l);
     }
+    inner.appendChild(words);
+    // a quick pen flick down toward the speaker
+    inner.insertAdjacentHTML(
+      "beforeend",
+      '<svg viewBox="0 0 12 12" width="12" height="12"><path d="M8.5 1.5c-.6 3-2 5.6-4.6 8.4" /></svg>',
+    );
     el.appendChild(inner);
     talk.appendChild(el);
     bubbles.push({ el, swan: s, until: clock + life });
   };
+  const sayLater = (s: Swan, text: string, mood: Mood, life: number, at: number) => {
+    s.sayAt = at;
+    s.sayText = text;
+    s.sayMood = mood;
+    s.sayLife = life;
+  };
 
   const updateTalk = () => {
+    // ink: a dark blue-grey by day, a soft baby blue once the light goes
+    const night = clamp((0.58 - params.waterLight) / 0.1, 0, 1);
+    const k = night * night * (3 - 2 * night);
+    if (Math.abs(k - inkLight) > 0.004) {
+      inkLight = k;
+      const mix = (a: number, b: number) => Math.round(a + (b - a) * k);
+      talk.style.color = `rgba(${mix(58, 186)}, ${mix(74, 220)}, ${mix(92, 242)}, ${(0.92 - 0.1 * k).toFixed(2)})`;
+    }
     for (let i = bubbles.length - 1; i >= 0; i--) {
       const b = bubbles[i];
       const s = b.swan;
@@ -2057,10 +2100,18 @@ export function startPond(
         continue;
       }
       const sz = L * s.size;
-      const reach = (0.2 + s.look.neckLen) * sz;
-      const hx = s.x + Math.cos(s.h) * reach;
-      const hy = s.y + Math.sin(s.h) * reach;
-      b.el.style.transform = `translate(${hx.toFixed(1)}px, ${(hy - 12 * scale).toFixed(1)}px)`;
+      // where the head really is, following the bend of the neck (as swan-paint draws it)
+      const bend = clamp(s.bend, -2.5, 2.5);
+      const reach = s.look.neckLen * (1 - Math.min(0.25, Math.abs(bend) * 0.08));
+      const lx = 0.2 + Math.cos(bend * 0.85) * reach;
+      const ly = Math.sin(bend * 0.85) * reach;
+      const c = Math.cos(s.h);
+      const sn = Math.sin(s.h);
+      const hx = s.x + (lx * c - ly * sn) * sz;
+      const hy = s.y + (lx * sn + ly * c) * sz;
+      // facing down the pond its body sits above the head, so step to the side of it
+      const side = (c < 0 ? -1 : 1) * Math.max(0, sn) * 0.55 * sz;
+      b.el.style.transform = `translate(${(hx + side).toFixed(1)}px, ${(hy - 9 * scale).toFixed(1)}px)`;
     }
     // hovering over the pond, an idle swan asks for food now and then
     if (pointer && !touchy && clock > nextChirp && !kernels.length) {
@@ -2070,7 +2121,7 @@ export function startPond(
         const pt = pointer;
         idle.sort((a, b) => Math.hypot(a.x - pt.x, a.y - pt.y) - Math.hypot(b.x - pt.x, b.y - pt.y));
         const s = Math.random() < 0.7 ? idle[0] : idle[Math.floor(Math.random() * idle.length)];
-        say(s, pick(HUNGRY), "hungry");
+        say(s, pick(HUNGRY), "calm", 1.6);
         // and looks over at you while it asks
         s.headYawTarget = clamp(wrapAngle(Math.atan2(pt.y - s.y, pt.x - s.x) - s.h), -0.7, 0.7);
         s.nextLook = 2;
@@ -2118,8 +2169,7 @@ export function startPond(
     const startled = swans.filter((s) => s.state !== "away");
     const n = Math.random() < 0.12 ? 0 : Math.random() < 0.65 ? 1 : 2;
     for (const s of startled.sort(() => Math.random() - 0.5).slice(0, n)) {
-      s.sayAt = (s.fleeAt >= 0 ? s.fleeAt : clock) + rand(0.05, 0.3);
-      s.sayText = pick(CROSS);
+      sayLater(s, pick(CROSS), "cross", 0.6, (s.fleeAt >= 0 ? s.fleeAt : clock) + rand(0.05, 0.3));
     }
   };
 
@@ -2143,7 +2193,7 @@ export function startPond(
 
     if (s.sayAt >= 0 && clock >= s.sayAt) {
       s.sayAt = -1;
-      say(s, s.sayText, "cross");
+      say(s, s.sayText, s.sayMood, s.sayLife);
     }
 
     if (s.fleeAt >= 0 && clock >= s.fleeAt) {
@@ -2213,6 +2263,10 @@ export function startPond(
         if (!s.food || (best && best !== s.food && bestD < cost(s.food) * 0.75)) s.food = best;
       }
       if (!s.food || s.ate >= s.appetite || clock > s.feedUntil) {
+        if (s.ate > 0 && s.sayAt < 0 && Math.random() < 0.7) {
+          const full = s.ate >= s.appetite;
+          sayLater(s, pick(full ? FULL : MORE), "calm", 1.3, clock + rand(0.4, 0.8));
+        }
         s.state = "glide";
         s.food = null;
         pickWaypoint(s);

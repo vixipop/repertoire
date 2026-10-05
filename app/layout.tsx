@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Gochi_Hand, Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
+import { Homemade_Apple, Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
@@ -31,7 +31,7 @@ const arabic = Noto_Naskh_Arabic({
 });
 
 // The swans' handwriting.
-const hand = Gochi_Hand({
+const hand = Homemade_Apple({
   subsets: ["latin"],
   weight: ["400"],
   display: "swap",
