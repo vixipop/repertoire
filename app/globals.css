@@ -676,8 +676,8 @@ html.is-theme-switching .theme-toggle-icon {
   top: 0;
   will-change: transform;
   /* the tuner can try other lettering through these */
-  font-family: var(--say-font, var(--font-hand, "Homemade Apple")), cursive;
-  font-size: var(--say-size, 13px);
+  font-family: var(--say-font, var(--font-hand, "Gaegu")), cursive;
+  font-size: var(--say-size, 20px);
   font-style: var(--say-style, normal);
   line-height: 1.5;
   white-space: nowrap;
@@ -689,7 +689,7 @@ html.is-theme-switching .theme-toggle-icon {
   transform: translate(-50%, -100%) rotate(var(--tilt, 0deg));
   animation: pond-say linear forwards;
 }
-.pond-say b { font-weight: var(--say-weight, 400); }
+.pond-say b { font-weight: var(--say-weight, 700); }
 .pond-say i { display: inline-block; font-style: inherit; }
 .pond-say svg {
   display: block;

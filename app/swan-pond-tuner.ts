@@ -15,6 +15,7 @@ const STORAGE_KEY = "swan-pond-looks-v7";
 
 /** Handwritten Google fonts to try for the swans' remarks. */
 export const HAND_FONTS = [
+  "Gaegu",
   "Homemade Apple",
   "Caveat",
   "Nothing You Could Do",
@@ -25,7 +26,6 @@ export const HAND_FONTS = [
   "Gochi Hand",
   "Patrick Hand",
   "Kalam",
-  "Gaegu",
   "Nanum Pen Script",
   "Covered By Your Grace",
   "Just Another Hand",
@@ -50,7 +50,7 @@ export const HAND_FONTS = [
 ];
 
 export type Lettering = { font: string; size: number; bold: boolean; italic: boolean };
-export const DEFAULT_LETTERING: Lettering = { font: "Homemade Apple", size: 13, bold: false, italic: false };
+export const DEFAULT_LETTERING: Lettering = { font: "Gaegu", size: 20, bold: true, italic: false };
 
 type Saved = { looks: Looks; mode: "Auto" | TimeName; lettering?: Lettering };
 

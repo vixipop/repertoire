@@ -53,19 +53,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55, inkHue: 212, inkSat: 0.32, inkLight: 0.24 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55, inkHue: 52, inkSat: 1, inkLight: 0.79 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51, inkHue: 212, inkSat: 0.32, inkLight: 0.22 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51, inkHue: 52, inkSat: 1, inkLight: 0.79 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62, inkHue: 204, inkSat: 0.75, inkLight: 0.88 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62, inkHue: 203, inkSat: 0.74, inkLight: 0.88 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85, inkHue: 204, inkSat: 0.75, inkLight: 0.88 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85, inkHue: 203, inkSat: 0.74, inkLight: 0.88 },
   },
 ];
 
@@ -2902,6 +2902,42 @@ export function startPond(
       c.fillStyle = getComputedStyle(document.body).backgroundColor || "#fafafa";
       c.fillRect(0, 0, w, h);
       c.restore();
+      // the remarks are DOM text over the canvas, so paint them in by hand,
+      // letter by letter where the page has laid them out (shake and all)
+      const box = host.getBoundingClientRect();
+      const kx = w / (box.width || 1);
+      const ky = h / (box.height || 1);
+      for (const b of bubbles) {
+        const inner = b.el.firstElementChild as HTMLElement | null;
+        if (!inner) continue;
+        const alpha = Number(getComputedStyle(inner).opacity);
+        if (!(alpha > 0.01)) continue;
+        const cs = getComputedStyle(b.el.querySelector("b") ?? b.el);
+        c.save();
+        c.globalAlpha = alpha;
+        c.fillStyle = cs.color;
+        c.strokeStyle = cs.color;
+        c.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * kx}px ${cs.fontFamily}`;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        for (const l of b.el.querySelectorAll("i")) {
+          const r = l.getBoundingClientRect();
+          c.fillText(l.textContent ?? "", (r.left + r.width / 2 - box.left) * kx, (r.top + r.height / 2 - box.top) * ky);
+        }
+        const svg = b.el.querySelector("svg");
+        if (svg) {
+          const r = svg.getBoundingClientRect();
+          const u = (r.width / 12) * kx;
+          c.lineWidth = 1.3 * u;
+          c.lineCap = "round";
+          c.translate((r.left - box.left) * kx, (r.top - box.top) * ky);
+          c.beginPath();
+          c.moveTo(8.5 * u, 1.5 * u);
+          c.bezierCurveTo(7.9 * u, 4.5 * u, 6.5 * u, 7.1 * u, 3.9 * u, 9.9 * u);
+          c.stroke();
+        }
+        c.restore();
+      }
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);

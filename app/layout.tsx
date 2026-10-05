@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Homemade_Apple, Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
+import { Gaegu, Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
@@ -31,9 +31,9 @@ const arabic = Noto_Naskh_Arabic({
 });
 
 // The swans' handwriting.
-const hand = Homemade_Apple({
+const hand = Gaegu({
   subsets: ["latin"],
-  weight: ["400"],
+  weight: ["700"],
   display: "swap",
   variable: "--font-hand",
 });
