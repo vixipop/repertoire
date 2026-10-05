@@ -42,6 +42,9 @@ export type PondParams = {
   paint: number; // 0–1 brushwork strength
   brush: number; // 0–1 brush size
   bloom: number; // 0–1
+  inkHue: number; // 0–360 colour of the swans' handwriting
+  inkSat: number; // 0–1
+  inkLight: number; // 0–1
 };
 
 export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
@@ -50,19 +53,19 @@ export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
 export const TIMES: Array<{ name: TimeName; params: PondParams }> = [
   {
     name: "Dawn",
-    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+    params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55, inkHue: 212, inkSat: 0.32, inkLight: 0.24 },
   },
   {
     name: "Day",
-    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+    params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51, inkHue: 212, inkSat: 0.32, inkLight: 0.22 },
   },
   {
     name: "Dusk",
-    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+    params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62, inkHue: 204, inkSat: 0.75, inkLight: 0.88 },
   },
   {
     name: "Dark",
-    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+    params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85, inkHue: 204, inkSat: 0.75, inkLight: 0.88 },
   },
 ];
 
@@ -98,7 +101,7 @@ export const PARAM_SPECS: ParamSpec[] = [
   { key: "bloom", label: "Bloom", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
 ];
 
-const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue"]);
+const HUE_KEYS = new Set<keyof PondParams>(["waterHue", "lightHue", "skyHue", "swanHue", "inkHue"]);
 
 /** Settings that belong to the scene rather than to a time of day. */
 export const GLOBAL_KEYS = new Set<keyof PondParams>([]);
@@ -2050,7 +2053,7 @@ export function startPond(
   const bubbles: Bubble[] = [];
   let nextChirp = 0;
   let feedsSinceDibs = 3;
-  let inkLight = -1;
+  let inkKey = "";
   const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
 
   type Mood = "cross" | "calm";
@@ -2087,13 +2090,12 @@ export function startPond(
   };
 
   const updateTalk = () => {
-    // ink: a dark blue-grey by day, a soft baby blue once the light goes
-    const night = clamp((0.58 - params.waterLight) / 0.1, 0, 1);
-    const k = night * night * (3 - 2 * night);
-    if (Math.abs(k - inkLight) > 0.004) {
-      inkLight = k;
-      const mix = (a: number, b: number) => Math.round(a + (b - a) * k);
-      talk.style.color = `rgba(${mix(58, 186)}, ${mix(74, 220)}, ${mix(92, 242)}, ${(0.92 - 0.1 * k).toFixed(2)})`;
+    // ink follows the hour, like the rest of the look
+    const ink = `${params.inkHue.toFixed(0)},${params.inkSat.toFixed(3)},${params.inkLight.toFixed(3)}`;
+    if (ink !== inkKey) {
+      inkKey = ink;
+      const [r, g, b] = hsl(params.inkHue, params.inkSat, params.inkLight);
+      talk.style.color = `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
     }
     for (let i = bubbles.length - 1; i >= 0; i--) {
       const b = bubbles[i];

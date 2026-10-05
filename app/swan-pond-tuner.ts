@@ -60,7 +60,11 @@ export function loadSaved(): Saved {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>;
-      // the colour sliders are gone, so the looks are always the locked-in defaults
+      // the colour sliders are gone, so only the handwriting colour is kept from before
+      for (const n of TIME_NAMES) {
+        const l = s.looks?.[n];
+        if (l && typeof l.inkHue === "number") Object.assign(base[n], { inkHue: l.inkHue, inkSat: l.inkSat, inkLight: l.inkLight });
+      }
       return { looks: base, mode: s.mode ?? "Auto", lettering: { ...DEFAULT_LETTERING, ...s.lettering } };
     }
   } catch {
@@ -82,6 +86,32 @@ export function initialParams(): PondParams {
   const s = loadSaved();
   return s.mode === "Auto" ? lookAt(s.looks).params : { ...s.looks[s.mode] };
 }
+
+const toHex = (h: number, s: number, l: number) => {
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const f = (t: number) => {
+    t = (t + 1) % 1;
+    const v = t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p;
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  const k = (((h % 360) + 360) % 360) / 360;
+  return `#${f(k + 1 / 3)}${f(k)}${f(k - 1 / 3)}`;
+};
+const fromHex = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (!d) return { inkHue: 0, inkSat: 0, inkLight: l };
+  const sat = d / (1 - Math.abs(2 * l - 1));
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { inkHue: (h * 60 + 360) % 360, inkSat: sat, inkLight: l };
+};
 
 let fontsLoaded = false;
 /** Fetch every font on the list at once (tuner only), so switching is instant. */
@@ -186,6 +216,40 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   fonts.append(fontLabel, select, size, boldBtn, italicBtn, speak, sample);
   root.appendChild(fonts);
 
+  // handwriting colour for each time of day
+  const inks = document.createElement("div");
+  inks.className = "pond-tuner-fonts";
+  const inkLabel = document.createElement("span");
+  inkLabel.className = "pond-tuner-label";
+  inkLabel.textContent = "Ink";
+  inks.appendChild(inkLabel);
+  const inkInputs = new Map<TimeName, HTMLInputElement>();
+  for (const n of TIME_NAMES) {
+    const wrap = document.createElement("label");
+    wrap.className = "pond-tuner-ink";
+    const input = document.createElement("input");
+    input.type = "color";
+    input.setAttribute("aria-label", `${n} ink colour`);
+    input.addEventListener("input", () => {
+      Object.assign(state.looks[n], fromHex(input.value));
+      save(state);
+      // show the hour you're colouring
+      if (state.mode !== n) setMode(n);
+      else ctl.setParams(state.looks[n]);
+    });
+    input.addEventListener("change", () => ctl.chatter());
+    wrap.append(input, document.createTextNode(n));
+    inks.appendChild(wrap);
+    inkInputs.set(n, input);
+  }
+  root.appendChild(inks);
+  const syncInks = () => {
+    for (const [n, input] of inkInputs) {
+      const l = state.looks[n];
+      input.value = toHex(l.inkHue, l.inkSat, l.inkLight);
+    }
+  };
+
   const setLettering = (patch: Partial<Lettering>, talk = true) => {
     Object.assign(lettering, patch);
     save(state);
@@ -237,9 +301,10 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   root.append(actions, recRow, fallback);
 
   copy.addEventListener("click", () => {
-    const text = JSON.stringify({ lettering });
+    const ink = Object.fromEntries(TIME_NAMES.map((n) => [n, toHex(state.looks[n].inkHue, state.looks[n].inkSat, state.looks[n].inkLight)]));
+    const text = JSON.stringify({ lettering, ink });
     const done = () => {
-      status.textContent = "Copied the lettering";
+      status.textContent = "Copied the lettering and ink";
       setTimeout(() => (status.textContent = ""), 1800);
     };
     const manual = () => {
@@ -254,7 +319,12 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
       manual();
     }
   });
-  reset.addEventListener("click", () => setLettering({ ...DEFAULT_LETTERING }));
+  reset.addEventListener("click", () => {
+    const d = defaultLooks();
+    for (const n of TIME_NAMES) Object.assign(state.looks[n], { inkHue: d[n].inkHue, inkSat: d[n].inkSat, inkLight: d[n].inkLight });
+    setMode(state.mode);
+    setLettering({ ...DEFAULT_LETTERING });
+  });
 
   /** The time of day showing right now. */
   const editing = (): TimeName => (state.mode === "Auto" ? lookAt(state.looks).name : state.mode);
@@ -271,6 +341,7 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
 
   function sync() {
     const name = editing();
+    syncInks();
     for (const [n, b] of chips) b.setAttribute("aria-pressed", String(n === state.mode));
     chips.get("Auto")!.textContent = state.mode === "Auto" ? `Auto · ${name}` : "Auto";
     note.textContent = state.mode === "Auto" ? "follows your clock" : `showing ${name} (${TIME_HOURS[name]})`;

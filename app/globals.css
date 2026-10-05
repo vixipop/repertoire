@@ -801,6 +801,11 @@ html.is-theme-switching .theme-toggle-icon {
 }
 .pond-tuner-size { display: grid; grid-template-columns: auto 120px 40px; align-items: center; gap: 8px; }
 .pond-tuner-size output { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pond-tuner-ink { display: inline-flex; align-items: center; gap: 6px; color: var(--text-strong); cursor: pointer; }
+.pond-tuner-ink input { width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-soft); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.pond-tuner-ink input::-webkit-color-swatch-wrapper { padding: 0; }
+.pond-tuner-ink input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.pond-tuner-ink input::-moz-color-swatch { border: 0; border-radius: 50%; }
 .pond-tuner-sample { font-size: 18px; color: var(--text-strong); flex-basis: 100%; min-height: 30px; }
 .pond-tuner-fallback { width: 100%; min-height: 60px; font: 12px/18px ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg-icon); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px; }
 .pond-tuner-button.is-record { background: #b3261e; color: #fff; }
