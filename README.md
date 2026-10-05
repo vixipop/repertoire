@@ -21,7 +21,8 @@ npm run dev     # http://localhost:3000
 | `app/swan-pond-engine.ts` | Pond engine — water + Monet paint shaders, swan steering, weeds, leaves |
 | `app/swan-paint.ts` | How each swan is painted (proportions, plumage, wings, neck) |
 | `app/swan-pond-tuner.ts` | Time-of-day + colour panel — shown in dev or with `?tune` in the URL |
-| `app/swan-pond-recorder.ts` | Records the pond to a GIF (own median-cut + LZW encoder, no dependency) |
+| `app/swan-pond-recorder.ts` | Records the pond to a video (MP4, or WebM where MP4 isn't available), with the music |
+| `app/swan-pond-music.ts` | Background music for the tuner, through Web Audio so one volume feeds the speakers and the recording. The track lives at `public/music/pond-song.mp3`, which is git-ignored |
 | `app/swan-pond-time.ts` | Follows the visitor's clock: dawn, day, dusk, dark |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 

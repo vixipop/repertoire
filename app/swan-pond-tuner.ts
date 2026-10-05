@@ -10,6 +10,7 @@
 import type { PondController, PondParams, TimeName } from "./swan-pond-engine";
 import { TIME_HOURS, TIME_NAMES, defaultLooks, followClock, lookAt, type Looks } from "./swan-pond-time";
 import { browserSave, mountRecorder, type SaveFile } from "./swan-pond-recorder";
+import { createMusic, type Music } from "./swan-pond-music";
 
 const STORAGE_KEY = "swan-pond-looks-v7";
 
@@ -52,7 +53,7 @@ export const HAND_FONTS = [
 export type Lettering = { font: string; size: number; bold: boolean; italic: boolean };
 export const DEFAULT_LETTERING: Lettering = { font: "Gaegu", size: 20, bold: true, italic: false };
 
-type Saved = { looks: Looks; mode: "Auto" | TimeName; lettering?: Lettering };
+type Saved = { looks: Looks; mode: "Auto" | TimeName; lettering?: Lettering; volume?: number };
 
 export function loadSaved(): Saved {
   const base = defaultLooks();
@@ -65,12 +66,12 @@ export function loadSaved(): Saved {
         const l = s.looks?.[n];
         if (l && typeof l.inkHue === "number") Object.assign(base[n], { inkHue: l.inkHue, inkSat: l.inkSat, inkLight: l.inkLight });
       }
-      return { looks: base, mode: s.mode ?? "Auto", lettering: { ...DEFAULT_LETTERING, ...s.lettering } };
+      return { looks: base, mode: s.mode ?? "Auto", lettering: { ...DEFAULT_LETTERING, ...s.lettering }, volume: s.volume ?? 0.6 };
     }
   } catch {
     /* storage blocked: start from the defaults */
   }
-  return { looks: base, mode: "Auto", lettering: { ...DEFAULT_LETTERING } };
+  return { looks: base, mode: "Auto", lettering: { ...DEFAULT_LETTERING }, volume: 0.6 };
 }
 
 function save(s: Saved) {
@@ -136,7 +137,7 @@ export function applyLettering(l: Lettering) {
   root.setProperty("--say-style", l.italic ? "italic" : "normal");
 }
 
-export function mountTuner(container: HTMLElement, ctl: PondController, opts: { save?: SaveFile } = {}): () => void {
+export function mountTuner(container: HTMLElement, ctl: PondController, opts: { save?: SaveFile; musicSrc?: string } = {}): () => void {
   const state = loadSaved();
   let stopClock: (() => void) | null = null;
 
@@ -295,9 +296,47 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   fallback.hidden = true;
   fallback.setAttribute("aria-label", "Pond settings");
   actions.append(copy, reset, status);
+  // background music, with its volume; the recorder captures it too
   const recRow = document.createElement("div");
   recRow.className = "pond-tuner-actions";
-  const unmountRecorder = mountRecorder(recRow, ctl, opts.save ?? browserSave);
+  let music: Music | undefined;
+  let unwatchMusic = () => {};
+  if (opts.musicSrc) {
+    const m = createMusic(opts.musicSrc, state.volume ?? 0.6);
+    music = m;
+    const playBtn = document.createElement("button");
+    playBtn.type = "button";
+    playBtn.className = "pond-tuner-button is-quiet";
+    const vol = document.createElement("label");
+    vol.className = "pond-tuner-size";
+    const volText = document.createElement("span");
+    volText.textContent = "Volume";
+    const volInput = document.createElement("input");
+    volInput.type = "range";
+    volInput.className = "pond-tuner-range";
+    volInput.min = "0";
+    volInput.max = "100";
+    volInput.step = "1";
+    volInput.value = String(Math.round((state.volume ?? 0.6) * 100));
+    const volOut = document.createElement("output");
+    volOut.textContent = `${volInput.value}%`;
+    vol.append(volText, volInput, volOut);
+    volInput.addEventListener("input", () => {
+      state.volume = Number(volInput.value) / 100;
+      volOut.textContent = `${volInput.value}%`;
+      m.setVolume(state.volume);
+      save(state);
+    });
+    const label = () => (playBtn.textContent = m.playing ? "❚❚ Pause music" : "♪ Play music");
+    label();
+    unwatchMusic = m.onChange(label);
+    playBtn.addEventListener("click", () => {
+      if (m.playing) m.pause();
+      else m.play().catch(() => (status.textContent = "couldn't start the music"));
+    });
+    recRow.append(playBtn, vol);
+  }
+  const unmountRecorder = mountRecorder(recRow, ctl, opts.save ?? browserSave, music);
   root.append(actions, recRow, fallback);
 
   copy.addEventListener("click", () => {
@@ -352,6 +391,8 @@ export function mountTuner(container: HTMLElement, ctl: PondController, opts: { 
   return () => {
     stopClock?.();
     unmountRecorder();
+    unwatchMusic();
+    music?.destroy();
     root.remove();
   };
 }

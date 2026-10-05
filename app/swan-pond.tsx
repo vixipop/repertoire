@@ -5,6 +5,9 @@ import { startPond } from "./swan-pond-engine";
 import { defaultLooks, followClock, lookAt } from "./swan-pond-time";
 import { initialParams, mountTuner } from "./swan-pond-tuner";
 
+/** Drop a song here (not committed) to play it in the tuner and record it into videos. */
+const MUSIC_SRC = "/music/pond-song.mp3";
+
 /**
  * Interactive pond — swans drift in long loops; hovering stirs the water,
  * clicking startles them off-frame until they wander back. The light follows
@@ -30,7 +33,7 @@ export default function SwanPond() {
       process.env.NODE_ENV === "development" || new URLSearchParams(window.location.search).has("tune");
     const ctl = startPond(host, water, swans, tune ? initialParams() : lookAt(defaultLooks()).params);
     const stop =
-      tune && tunerRef.current ? mountTuner(tunerRef.current, ctl) : followClock(ctl, defaultLooks);
+      tune && tunerRef.current ? mountTuner(tunerRef.current, ctl, { musicSrc: MUSIC_SRC }) : followClock(ctl, defaultLooks);
     return () => {
       stop();
       ctl.destroy();

@@ -9,3 +9,6 @@ next-env.d.ts
 npm-debug.log*
 .vercel
 *.tsbuildinfo
+
+# background music for the pond tuner: a licensed track, kept out of git
+public/music/
