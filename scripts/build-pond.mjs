@@ -227,18 +227,15 @@ const PAGE_SCRIPT = `
   $("copy-link").addEventListener("click", () => copy(location.href, "link copied"));
   $("copy-mail").addEventListener("click", () => copy(SITE.email, "email copied"));
 
-  /* music: starts with the first click or key (browsers require one), mute on the top right */
+  /* music: on by default. Browsers only allow sound after a click, tap or key, so it
+     starts with the first of those; the mute button sits on the top right */
   const music = createMusic(SITE.music, SITE.volume);
   const mute = $("mute");
   let muted = false;
-  try { muted = localStorage.getItem("pond-muted") === "1"; } catch {}
-  const remember = () => { try { localStorage.setItem("pond-muted", muted ? "1" : "0"); } catch {} };
   const paintMute = () => {
-    const audible = music.playing && !muted;
-    mute.dataset.audible = String(audible);
-    mute.setAttribute("aria-label", audible ? "Mute music" : "Unmute music");
+    mute.dataset.audible = String(!muted);
+    mute.setAttribute("aria-label", muted ? "Unmute music" : "Mute music");
   };
-  music.onChange(paintMute);
   paintMute();
   const start = async () => {
     try {
@@ -250,14 +247,9 @@ const PAGE_SCRIPT = `
     paintMute();
   };
   mute.addEventListener("click", () => {
-    if (!music.playing) {
-      muted = false;
-      start();
-    } else {
-      muted = !muted;
-      music.setVolume(muted ? 0 : SITE.volume);
-    }
-    remember();
+    muted = !muted;
+    music.setVolume(muted ? 0 : SITE.volume);
+    if (!muted && !music.playing) start();
     paintMute();
   });
   const gestures = ["pointerdown", "pointerup", "keydown", "touchend"];
@@ -269,6 +261,7 @@ const PAGE_SCRIPT = `
     });
   };
   gestures.forEach((t) => document.addEventListener(t, onGesture, true));
+  start(); // plays straight away where the browser allows it
   // and quiet while the tab is out of sight
   let resume = false;
   document.addEventListener("visibilitychange", () => {
