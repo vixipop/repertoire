@@ -142,6 +142,7 @@ html[data-time="dusk"] .moon-ink, html[data-time="dark"] .moon-ink { opacity: 0;
 main { display: grid; place-items: center; padding-bottom: 24px; }
 .pond { width: var(--pw); cursor: pointer; }
 
+.corn { display: none; }
 .times { position: fixed; right: 28px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .times button { font: inherit; font-size: 13px; letter-spacing: 0.04em; padding: 4px 0 4px 14px; border: 0; background: none; color: var(--muted); cursor: pointer; position: relative; transition: color 0.2s ease; }
 .times button:hover, .times button:focus-visible { color: var(--ink); }
@@ -154,7 +155,10 @@ main { display: grid; place-items: center; padding-bottom: 24px; }
 @media (max-width: 760px) {
   :root { --pw: calc(100vw - 32px); }
   .pond { aspect-ratio: 4 / 3; }
-  main { align-content: center; grid-template-rows: auto auto; gap: 18px; }
+  main { align-content: center; grid-template-rows: auto auto auto; gap: 18px; justify-items: center; }
+  .corn { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; letter-spacing: 0.04em; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--muted); background: none; color: var(--ink); cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+  .corn svg { width: 14px; height: 14px; fill: #f2c94c; stroke: #b88a1e; stroke-width: 1.2; }
+  .corn[aria-pressed="true"] { background: #f7e08a; border-color: #f7e08a; color: #2a2d2b; }
   .times { position: static; transform: none; flex-direction: row; justify-content: center; gap: 4px; width: var(--pw); }
   .times button { padding: 6px 12px; }
   .times button[aria-pressed="true"]::before { display: none; }
@@ -178,6 +182,7 @@ main { display: grid; place-items: center; padding-bottom: 24px; }
     <canvas class="pond-water" id="water"></canvas>
     <canvas class="pond-swans" id="swans"></canvas>
   </div>
+  <button class="corn" id="corn" type="button" aria-pressed="false" aria-label="Corn mode: tap the pond to toss corn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c3.6 2.6 5.5 6.4 5.5 10.2 0 4.2-2.4 7.6-5.5 8.8-3.1-1.2-5.5-4.6-5.5-8.8 0-3.8 1.9-7.6 5.5-10.2z"/></svg><span>corn</span></button>
   <nav class="times" id="times" aria-label="Time of day"></nav>
 </main>
 <div class="toast" id="toast" role="status"></div>
@@ -2498,8 +2503,14 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     const feed = (p) => {
         throwCorn(p.x, p.y);
     };
+    let tapFeeds = false;
     const onDown = (e) => {
         const p = local(e);
+        // corn mode (for screens without a right button): a tap feeds instead of splashing
+        if (tapFeeds && (e.pointerType === "touch" || e.button === 0)) {
+            feed(p);
+            return;
+        }
         if (e.pointerType === "mouse" || e.pointerType === "pen") {
             if (e.button === 2)
                 feed(p);
@@ -3368,6 +3379,9 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             frameListeners.add(cb);
             return () => frameListeners.delete(cb);
         },
+        setTapMode(mode) {
+            tapFeeds = mode === "feed";
+        },
         setHighQuality(width) {
             if (!hasGL)
                 return;
@@ -3639,6 +3653,19 @@ function createMusic(src, volume = 0.6) {
   const fit = () => root.style.setProperty("--say-size", (20 * Math.pow(Math.max(0.6, pond.clientWidth / 680), 0.8)).toFixed(1) + "px");
   new ResizeObserver(fit).observe(pond);
   fit();
+
+  /* corn mode, for phones: tap the pond to feed instead of splash */
+  const corn = $("corn");
+  corn.addEventListener("click", () => {
+    const on = corn.getAttribute("aria-pressed") !== "true";
+    corn.setAttribute("aria-pressed", String(on));
+    ctl.setTapMode(on ? "feed" : "splash");
+    toast(on ? "tap the pond to toss corn" : "tap the pond to splash");
+  });
+  // leaving a phone-sized window with corn on would leave left clicks feeding with no button to undo it
+  matchMedia("(min-width: 761px)").addEventListener("change", (e) => {
+    if (e.matches && corn.getAttribute("aria-pressed") === "true") corn.click();
+  });
 
   /* copy buttons */
   const toastEl = $("toast");

@@ -135,6 +135,8 @@ export type PondController = {
    * normal, adaptive rendering.
    */
   setHighQuality(width: number | null): void;
+  /** What a plain tap or left click does: splash the water (default) or toss corn. */
+  setTapMode(mode: "splash" | "feed"): void;
   /** Have a swan or two say something now (for previewing the lettering). */
   chatter(): void;
   destroy(): void;
@@ -2022,8 +2024,14 @@ export function startPond(
     throwCorn(p.x, p.y);
   };
 
+  let tapFeeds = false;
   const onDown = (e: PointerEvent) => {
     const p = local(e);
+    // corn mode (for screens without a right button): a tap feeds instead of splashing
+    if (tapFeeds && (e.pointerType === "touch" || e.button === 0)) {
+      feed(p);
+      return;
+    }
     if (e.pointerType === "mouse" || e.pointerType === "pen") {
       if (e.button === 2) feed(p);
       else if (e.button === 0) splash(p);
@@ -2905,6 +2913,9 @@ export function startPond(
     onFrame(cb) {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
+    },
+    setTapMode(mode) {
+      tapFeeds = mode === "feed";
     },
     setHighQuality(width) {
       if (!hasGL) return;
