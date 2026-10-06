@@ -10,7 +10,8 @@ import type { Music } from "./swan-pond-music";
 
 const FPS = 30;
 const MAX_SECONDS = 180;
-const MAX_WIDTH = 1280;
+/** Videos are rendered at this width whatever size the pond is on screen. */
+const VIDEO_WIDTH = 1920;
 
 const TYPES = [
   "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -69,10 +70,11 @@ export function mountRecorder(
 
   const start = async () => {
     const { width, height } = ctl.size();
-    const k = Math.min(MAX_WIDTH / width, Math.min(2, window.devicePixelRatio || 1));
+    // the pond renders itself at video size while recording, not screen size
+    ctl.setHighQuality(VIDEO_WIDTH);
     // video encoders want even dimensions
-    canvas.width = Math.round((width * k) / 2) * 2;
-    canvas.height = Math.round((height * k) / 2) * 2;
+    canvas.width = VIDEO_WIDTH;
+    canvas.height = Math.round((VIDEO_WIDTH * height) / width / 2) * 2;
     ctl.snapshot(cx, canvas.width, canvas.height);
 
     // the song goes in the video too, so start it if it isn't playing
@@ -87,7 +89,7 @@ export function mountRecorder(
     for (const t of music?.tracks() ?? []) stream.addTrack(t);
 
     chunks = [];
-    rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 192_000 });
+    rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 16_000_000, audioBitsPerSecond: 192_000 });
     rec.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
     };
@@ -112,6 +114,7 @@ export function mountRecorder(
     if (!rec || rec.state === "inactive") return;
     unsub?.();
     unsub = null;
+    ctl.setHighQuality(null);
     btn.disabled = true;
     note.textContent = "saving video…";
     rec.stop();
@@ -143,6 +146,7 @@ export function mountRecorder(
   return () => {
     unsub?.();
     if (rec && rec.state !== "inactive") {
+      ctl.setHighQuality(null);
       rec.onstop = null;
       rec.stop();
     }

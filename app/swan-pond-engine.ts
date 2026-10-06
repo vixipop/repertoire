@@ -129,6 +129,12 @@ export type PondController = {
   onFrame(cb: () => void): () => void;
   /** Paint the finished pond (water and torn edge) into a 2D context. */
   snapshot(c: CanvasRenderingContext2D, w: number, h: number): void;
+  /**
+   * Render at a fixed output width (in pixels) regardless of the pond's size
+   * on screen, at full water resolution, for recording. null goes back to
+   * normal, adaptive rendering.
+   */
+  setHighQuality(width: number | null): void;
   /** Have a swan or two say something now (for previewing the lettering). */
   chatter(): void;
   destroy(): void;
@@ -1527,16 +1533,23 @@ export function startPond(
   let sceneW = 1;
   let sceneK = 0.7; // water pass resolution, relative to the output
   let sceneH = 1;
+  // while recording in high quality: the output width, and the settings to go back to
+  let hqWidth = 0;
+  let beforeHq = { wd: 1, sceneK: 0.7 };
 
   const sizeLayers = () => {
     // the swans stay sharp even when the water is rendered small
-    const pr = hasGL ? Math.min(window.devicePixelRatio || 1, 1.5) : dpr;
+    if (hqWidth) wd = hqWidth / W;
+    const pr = hasGL ? (hqWidth ? wd : Math.min(window.devicePixelRatio || 1, 1.5)) : dpr;
     paint.width = Math.round(W * pr);
     paint.height = Math.round(H * pr);
-    weeds.width = Math.round(W * 0.75);
-    weeds.height = Math.round(H * 0.75);
-    canopy.width = Math.round(W * Math.min(wd, 1));
-    canopy.height = Math.round(H * Math.min(wd, 1));
+    // weeds are seen through moving water, so they can be a little soft
+    const wk = hqWidth ? 1.5 : 0.75;
+    weeds.width = Math.round(W * wk);
+    weeds.height = Math.round(H * wk);
+    const ck = hqWidth ? wd : Math.min(wd, 1);
+    canopy.width = Math.round(W * ck);
+    canopy.height = Math.round(H * ck);
     surf.width = Math.round(W * 0.5);
     surf.height = Math.round(H * 0.5);
     if (hasGL && gl) {
@@ -2719,7 +2732,20 @@ export function startPond(
     // if the machine is struggling, render at a lower resolution
     perfAcc += real;
     perfN++;
-    if (perfN >= 45) {
+    // while recording in high quality the output stays at video size; only the
+    // water's detail gives a little if the machine can't keep up
+    if (perfN >= 30 && hqWidth) {
+      const avg = perfAcc / perfN;
+      if (hasGL && avg > 0.04 && sceneK > 0.5) {
+        sceneK = Math.max(0.5, sceneK - 0.125);
+        sizeLayers();
+      } else if (hasGL && avg < 0.022 && sceneK < 1) {
+        sceneK = Math.min(1, sceneK + 0.125);
+        sizeLayers();
+      }
+      perfAcc = 0;
+      perfN = 0;
+    } else if (perfN >= 45) {
       const avg = perfAcc / perfN;
       // shed load from the water first (the brushwork hides it), and only
       // then soften the whole picture
@@ -2880,6 +2906,19 @@ export function startPond(
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
     },
+    setHighQuality(width) {
+      if (!hasGL) return;
+      if (width && !hqWidth) beforeHq = { wd, sceneK };
+      if (width) {
+        hqWidth = width;
+        sceneK = 0.875;
+      } else if (hqWidth) {
+        hqWidth = 0;
+        wd = beforeHq.wd;
+        sceneK = beforeHq.sceneK;
+      } else return;
+      sizeLayers();
+    },
     chatter() {
       const here = swans.filter((s) => s.state !== "away" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
       const all = [...CROSS, ...HUNGRY, ...FULL, ...MORE, "dibs!", "glutton!"];
@@ -2893,6 +2932,7 @@ export function startPond(
       c.save();
       c.globalCompositeOperation = "source-over";
       c.clearRect(0, 0, w, h);
+      c.imageSmoothingQuality = "high";
       c.drawImage(hasGL ? waterCanvas : swanCanvas, 0, 0, w, h);
       if (edgeMask) {
         c.globalCompositeOperation = "destination-in";
