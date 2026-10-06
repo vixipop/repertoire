@@ -17,6 +17,8 @@ npm run dev     # http://localhost:3000
 | `app/site-behaviour.tsx` | Staggered entrance (client) |
 | `app/dock.tsx` | Floating dock — social slots (client) |
 | `app/theme-toggle.tsx` | Top-right light/dark toggle (client) |
+| `app/audio-provider.tsx` | Ambient music, mounted once in the root layout so it survives page changes (client) |
+| `app/hero-bar.tsx` | The strip above the pond: Bangalore time on the left, music toggle on the right (client) |
 | `app/pond/pond-hero.tsx` | The hero's React frame: mounts the engine, follows the clock (client) |
 | `app/pond/engine.ts` | The pond engine, lifted from the standalone artifact: painted floor, weeds, vines, ripples, wakes, the water + brushwork shaders, swan behaviour, the four time-of-day looks |
 | `app/pond/swan-paint.ts` | The painted swans |
@@ -100,12 +102,31 @@ a 60Hz screen can't reach, and it counted startup stalls), so it now ignores the
 first ~2s and climbs back after three clean windows at >=54fps. The order of what
 it sheds, the steps, the floors and the threshold for shedding are unchanged.
 
-There is a hanging feeder at the top right: click the bowl to take a kernel (the
-cursor becomes corn), click the water to throw it, Escape or the bowl again to put
-it back. The frame takes the column
-width (or the mobile gutter); only the aspect ratio is set in CSS, because the
-engine scales everything to whatever size it is given. The torn edge is drawn by
-the engine as a generated mask.
+Click to make a splash and startle the swans; right-click (long-press on touch) to
+toss them corn. They talk back in handwriting (Gaegu); the ink colour follows the
+hour like everything else. The speech size is set in CSS (`--say-size` on
+`.pond-hero`) because the pond here is narrower than the 680px it was drawn at.
+
+## Music
+
+One track (`public/audio/`), 40% volume, looping. The player lives in the root layout,
+so it keeps playing as you move between pages **as long as those moves are client-side**
+(`next/link`). A plain `<a href>` to an internal page reloads the document and restarts
+the music, so use `Link` for anything internal.
+
+Browsers only allow sound after a gesture, so nothing is fetched or played until the
+first click, tap or key press; the icon shows "off" until then. Muting stops it and is
+remembered (`localStorage`, key `ambient-muted`), including across reloads. Volume goes
+through a Web Audio gain node because iOS Safari ignores `audio.volume`.
+
+The mute toggle only exists on the homepage (it is part of the strip above the pond).
+The music carries on to other pages with no control there.
+
+## Bangalore time
+
+`bangalore, ka | 02:24pm`, always in `Asia/Kolkata` whatever the visitor's own timezone.
+It is empty on the server and filled in after mount, because the server's clock isn't
+the point and would mismatch on hydration.
 
 **Time of day.** The look follows the *visitor's* local clock, read in their own
 browser, so someone in Mumbai at 7pm sees dusk while someone in Los Angeles at the

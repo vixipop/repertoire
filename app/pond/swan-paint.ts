@@ -1,7 +1,8 @@
 // @ts-nocheck
 /**
  * Lifted from the standalone Swan Pond artifact, with these changes only:
- * the tuner/sliders/recorder are gone, and the pieces the page needs are exported.
+ * the tuner/sliders/recorder/music helper are gone, the pieces the page needs
+ * are exported, and the resolution guard in `frame` is fixed (see the note there).
  * It is plain JavaScript and is not type-checked here (hence the pragma above)
  * -- the typed surface the app uses is `pond-hero.tsx` and `time-of-day.ts`.
  */

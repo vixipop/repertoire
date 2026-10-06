@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic } from "next/font/google";
+import { Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic, Gaegu } from "next/font/google";
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
 import ThemeToggle from "./theme-toggle";
+import AudioProvider from "./audio-provider";
 
 // Self-hosted at build time — no runtime CDN request. Exposed as --font-inter,
 // which globals.css feeds into the --font-sf token.
@@ -28,6 +29,14 @@ const arabic = Noto_Naskh_Arabic({
   weight: ["400"],
   display: "swap",
   variable: "--font-arabic",
+});
+
+// The swans' handwritten remarks in the pond (--font-hand, picked up by .pond-say).
+const hand = Gaegu({
+  subsets: ["latin"],
+  weight: "700",
+  display: "swap",
+  variable: "--font-hand",
 });
 
 export const metadata: Metadata = {
@@ -66,17 +75,20 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${devanagari.variable} ${arabic.variable}`}
+      className={`${inter.variable} ${devanagari.variable} ${arabic.variable} ${hand.variable}`}
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <ThemeToggle />
-        {children}
-        <Dock />
-        <SiteBehaviour />
+        {/* Mounted once here, so the music carries on across page changes. */}
+        <AudioProvider>
+          <ThemeToggle />
+          {children}
+          <Dock />
+          <SiteBehaviour />
+        </AudioProvider>
       </body>
     </html>
   );

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /**
  * Note detail page — stub.
  *
@@ -20,7 +22,7 @@ export default async function Note({
             <div className="body-copy">
               <div className="greetings appear">
                 <span>
-                  <a href="/">← back</a>
+                  <Link href="/">← back</Link>
                 </span>
               </div>
               <div className="information">

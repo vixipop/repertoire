@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import SplineEmbed from "./spline-embed";
 
 export const metadata: Metadata = {
@@ -34,9 +35,9 @@ export default function About() {
                   looking for.
                 </p>
                 <p className="appear">
-                  <a href="/">
+                  <Link href="/">
                     <span className="link-label">Back home</span>
-                  </a>
+                  </Link>
                 </p>
               </div>
             </div>

@@ -1,7 +1,9 @@
 import { Fragment } from "react";
+import Link from "next/link";
 import CopyButton from "./copy-button";
 import Tooltip from "./tooltip";
 import PondHero from "./pond/pond-hero";
+import HeroBar from "./hero-bar";
 
 /**
  * Homepage.
@@ -14,7 +16,10 @@ export default function Home() {
     <main className="site">
       <section className="intro-section">
         <div className="content">
-          <PondHero />
+          <div className="hero">
+            <HeroBar />
+            <PondHero />
+          </div>
 
           <div className="avatar-wrap appear">
             <span className="avatar-swap">
@@ -134,15 +139,15 @@ function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
         {rows.map((row) => (
           <Fragment key={row.name}>
             <div className="names">
-              {row.href ? (
-                <a
-                  href={row.href}
-                  {...(row.external
-                    ? { target: "_blank", rel: "noopener noreferrer" }
-                    : {})}
-                >
+              {row.href && row.external ? (
+                <a href={row.href} target="_blank" rel="noopener noreferrer">
                   <span className="link-label">{row.name}</span>
                 </a>
+              ) : row.href ? (
+                // Client-side navigation: a full page load would cut the music off.
+                <Link href={row.href}>
+                  <span className="link-label">{row.name}</span>
+                </Link>
               ) : (
                 <span className="link-disabled">
                   <span className="link-label">{row.name}</span>

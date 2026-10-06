@@ -1,8 +1,8 @@
 // @ts-nocheck
 /**
  * Lifted from the standalone Swan Pond artifact, with these changes only:
- * the tuner/sliders/recorder are gone, the pieces the page needs are exported,
- * and the resolution guard in `frame` is fixed (see the note there).
+ * the tuner/sliders/recorder/music helper are gone, the pieces the page needs
+ * are exported, and the resolution guard in `frame` is fixed (see the note there).
  * It is plain JavaScript and is not type-checked here (hence the pragma above)
  * -- the typed surface the app uses is `pond-hero.tsx` and `time-of-day.ts`.
  */
@@ -24,7 +24,6 @@ import { makeLook, paintSwan } from "./swan-paint";
  * `scale` = actual width / 680, so it behaves identically at any size.
  */
 
-
 const MAX_RIPPLES = 20;
 const DESIGN_WIDTH = 680;
 const SWAN_COUNT = 3;
@@ -33,19 +32,19 @@ const LEAF_COUNT = 5;
 export const TIMES = [
     {
         name: "Dawn",
-        params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55 },
+        params: { waterHue: 171, waterSat: 0.68, waterDepth: 1, waterLight: 0.61, lightHue: 15, lightSat: 0.89, sun: 1, skyHue: 327, skySat: 0.59, moon: 0, fog: 0.51, swanHue: 340, swanTint: 0.16, glow: 0.5, paint: 0.44, brush: 0.16, bloom: 0.55, inkHue: 52, inkSat: 1, inkLight: 0.79 },
     },
     {
         name: "Day",
-        params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51 },
+        params: { waterHue: 153, waterSat: 0.51, waterDepth: 1, waterLight: 0.84, lightHue: 27, lightSat: 1, sun: 1, skyHue: 200, skySat: 0.76, moon: 0, fog: 0, swanHue: 30, swanTint: 0.16, glow: 0.41, paint: 0.64, brush: 0.11, bloom: 0.51, inkHue: 52, inkSat: 1, inkLight: 0.79 },
     },
     {
         name: "Dusk",
-        params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62 },
+        params: { waterHue: 195, waterSat: 0.93, waterDepth: 1, waterLight: 0.43, lightHue: 315, lightSat: 0.71, sun: 0.18, skyHue: 285, skySat: 0.73, moon: 0.34, fog: 0, swanHue: 327, swanTint: 0.31, glow: 0.55, paint: 0.65, brush: 0.17, bloom: 0.62, inkHue: 203, inkSat: 0.74, inkLight: 0.88 },
     },
     {
         name: "Dark",
-        params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, bowlHue: 345, bowlLight: 0, feederOpacity: 0.28, feederBlur: 0.8, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85 },
+        params: { waterHue: 243, waterSat: 0.81, waterDepth: 1, waterLight: 0.18, lightHue: 212, lightSat: 0.76, sun: 0.4, skyHue: 231, skySat: 0.69, moon: 0.78, fog: 0, swanHue: 215, swanTint: 0.25, glow: 0.64, paint: 0.6, brush: 0.15, bloom: 0.85, inkHue: 203, inkSat: 0.74, inkLight: 0.88 },
     },
 ];
 const DEFAULT_PARAMS = { ...TIMES[1].params };
@@ -61,10 +60,6 @@ const PARAM_SPECS = [
     { key: "skySat", label: "Sky colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
     { key: "moon", label: "Moon", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
     { key: "fog", label: "Fog", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "bowlHue", label: "Bowl hue", group: "Feeder", min: 0, max: 360, step: 1, kind: "hue" },
-    { key: "bowlLight", label: "Bowl shade", group: "Feeder", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "feederOpacity", label: "Clarity", group: "Feeder", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "feederBlur", label: "Blur", group: "Feeder", min: 0, max: 3, step: 0.05, kind: "amount" },
     { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
     { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
     { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
@@ -72,9 +67,9 @@ const PARAM_SPECS = [
     { key: "brush", label: "Brush size", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
     { key: "bloom", label: "Bloom", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
 ];
-const HUE_KEYS = new Set(["waterHue", "lightHue", "skyHue", "swanHue", "bowlHue"]);
+const HUE_KEYS = new Set(["waterHue", "lightHue", "skyHue", "swanHue", "inkHue"]);
 /** Settings that belong to the scene rather than to a time of day. */
-const GLOBAL_KEYS = new Set(["bowlHue", "bowlLight", "feederOpacity", "feederBlur"]);
+const GLOBAL_KEYS = new Set([]);
 /** Blend two looks; hues travel the short way round the wheel. */
 export function mixParams(a, b, t) {
     const out = { ...a };
@@ -865,17 +860,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     const surf = document.createElement("canvas"); // wake height map
     const canopy = document.createElement("canvas"); // overhanging vines
     const cctx = canopy.getContext("2d");
-    // the feeder gets its own canvas over everything, at full pixel density, so
-    // nothing in the painting passes can soften it
-    const feederCanvas = document.createElement("canvas");
-    feederCanvas.className = "pond-feeder";
-    feederCanvas.setAttribute("aria-hidden", "true");
-    // ...but not so crisp it looks pasted on: a touch soft and partly see-through,
-    // so the painted copy beneath lends it the brushwork
-    Object.assign(feederCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none", display: "block" });
-    let feederFilter = "";
-    host.appendChild(feederCanvas);
-    const fctx = feederCanvas.getContext("2d");
     const sctx = surf.getContext("2d");
     /* ---------- WebGL ---------- */
     const gl = waterCanvas.getContext("webgl", { antialias: false, alpha: false, premultipliedAlpha: false });
@@ -1207,249 +1191,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             draw(br, br.bx, br.by, br.ang);
         cctx.setTransform(1, 0, 0, 1, 0, 0);
     };
-    /* ---------- the hanging feeder ---------- */
-    // Seen from high above, as everything in the pond is: we look down into an
-    // ultramarine bowl of corn, held snug in a ring of twine, its three ropes
-    // rising toward us and out past the top of the frame. Pink blossom and
-    // leaves twine up the ropes. It swings like a pendulum when touched.
-    const feeder = { ang: 0, vel: 0 };
-    let ropeDeco = [];
-    let cornBits = [];
-    const buildFeeder = () => {
-        const r = mulberry32(77);
-        ropeDeco = [];
-        for (let rope = 0; rope < ROPES.length; rope++) {
-            // leaves and flowers all the way down each rope, on a vine wrapped round it
-            for (let t = 0.06 + r() * 0.04; t < 0.96; t += 0.06 + r() * 0.05) {
-                const bloom = r() < 0.32;
-                const white = r() < 0.5;
-                ropeDeco.push({
-                    rope,
-                    t,
-                    side: Math.sin(t * VINE_TURNS * Math.PI * 2 + rope) > 0 ? 1 : -1,
-                    kind: bloom ? "bloom" : "leaf",
-                    r: bloom ? 2.6 + r() * 1.2 : 3.6 + r() * 2,
-                    rot: r() * Math.PI * 2,
-                    hue: white ? 30 : 342 + r() * 14,
-                    light: white ? 96 : 84 + r() * 8,
-                    ...leafColour(r),
-                });
-            }
-        }
-        cornBits = Array.from({ length: 120 }, () => {
-            const a = r() * Math.PI * 2;
-            const d = Math.sqrt(r());
-            return { x: Math.cos(a) * d * 0.86, y: Math.sin(a) * d * 0.86, r: 0.09 + r() * 0.035, rot: r() * Math.PI, l: 50 + (1 - d) * 18 + r() * 8 };
-        });
-    };
-    // four ropes tied round the ring, meeting at one knot at the top
-    const ROPES = [-Math.PI / 2, Math.PI, 0, Math.PI / 2];
-    const VINE_TURNS = 5;
-    const FEED_R = 34; // bowl mouth radius, design px
-    const feederPivot = () => ({ x: W * 0.87, y: H * 0.035 });
-    const feederBowl = () => {
-        const pv = feederPivot();
-        const len = H * 0.68 - pv.y;
-        return { x: pv.x + Math.sin(feeder.ang) * len, y: pv.y + Math.cos(feeder.ang) * len };
-    };
-    const overFeeder = (p) => {
-        const b = feederBowl();
-        const R = FEED_R * scale;
-        return Math.hypot((p.x - b.x) / 1.35, (p.y - b.y) / 1.15) < R * 1.25;
-    };
-    const updateFeeder = (dt) => {
-        const breeze = Math.sin(clock * 0.31) * 0.6 + Math.sin(clock * 0.83 + 1) * 0.4;
-        const acc = -2.1 * feeder.ang - 0.5 * feeder.vel + breeze * 0.008;
-        feeder.vel += acc * dt;
-        feeder.ang += feeder.vel * dt;
-    };
-    const drawFeeder = (c) => {
-        const k = c.canvas.width / W;
-        const s = scale;
-        const pv = feederPivot();
-        const b = feederBowl();
-        const R = FEED_R * s;
-        const q = 0.82; // nearly face-on: we're looking down into it
-        const ringRx = R * 1.06;
-        const ringRy = R * q * 1.06;
-        c.setTransform(k, 0, 0, k, 0, 0);
-        c.lineCap = "round";
-        c.lineJoin = "round";
-        const anchor = (i) => ({ x: b.x + Math.cos(ROPES[i]) * ringRx, y: b.y + Math.sin(ROPES[i]) * ringRy });
-        // a point on rope i: t = 0 at the top knot, 1 at the ring
-        const ropeAt = (i, t) => {
-            const a = anchor(i);
-            return { x: pv.x + (a.x - pv.x) * t, y: pv.y + (a.y - pv.y) * t };
-        };
-        const drawRope = (i) => {
-            const a = anchor(i);
-            c.strokeStyle = "rgba(150,98,92,1)";
-            c.lineWidth = 2.6 * s;
-            c.beginPath();
-            c.moveTo(pv.x, pv.y);
-            c.lineTo(a.x, a.y);
-            c.stroke();
-            c.strokeStyle = "rgba(232,186,176,1)";
-            c.lineWidth = 1.3 * s;
-            c.beginPath();
-            c.moveTo(pv.x, pv.y);
-            c.lineTo(a.x, a.y);
-            c.stroke();
-            // the vine wound round it
-            const dx = a.x - pv.x;
-            const dy = a.y - pv.y;
-            const len = Math.hypot(dx, dy) || 1;
-            const nx = -dy / len;
-            const ny = dx / len;
-            c.strokeStyle = "rgba(58,104,48,0.95)";
-            c.lineWidth = 1.1 * s;
-            c.beginPath();
-            for (let t = 0; t <= 1.0001; t += 0.01) {
-                const p = ropeAt(i, t);
-                const w = Math.sin(t * VINE_TURNS * Math.PI * 2 + i) * 2.6 * s;
-                if (t === 0)
-                    c.moveTo(p.x + nx * w, p.y + ny * w);
-                else
-                    c.lineTo(p.x + nx * w, p.y + ny * w);
-            }
-            c.stroke();
-            for (const d of ropeDeco) {
-                if (d.rope !== i)
-                    continue;
-                const p = ropeAt(i, d.t);
-                const w = Math.sin(d.t * VINE_TURNS * Math.PI * 2 + i) * 2.6 * s;
-                const x = p.x + nx * w;
-                const y = p.y + ny * w;
-                const rot = d.rot + Math.sin(clock * 1.3 + d.rot * 4) * 0.12;
-                c.setTransform(k * Math.cos(rot), k * Math.sin(rot), -k * Math.sin(rot), k * Math.cos(rot), x * k, y * k);
-                if (d.kind === "leaf") {
-                    const lr = d.r * s;
-                    c.fillStyle = d.hi;
-                    c.beginPath();
-                    c.moveTo(0, 0);
-                    c.bezierCurveTo(lr * 0.4, -lr * 0.8, lr * 1.5, -lr * 0.6, lr * 2, 0);
-                    c.lineTo(0, 0);
-                    c.fill();
-                    c.fillStyle = d.col;
-                    c.beginPath();
-                    c.moveTo(0, 0);
-                    c.bezierCurveTo(lr * 0.4, lr * 0.8, lr * 1.5, lr * 0.6, lr * 2, 0);
-                    c.lineTo(0, 0);
-                    c.fill();
-                }
-                else {
-                    const br = d.r * s;
-                    c.fillStyle = d.light > 94 ? "hsl(40 60% 96%)" : `hsl(${d.hue} 85% ${d.light}%)`;
-                    for (let n = 0; n < 5; n++) {
-                        const an = (n / 5) * Math.PI * 2;
-                        c.beginPath();
-                        c.ellipse(Math.cos(an) * br * 0.62, Math.sin(an) * br * 0.62, br * 0.62, br * 0.46, an, 0, Math.PI * 2);
-                        c.fill();
-                    }
-                    c.fillStyle = "hsl(46 85% 60%)";
-                    c.beginPath();
-                    c.arc(0, 0, br * 0.3, 0, Math.PI * 2);
-                    c.fill();
-                }
-                c.setTransform(k, 0, 0, k, 0, 0);
-            }
-        };
-        // the back rope passes behind the bowl
-        drawRope(0);
-        // the bowl, in whatever glaze is chosen (ultramarine by default)
-        const hue = params.bowlHue;
-        const L0 = params.bowlLight;
-        const glaze = (dl, sat = 70) => `hsl(${hue} ${sat}% ${Math.max(4, Math.min(92, (L0 * 0.8 + 0.1) * 100 + dl))}%)`;
-        const body = c.createLinearGradient(b.x - R, b.y, b.x + R, b.y + R * 0.5);
-        body.addColorStop(0, glaze(16));
-        body.addColorStop(0.5, glaze(0));
-        body.addColorStop(1, glaze(-22));
-        c.fillStyle = body;
-        c.beginPath();
-        c.ellipse(b.x, b.y + R * 0.16, R, R * q * 1.02, 0, 0, Math.PI * 2);
-        c.fill();
-        const wall = c.createLinearGradient(b.x, b.y - R * q, b.x, b.y + R * q);
-        wall.addColorStop(0, glaze(22));
-        wall.addColorStop(0.5, glaze(4));
-        wall.addColorStop(1, glaze(-18));
-        c.fillStyle = wall;
-        c.beginPath();
-        c.ellipse(b.x, b.y, R * 0.93, R * q * 0.93, 0, 0, Math.PI * 2);
-        c.fill();
-        c.strokeStyle = glaze(36, 60);
-        c.lineWidth = 2 * s;
-        c.beginPath();
-        c.ellipse(b.x, b.y, R * 0.95, R * q * 0.95, 0, 0, Math.PI * 2);
-        c.stroke();
-        c.strokeStyle = "rgba(255,255,255,0.8)";
-        c.lineWidth = 1.4 * s;
-        c.beginPath();
-        c.ellipse(b.x, b.y, R * 0.95, R * q * 0.95, 0, Math.PI * 1.05, Math.PI * 1.45);
-        c.stroke();
-        // corn heaped in the bottom
-        // a generous heap, filling most of the bowl
-        const cr = 0.8;
-        const cy0 = b.y + R * q * 0.06;
-        c.fillStyle = "#a8771f";
-        c.beginPath();
-        c.ellipse(b.x, cy0, R * cr, R * q * cr, 0, 0, Math.PI * 2);
-        c.fill();
-        c.lineWidth = 0.6 * s;
-        c.strokeStyle = "rgba(120,72,10,0.7)";
-        for (const cb of cornBits) {
-            const x = b.x + cb.x * R * cr;
-            const y = cy0 + cb.y * R * q * cr;
-            const kr = cb.r * R * 0.95;
-            c.fillStyle = `hsl(43 95% ${cb.l}%)`;
-            c.beginPath();
-            c.ellipse(x, y, kr * 1.25, kr, cb.rot, 0, Math.PI * 2);
-            c.fill();
-            c.stroke();
-            c.fillStyle = "rgba(255,250,215,0.85)";
-            c.beginPath();
-            c.ellipse(x - kr * 0.35, y - kr * 0.3, kr * 0.4, kr * 0.28, cb.rot, 0, Math.PI * 2);
-            c.fill();
-        }
-        // the twine ring, snug round the rim: it's what holds the bowl
-        c.strokeStyle = "rgba(150,98,92,1)";
-        c.lineWidth = 3.4 * s;
-        c.beginPath();
-        c.ellipse(b.x, b.y, ringRx, ringRy, 0, 0, Math.PI * 2);
-        c.stroke();
-        c.strokeStyle = "rgba(240,198,188,0.9)";
-        c.lineWidth = 1 * s;
-        for (let n = 0; n < 48; n++) {
-            const a = (n / 48) * Math.PI * 2;
-            const x = b.x + Math.cos(a) * ringRx;
-            const y = b.y + Math.sin(a) * ringRy;
-            const tx = -Math.sin(a);
-            const ty = Math.cos(a) * q;
-            c.beginPath();
-            c.moveTo(x - tx * 1.6 * s + Math.cos(a) * 1.3 * s, y - ty * 1.6 * s + Math.sin(a) * 1.3 * s);
-            c.lineTo(x + tx * 1.6 * s - Math.cos(a) * 1.3 * s, y + ty * 1.6 * s - Math.sin(a) * 1.3 * s);
-            c.stroke();
-        }
-        // a slow warm shimmer on the ring, a hint that it can be touched
-        const pulse = 0.5 + 0.5 * Math.sin(clock * 1.6);
-        c.strokeStyle = `rgba(255,232,170,${(feeding ? 0.25 : 0.35) + pulse * (feeding ? 0.1 : 0.4)})`;
-        c.lineWidth = 1.4 * s;
-        c.beginPath();
-        c.ellipse(b.x, b.y, ringRx + 2 * s, ringRy + 2 * s, 0, Math.PI * 0.9, Math.PI * 1.9);
-        c.stroke();
-        // the remaining ropes in front, then the knot where they all meet
-        for (let i = 1; i < ROPES.length; i++)
-            drawRope(i);
-        c.fillStyle = "rgba(150,98,92,1)";
-        for (let i = 0; i < ROPES.length; i++) {
-            const a = anchor(i);
-            c.beginPath();
-            c.arc(a.x, a.y, 2.6 * s, 0, Math.PI * 2);
-            c.fill();
-        }
-        c.beginPath();
-        c.arc(pv.x, pv.y, 3.4 * s, 0, Math.PI * 2);
-        c.fill();
-    };
     /* ---------- corn ---------- */
     const updateKernels = (dt) => {
         const ca = currentAngle();
@@ -1597,18 +1338,23 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let sceneW = 1;
     let sceneK = 0.7; // water pass resolution, relative to the output
     let sceneH = 1;
+    // while recording in high quality: the output width, and the settings to go back to
+    let hqWidth = 0;
+    let beforeHq = { wd: 1, sceneK: 0.7 };
     const sizeLayers = () => {
-        // the swans and feeder stay sharp even when the water is rendered small
-        const pr = hasGL ? Math.min(window.devicePixelRatio || 1, 1.5) : dpr;
+        // the swans stay sharp even when the water is rendered small
+        if (hqWidth)
+            wd = hqWidth / W;
+        const pr = hasGL ? (hqWidth ? wd : Math.min(window.devicePixelRatio || 1, 1.5)) : dpr;
         paint.width = Math.round(W * pr);
         paint.height = Math.round(H * pr);
-        const fr = Math.min(window.devicePixelRatio || 1, 2);
-        feederCanvas.width = Math.round(W * fr);
-        feederCanvas.height = Math.round(H * fr);
-        weeds.width = Math.round(W * 0.75);
-        weeds.height = Math.round(H * 0.75);
-        canopy.width = Math.round(W * Math.min(wd, 1));
-        canopy.height = Math.round(H * Math.min(wd, 1));
+        // weeds are seen through moving water, so they can be a little soft
+        const wk = hqWidth ? 1.5 : 0.75;
+        weeds.width = Math.round(W * wk);
+        weeds.height = Math.round(H * wk);
+        const ck = hqWidth ? wd : Math.min(wd, 1);
+        canopy.width = Math.round(W * ck);
+        canopy.height = Math.round(H * ck);
         surf.width = Math.round(W * 0.5);
         surf.height = Math.round(H * 0.5);
         if (hasGL && gl) {
@@ -1721,7 +1467,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         sizeLayers();
         buildWeeds();
         buildVines();
-        buildFeeder();
         featherEdge();
         if (hasGL && gl) {
             gl.bindTexture(gl.TEXTURE_2D, tBed);
@@ -1817,10 +1562,11 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             appetite: 0,
             ate: 0,
             food: null,
+            sayAt: -1,
+            sayText: "",
+            sayMood: "calm",
+            sayLife: 1,
             feedUntil: 0,
-            begUntil: 0,
-            begSpot: 0,
-            lift: 0,
         };
         s.v = glideSpeed(s);
         return s;
@@ -2002,24 +1748,9 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const r = host.getBoundingClientRect();
         return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
     };
-    const corn = kernelCursor();
-    const setCursor = (p) => {
-        host.style.cursor = feeding ? corn : p && overFeeder(p) ? "grab" : "";
-    };
-    const setFeedingMode = (on) => {
-        feeding = on;
-        host.dataset.feeding = on ? "true" : "false";
-        setCursor(pointer);
-    };
-    const onKey = (e) => {
-        if (e.key === "Escape" && feeding)
-            setFeedingMode(false);
-    };
-    window.addEventListener("keydown", onKey);
     const onMove = (e) => {
         const p = local(e);
         pointer = p;
-        setCursor(p);
         const d = Math.hypot(p.x - lastHover.x, p.y - lastHover.y);
         if (d > 26 * scale && clock - lastHover.t > 0.08) {
             addRipple(p.x, p.y, clamp(0.12 + d / (160 * scale), 0.14, 0.34));
@@ -2029,7 +1760,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     const onLeave = () => {
         pointer = null;
     };
-    let feeding = false;
     const kernels = [];
     // a small handful: 4–8 kernels, scattered as they leave the hand
     const throwCorn = (px, py) => {
@@ -2064,19 +1794,155 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                 s.appetite += Math.random() < 0.5 ? 1 : 0;
             }
         }
+        // the nearest one calls dibs, and another has an opinion about that
+        // ...but not every time: at least three handfuls go by before it happens again
+        feedsSinceDibs++;
+        if (feedsSinceDibs > 3) {
+            const near = swans
+                .filter((s) => s.state !== "away" && s.state !== "flee" && s.fleeAt < 0 && s.x > 0 && s.x < W && s.y > 0 && s.y < H)
+                .sort((a, b) => Math.hypot(a.x - px, a.y - py) - Math.hypot(b.x - px, b.y - py));
+            if (near.length) {
+                feedsSinceDibs = 0;
+                const first = near[0];
+                const at = Math.max(clock + 0.15, first.noticeAt) + 0.05;
+                sayLater(first, "dibs!", "calm", 1.1, at);
+                if (near.length > 1)
+                    sayLater(near[1], "glutton!", "calm", 1.2, at + rand(1.0, 1.3));
+            }
+        }
+    };
+    const touchy = window.matchMedia("(hover: none)").matches;
+    const onCtx = (e) => e.preventDefault(); // right-click feeds instead of opening a menu
+    let holdTimer = 0;
+    let holdFed = false;
+    const onUp = () => clearTimeout(holdTimer);
+    const splash = (p) => {
+        startle(p);
+    };
+    const feed = (p) => {
+        throwCorn(p.x, p.y);
     };
     const onDown = (e) => {
         const p = local(e);
-        // the feeder: take a kernel, or put it back
-        if (overFeeder(p)) {
-            feeder.vel += (p.x < feederBowl().x ? 1 : -1) * 0.045;
-            setFeedingMode(!feeding);
+        if (e.pointerType === "mouse" || e.pointerType === "pen") {
+            if (e.button === 2)
+                feed(p);
+            else if (e.button === 0)
+                splash(p);
             return;
         }
-        if (feeding) {
-            throwCorn(p.x, p.y);
+        // touch: a quick tap splashes, a press-and-hold tosses corn
+        holdFed = false;
+        clearTimeout(holdTimer);
+        holdTimer = window.setTimeout(() => {
+            holdFed = true;
+            feed(p);
+        }, 450);
+        const release = () => {
+            host.removeEventListener("pointerup", release);
+            host.removeEventListener("pointercancel", cancel);
+            clearTimeout(holdTimer);
+            if (!holdFed)
+                splash(p);
+        };
+        const cancel = () => {
+            host.removeEventListener("pointerup", release);
+            host.removeEventListener("pointercancel", cancel);
+            clearTimeout(holdTimer);
+        };
+        host.addEventListener("pointerup", release);
+        host.addEventListener("pointercancel", cancel);
+    };
+    /* ---------- talking ---------- */
+    // little handwritten remarks above their heads
+    const CROSS = ["bruh!", "excuse me?", "rude!", "watch it!", "hey!", "ugh!"];
+    const HUNGRY = ["corn pls <3", "right click!", "bro gib corn"];
+    const FULL = ["yummm", "yummm!", "yummm"];
+    const MORE = ["more!", "more!!", "yummm… more!"];
+    const talk = document.createElement("div");
+    talk.className = "pond-talk";
+    talk.setAttribute("aria-hidden", "true");
+    host.appendChild(talk);
+    const bubbles = [];
+    let nextChirp = 0;
+    let feedsSinceDibs = 3;
+    let inkKey = "";
+    const pick = (list) => list[Math.floor(Math.random() * list.length)];
+    const say = (s, text, mood, life) => {
+        if (bubbles.some((b) => b.swan === s))
             return;
+        const el = document.createElement("span");
+        el.className = `pond-say is-${mood}`;
+        const inner = document.createElement("span");
+        inner.style.animationDuration = `${life}s`;
+        inner.style.setProperty("--tilt", `${rand(-7, 5).toFixed(1)}deg`);
+        const words = document.createElement("b");
+        // every letter on its own, so a cross one can tremble
+        for (const ch of text) {
+            const l = document.createElement("i");
+            l.textContent = ch === " " ? "\u00a0" : ch;
+            l.style.animationDelay = `${(-Math.random() * 0.4).toFixed(2)}s`;
+            words.appendChild(l);
         }
+        inner.appendChild(words);
+        // a quick pen flick down toward the speaker
+        inner.insertAdjacentHTML("beforeend", '<svg viewBox="0 0 12 12" width="12" height="12"><path d="M8.5 1.5c-.6 3-2 5.6-4.6 8.4" /></svg>');
+        el.appendChild(inner);
+        talk.appendChild(el);
+        bubbles.push({ el, swan: s, until: clock + life });
+    };
+    const sayLater = (s, text, mood, life, at) => {
+        s.sayAt = at;
+        s.sayText = text;
+        s.sayMood = mood;
+        s.sayLife = life;
+    };
+    const updateTalk = () => {
+        // ink follows the hour, like the rest of the look
+        const ink = `${params.inkHue.toFixed(0)},${params.inkSat.toFixed(3)},${params.inkLight.toFixed(3)}`;
+        if (ink !== inkKey) {
+            inkKey = ink;
+            const [r, g, b] = hsl(params.inkHue, params.inkSat, params.inkLight);
+            talk.style.color = `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+        }
+        for (let i = bubbles.length - 1; i >= 0; i--) {
+            const b = bubbles[i];
+            const s = b.swan;
+            if (clock > b.until || s.state === "away") {
+                b.el.remove();
+                bubbles.splice(i, 1);
+                continue;
+            }
+            const sz = L * s.size;
+            // where the head really is, following the bend of the neck (as swan-paint draws it)
+            const bend = clamp(s.bend, -2.5, 2.5);
+            const reach = s.look.neckLen * (1 - Math.min(0.25, Math.abs(bend) * 0.08));
+            const lx = 0.2 + Math.cos(bend * 0.85) * reach;
+            const ly = Math.sin(bend * 0.85) * reach;
+            const c = Math.cos(s.h);
+            const sn = Math.sin(s.h);
+            const hx = s.x + (lx * c - ly * sn) * sz;
+            const hy = s.y + (lx * sn + ly * c) * sz;
+            // facing down the pond its body sits above the head, so step to the side of it
+            const side = (c < 0 ? -1 : 1) * Math.max(0, sn) * 0.55 * sz;
+            b.el.style.transform = `translate(${(hx + side).toFixed(1)}px, ${(hy - 9 * scale).toFixed(1)}px)`;
+        }
+        // hovering over the pond, an idle swan asks for food now and then
+        if (pointer && !touchy && clock > nextChirp && !kernels.length) {
+            nextChirp = clock + rand(2.6, 5);
+            const idle = swans.filter((s) => s.state === "glide" && s.act === "none" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
+            if (idle.length) {
+                const pt = pointer;
+                idle.sort((a, b) => Math.hypot(a.x - pt.x, a.y - pt.y) - Math.hypot(b.x - pt.x, b.y - pt.y));
+                const s = Math.random() < 0.7 ? idle[0] : idle[Math.floor(Math.random() * idle.length)];
+                say(s, pick(HUNGRY), "calm", 1.6);
+                // and looks over at you while it asks
+                s.headYawTarget = clamp(wrapAngle(Math.atan2(pt.y - s.y, pt.x - s.x) - s.h), -0.7, 0.7);
+                s.nextLook = 2;
+            }
+        }
+    };
+    const startle = (p) => {
         addRipple(p.x, p.y, 1.0);
         addRipple(p.x, p.y, 0.45, 0.22);
         for (const f of leaves) {
@@ -2113,10 +1979,18 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             s.fleeX = p.x;
             s.fleeY = p.y;
         }
+        // one or two of them have something to say about it (sometimes nobody does)
+        const startled = swans.filter((s) => s.state !== "away");
+        const n = Math.random() < 0.12 ? 0 : Math.random() < 0.65 ? 1 : 2;
+        for (const s of startled.sort(() => Math.random() - 0.5).slice(0, n)) {
+            sayLater(s, pick(CROSS), "cross", 0.6, (s.fleeAt >= 0 ? s.fleeAt : clock) + rand(0.05, 0.3));
+        }
     };
     host.addEventListener("pointermove", onMove);
     host.addEventListener("pointerleave", onLeave);
     host.addEventListener("pointerdown", onDown);
+    host.addEventListener("contextmenu", onCtx);
+    host.addEventListener("pointerup", onUp);
     /* ---------- simulation ---------- */
     const update = (s, dt) => {
         if (s.state === "away") {
@@ -2128,6 +2002,10 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const sz = L * s.size;
         const dirX = Math.cos(s.h);
         const dirY = Math.sin(s.h);
+        if (s.sayAt >= 0 && clock >= s.sayAt) {
+            s.sayAt = -1;
+            say(s, s.sayText, s.sayMood, s.sayLife);
+        }
         if (s.fleeAt >= 0 && clock >= s.fleeAt) {
             s.fleeAt = -1;
             s.state = "flee";
@@ -2152,7 +2030,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             s.act = "none";
             s.food = null;
             s.noticeAt = -1;
-            s.begUntil = 0;
             if (Math.random() < 0.6)
                 startFlap(s, true);
         }
@@ -2163,7 +2040,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         let loopOverride = null;
         // corn on the water: notice it, then swim for the nearest kernel nobody's taken
         const edible = (k) => k.eatenAt < 0 && k.delay <= 0;
-        if (s.noticeAt >= 0 && clock >= s.noticeAt && (s.state === "glide" || s.state === "return" || s.state === "beg")) {
+        if (s.noticeAt >= 0 && clock >= s.noticeAt && (s.state === "glide" || s.state === "return")) {
             s.noticeAt = -1;
             if (kernels.some(edible)) {
                 s.state = "feed";
@@ -2200,6 +2077,10 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                     s.food = best;
             }
             if (!s.food || s.ate >= s.appetite || clock > s.feedUntil) {
+                if (s.ate > 0 && s.sayAt < 0 && Math.random() < 0.7) {
+                    const full = s.ate >= s.appetite;
+                    sayLater(s, pick(full ? FULL : MORE), "calm", 1.3, clock + rand(0.4, 0.8));
+                }
                 s.state = "glide";
                 s.food = null;
                 pickWaypoint(s);
@@ -2261,35 +2142,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                 s.actDur = s.act === "dip" ? rand(2.2, 3.6) : rand(2.6, 4.2);
                 s.actSide = Math.random() < 0.5 ? -1 : 1;
                 s.nextAct = rand(7, 16);
-            }
-        }
-        else if (s.state === "beg") {
-            // swim to a spot beside the feeder (to its left, or just below it),
-            // then turn to face it and gaze up
-            const fb = feederBowl();
-            const R = FEED_R * scale;
-            const spot = s.begSpot === 0 ? { x: fb.x - 2.5 * R, y: fb.y + 0.6 * R } : { x: fb.x + 0.1 * R, y: fb.y + 2.7 * R };
-            const ds = Math.hypot(spot.x - s.x, spot.y - s.y);
-            if (s.begUntil === 0 && ds < 0.45 * sz)
-                s.begUntil = clock + rand(4, 6.5);
-            const waiting = s.begUntil > 0;
-            // on the way, steer for the spot; once there, turn on the spot to face the bowl
-            const aim = waiting ? fb : spot;
-            s.tx = aim.x;
-            s.ty = aim.y;
-            const off = wrapAngle(Math.atan2(aim.y - s.y, aim.x - s.x) - s.h);
-            const align = Math.max(0, Math.cos(off));
-            vTarget = waiting ? 0 : glideSpeed(s) * clamp(ds / (2 * sz), 0.15, 1) * (0.15 + 0.85 * align * align);
-            maxTurn = waiting ? 0.55 : 1.0;
-            angAcc = 1.2;
-            accel = waiting ? 2.2 : 1;
-            if (waiting)
-                s.headYawTarget = clamp(wrapAngle(Math.atan2(fb.y - s.y, fb.x - s.x) - s.h), -0.8, 0.8);
-            if (waiting && clock > s.begUntil) {
-                s.state = "glide";
-                s.begUntil = 0;
-                s.headYawTarget = 0;
-                pickWaypoint(s);
             }
         }
         else if (s.state === "feed" && s.food) {
@@ -2393,7 +2245,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         }
         maxTurn *= 1 + urgent * 0.5;
         angAcc *= 1 + urgent * 0.6;
-        if (pointer && s.state !== "flee" && s.state !== "feed" && !feeding) {
+        if (pointer && s.state !== "flee" && s.state !== "feed") {
             const px = s.x - pointer.x;
             const py = s.y - pointer.y;
             const pd = Math.hypot(px, py);
@@ -2458,9 +2310,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             if (s.actT >= s.actDur)
                 s.act = "none";
         }
-        // gazing up: the head lifts toward us while it waits under the feeder
-        const liftTarget = s.state === "beg" && s.begUntil > 0 ? 1 : 0;
-        s.lift += (liftTarget - s.lift) * (1 - Math.exp(-dt * 2.2));
         // the neck is sprung: it leans into turns, overshoots a touch and settles
         const env = actionEnvelope(s);
         let bendTarget = s.w * 1.1 + s.headYaw * 0.6 + Math.sin(clock * 0.37 + s.swayPhase) * 0.1;
@@ -2540,8 +2389,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             speedRatio,
             bend: clamp(s.bend, -2.5, 2.5),
             headTurn: s.headYaw * 0.4 + (s.act === "preen" ? Math.sin(s.actT * 9) * 0.16 * env : 0),
-            stretch: (fleeing ? 1.12 : 1) + s.lift * 0.12 + (s.act === "dip" ? env * 0.2 : 0) + Math.sin(s.paddle * 2) * 0.015,
-            lift: s.lift,
+            stretch: (fleeing ? 1.12 : 1) + (s.act === "dip" ? env * 0.2 : 0) + Math.sin(s.paddle * 2) * 0.015,
             sink: s.act === "dip" ? clamp((env - 0.35) / 0.45, 0, 1) : 0,
             lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
             ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
@@ -2658,8 +2506,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let sinceUp = Infinity; // windows since the last climb
     let climbLocked = false; // a climb failed: stop trying for this session
     let canopyTick = 0;
-    let nextBeg = rand(40, 80);
-    let begNow = false;
     const frameListeners = new Set();
     const frame = (now) => {
         raf = 0;
@@ -2669,15 +2515,15 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         clock += dt;
         // if the machine is struggling, render at a lower resolution.
         //
-        // Changed from the standalone version, which could only ever go down: it
-        // climbed back only above 80fps, which a 60Hz display cannot reach, and its
-        // first window counted startup (shader compile, floor painting, hydration),
-        // so one slow second on load left the pond soft for good. Now the first ~2s
-        // are ignored, and it climbs back after three clean windows at >=54fps. If a
-        // climb is followed straight away by a drop, that level is more than this
-        // machine can hold, so it stops climbing for the session instead of pulsing.
-        // The order of what is shed, the steps, the floors and the threshold for
-        // shedding are unchanged.
+        // Changed from the standalone version, whose normal-mode guard could only ever go
+        // down: it climbed back only above 80fps, which a 60Hz display cannot reach, and its
+        // first window counted startup (shader compile, floor painting, hydration), so one
+        // slow second on load left the pond soft for good. Now the first ~2s are not
+        // counted, and it climbs back after three clean windows at >=54fps. If a climb is
+        // followed straight away by a drop, that level is more than this machine can hold,
+        // so it stops climbing for the session instead of pulsing. The order of what is
+        // shed, the steps, the floors and the threshold for shedding are unchanged, and
+        // the recording-mode branch is untouched.
         if (perfWarm > 0) {
             perfWarm--;
         }
@@ -2685,7 +2531,22 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             perfAcc += real;
             perfN++;
         }
-        if (perfN >= 45) {
+        // while recording in high quality the output stays at video size; only the
+        // water's detail gives a little if the machine can't keep up
+        if (perfN >= 30 && hqWidth) {
+            const avg = perfAcc / perfN;
+            if (hasGL && avg > 0.04 && sceneK > 0.5) {
+                sceneK = Math.max(0.5, sceneK - 0.125);
+                sizeLayers();
+            }
+            else if (hasGL && avg < 0.022 && sceneK < 1) {
+                sceneK = Math.min(1, sceneK + 0.125);
+                sizeLayers();
+            }
+            perfAcc = 0;
+            perfN = 0;
+        }
+        else if (perfN >= 45) {
             const avg = perfAcc / perfN;
             sinceUp++;
             const dropped = () => {
@@ -2742,28 +2603,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         updateLeaves(dt);
         updatePetals(dt);
         updateKernels(dt);
-        updateFeeder(dt);
-        if (clock > nextBeg || begNow) {
-            nextBeg = clock + rand(100, 140);
-            const forced = begNow;
-            begNow = false;
-            const idle = swans.filter((s) => (s.state === "glide" || (forced && s.state === "return")) && s.noticeAt < 0);
-            if (idle.length && (forced || !kernels.length)) {
-                const fb = feederBowl();
-                idle.sort((a, b) => Math.hypot(a.x - fb.x, a.y - fb.y) - Math.hypot(b.x - fb.x, b.y - fb.y));
-                const s = idle[Math.random() < 0.6 ? 0 : Math.floor(Math.random() * idle.length)];
-                s.state = "beg";
-                s.begUntil = 0;
-                // whichever spot is nearer, now and then the other
-                const fb2 = feederBowl();
-                const R2 = FEED_R * scale;
-                const dLeft = Math.hypot(s.x - (fb2.x - 2.5 * R2), s.y - fb2.y);
-                const dBelow = Math.hypot(s.x - fb2.x, s.y - (fb2.y + 2.7 * R2));
-                s.begSpot = (dLeft < dBelow) !== Math.random() < 0.25 ? 0 : 1;
-                s.loopTime = 0;
-                s.act = "none";
-            }
-        }
         for (let i = ripples.length - 1; i >= 0; i--)
             if (clock - ripples[i].t > 5.5)
                 ripples.splice(i, 1);
@@ -2785,25 +2624,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         for (const f of petals)
             if (!f.landed)
                 drawPetal(pctx, f);
-        // the feeder hangs above everything on the water
-        drawFeeder(pctx); // underneath: gives it a shadow and a soft halo on the water
-        fctx.setTransform(1, 0, 0, 1, 0, 0);
-        fctx.clearRect(0, 0, feederCanvas.width, feederCanvas.height);
-        if (hasGL) {
-            drawFeeder(fctx); // on top: clear
-            // the branches hang in front of the ropes: cut the sharp layer away under leaves
-            fctx.globalCompositeOperation = "destination-out";
-            fctx.drawImage(canopy, 0, 0, feederCanvas.width, feederCanvas.height);
-            fctx.globalCompositeOperation = "source-over";
-            // and it takes the hour's light, like everything else in the scene
-            const bright = (0.45 + 0.55 * Math.min(1, params.waterLight * 1.3 + params.moon * 0.1)).toFixed(2);
-            const f = `blur(${params.feederBlur.toFixed(2)}px) brightness(${bright}) saturate(0.92)`;
-            if (f !== feederFilter) {
-                feederFilter = f;
-                feederCanvas.style.filter = f;
-            }
-            feederCanvas.style.opacity = params.feederOpacity.toFixed(2);
-        }
         for (const k of kernels)
             if (!k.landed)
                 drawKernel(pctx, k);
@@ -2859,6 +2679,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             ctx.clearRect(0, 0, swanCanvas.width, swanCanvas.height);
             ctx.drawImage(paint, 0, 0, swanCanvas.width, swanCanvas.height);
         }
+        updateTalk();
         for (const cb of frameListeners)
             cb();
         scheduleFromFrame();
@@ -2899,9 +2720,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         getParams() {
             return { ...target };
         },
-        beg() {
-            begNow = true;
-        },
         size() {
             return { width: W, height: H };
         },
@@ -2909,16 +2727,39 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             frameListeners.add(cb);
             return () => frameListeners.delete(cb);
         },
+        setHighQuality(width) {
+            if (!hasGL)
+                return;
+            if (width && !hqWidth)
+                beforeHq = { wd, sceneK };
+            if (width) {
+                hqWidth = width;
+                sceneK = 0.875;
+            }
+            else if (hqWidth) {
+                hqWidth = 0;
+                wd = beforeHq.wd;
+                sceneK = beforeHq.sceneK;
+            }
+            else
+                return;
+            sizeLayers();
+        },
+        chatter() {
+            const here = swans.filter((s) => s.state !== "away" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
+            const all = [...CROSS, ...HUNGRY, ...FULL, ...MORE, "dibs!", "glutton!"];
+            for (const s of here.sort(() => Math.random() - 0.5).slice(0, 2)) {
+                const text = pick(all);
+                say(s, text, CROSS.includes(text) ? "cross" : "calm", 2.2);
+            }
+        },
         snapshot(c, w, h) {
             // the page behind shows through the torn edge
             c.save();
             c.globalCompositeOperation = "source-over";
             c.clearRect(0, 0, w, h);
+            c.imageSmoothingQuality = "high";
             c.drawImage(hasGL ? waterCanvas : swanCanvas, 0, 0, w, h);
-            c.globalAlpha = Number(feederCanvas.style.opacity || 1);
-            if (hasGL)
-                c.drawImage(feederCanvas, 0, 0, w, h);
-            c.globalAlpha = 1;
             if (edgeMask) {
                 c.globalCompositeOperation = "destination-in";
                 c.drawImage(edgeMask, 0, 0, w, h);
@@ -2927,12 +2768,46 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             c.fillStyle = getComputedStyle(document.body).backgroundColor || "#fafafa";
             c.fillRect(0, 0, w, h);
             c.restore();
-        },
-        setFeeding(on) {
-            setFeedingMode(on);
+            // the remarks are DOM text over the canvas, so paint them in by hand,
+            // letter by letter where the page has laid them out (shake and all)
+            const box = host.getBoundingClientRect();
+            const kx = w / (box.width || 1);
+            const ky = h / (box.height || 1);
+            for (const b of bubbles) {
+                const inner = b.el.firstElementChild;
+                if (!inner)
+                    continue;
+                const alpha = Number(getComputedStyle(inner).opacity);
+                if (!(alpha > 0.01))
+                    continue;
+                const cs = getComputedStyle(b.el.querySelector("b") ?? b.el);
+                c.save();
+                c.globalAlpha = alpha;
+                c.fillStyle = cs.color;
+                c.strokeStyle = cs.color;
+                c.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * kx}px ${cs.fontFamily}`;
+                c.textAlign = "center";
+                c.textBaseline = "middle";
+                for (const l of b.el.querySelectorAll("i")) {
+                    const r = l.getBoundingClientRect();
+                    c.fillText(l.textContent ?? "", (r.left + r.width / 2 - box.left) * kx, (r.top + r.height / 2 - box.top) * ky);
+                }
+                const svg = b.el.querySelector("svg");
+                if (svg) {
+                    const r = svg.getBoundingClientRect();
+                    const u = (r.width / 12) * kx;
+                    c.lineWidth = 1.3 * u;
+                    c.lineCap = "round";
+                    c.translate((r.left - box.left) * kx, (r.top - box.top) * ky);
+                    c.beginPath();
+                    c.moveTo(8.5 * u, 1.5 * u);
+                    c.bezierCurveTo(7.9 * u, 4.5 * u, 6.5 * u, 7.1 * u, 3.9 * u, 9.9 * u);
+                    c.stroke();
+                }
+                c.restore();
+            }
         },
         destroy() {
-            feederCanvas.remove();
             if (raf)
                 cancelAnimationFrame(raf);
             io.disconnect();
@@ -2941,39 +2816,11 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             host.removeEventListener("pointermove", onMove);
             host.removeEventListener("pointerleave", onLeave);
             host.removeEventListener("pointerdown", onDown);
-            window.removeEventListener("keydown", onKey);
+            host.removeEventListener("contextmenu", onCtx);
+            host.removeEventListener("pointerup", onUp);
+            clearTimeout(holdTimer);
+            talk.remove();
             gl?.getExtension("WEBGL_lose_context")?.loseContext();
         },
     };
-}
-
-/** A single kernel, drawn for the cursor. */
-function kernelCursor() {
-    const c = document.createElement("canvas");
-    c.width = c.height = 32;
-    const ctx = c.getContext("2d");
-    ctx.translate(16, 16);
-    ctx.rotate(-0.5);
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.beginPath();
-    ctx.ellipse(1.5, 2, 8, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    const g = ctx.createRadialGradient(-3, -3, 0, 0, 0, 10);
-    g.addColorStop(0, "#fff3b8");
-    g.addColorStop(0.5, "#f2c13c");
-    g.addColorStop(1, "#c4861a");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-8, -1);
-    ctx.quadraticCurveTo(-7, -7, 1, -6.5);
-    ctx.quadraticCurveTo(8.5, -4, 8, 0);
-    ctx.quadraticCurveTo(8.5, 4, 1, 6.5);
-    ctx.quadraticCurveTo(-7, 7, -8, 1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,250,225,0.75)";
-    ctx.beginPath();
-    ctx.ellipse(-4, -0.5, 2.2, 1.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    return `url(${c.toDataURL("image/png")}) 16 16, pointer`;
 }
