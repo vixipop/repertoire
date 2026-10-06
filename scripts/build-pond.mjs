@@ -102,8 +102,8 @@ const ICON = {
 const BODY = `<header class="bar">
   <span class="brand"><span class="moon"><img class="moon-ink" src="moon-ink.png" alt=""><img class="moon-glow" src="moon-glow.png" alt=""></span><span>jahnavi</span></span>
   <div class="tools">
-    <a class="tool" id="x" href="https://x.com/" target="_blank" rel="noopener" aria-label="Post on X">${ICON.x}</a>
-    <a class="tool" id="in" href="https://www.linkedin.com/" target="_blank" rel="noopener" aria-label="Post on LinkedIn">${ICON.linkedin}</a>
+    <a class="tool" id="x" href="https://x.com/vixenpspsps/status/2107388697327083537?s=20" target="_blank" rel="noopener" aria-label="Post on X">${ICON.x}</a>
+    <a class="tool" id="in" href="https://lnkd.in/p/deyMy8i3" target="_blank" rel="noopener" aria-label="Post on LinkedIn">${ICON.linkedin}</a>
     <button class="tool" id="copy-link" type="button" aria-label="Copy link">${ICON.link}</button>
     <button class="tool" id="copy-mail" type="button" aria-label="Copy email address">${ICON.mail}</button>
     <button class="tool" id="mute" type="button" aria-label="Unmute music" data-audible="false">${ICON.on}${ICON.off}</button>
@@ -122,9 +122,9 @@ const PAGE_SCRIPT = `
 (() => {
   // ---- edit these ----
   const SITE = {
-    twitter: "https://x.com/",            // link to the post
-    linkedin: "https://www.linkedin.com/", // link to the post
-    email: "you@example.com",
+    twitter: "https://x.com/vixenpspsps/status/2107388697327083537?s=20", // link to the post
+    linkedin: "https://lnkd.in/p/deyMy8i3", // link to the post
+    email: "jahnavijworks@gmail.com",
     music: "music.mp3",
     volume: 0.5,
   };
