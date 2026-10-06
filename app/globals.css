@@ -693,6 +693,8 @@ html.is-theme-switching .theme-toggle-icon {
 .pond-say i { display: inline-block; font-style: inherit; }
 .pond-say svg {
   display: block;
+  width: 0.6em;
+  height: 0.6em;
   margin: 1px 0 0 -12px;
   fill: none;
   stroke: currentColor;

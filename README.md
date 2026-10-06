@@ -97,3 +97,10 @@ via Next 15. The only clean fix is Next 16, a breaking major, and the advisories
 require attacker-controlled CSS — which doesn't apply to a site whose CSS you
 author yourself. Left on 15 deliberately; upgrade when you're ready to take the
 major.
+
+## The pond as its own site
+
+`pond-site/` is the pond on a page of its own: fullscreen-ish, with the time of day on the right, mute and share buttons on the top bar, and the music.
+
+- Rebuild it with `node scripts/build-pond.mjs` (it bundles the engine from `app/` into `pond-site/index.html`). Your post links and email are in the `SITE` block of `scripts/build-pond.mjs`.
+- Deploy on Vercel: New Project, import this repo, set **Root Directory** to `pond-site`, framework preset **Other**, leave the build command empty. Any static host works the same way.
