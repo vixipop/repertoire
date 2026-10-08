@@ -1168,7 +1168,7 @@ export function startPond(
   /* ---------- overhanging vines ---------- */
 
   type VLeaf = { t: number; off: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
-  type Bloom = { t: number; off: number; r: number; rot: number; hue: number; light: number; sat: number };
+  type Bloom = { t: number; off: number; r: number; rot: number; hue: number; light: number; sat: number; v: number };
   type Branch = {
     bx: number; // base, usually just outside the frame
     by: number;
@@ -1210,14 +1210,15 @@ export function startPond(
       const n = Math.max(5, Math.round(len / (3.4 * scale)));
       const leaves: VLeaf[] = [];
       // cherry boughs are mostly blossom, with only a few young leaves
-      const leafy = sakura ? 0.12 : 1;
+      // cherry boughs here are bare white wood and blossom, no leaves
+      const leafy = sakura ? 0 : 1;
       for (let i = 0; i < n; i++) {
         if (r() > leafy) continue;
         const t = 0.12 + (i / n) * 0.88;
         leaves.push(leaf(t, (r() - 0.5) * 7 * scale, (4.8 + r() * 3) * (1.1 - t * 0.3)));
       }
       // the clump at the tip
-      const clump = sakura ? 1 + Math.floor(r() * 3) : 10 + Math.floor(r() * 8);
+      const clump = sakura ? 0 : 10 + Math.floor(r() * 8);
       for (let i = 0; i < clump; i++) {
         leaves.push(leaf(0.82 + r() * 0.2, (r() - 0.5) * 26 * scale, 4.4 + r() * 3.2));
       }
@@ -1233,6 +1234,7 @@ export function startPond(
           hue: sakura ? 322 + r() * 18 : 342 + r() * 14,
           light: sakura ? 84 + r() * 10 : 86 + r() * 8,
           sat: sakura ? 62 + r() * 28 : 85,
+          v: Math.floor(r() * 1000),
         });
       }
       const br: Branch = {
@@ -1306,66 +1308,102 @@ export function startPond(
     cctx.stroke();
   };
 
-  const drawBloom = (x: number, y: number, b: Bloom, rot: number) => {
-    const k = canopy.width / W;
-    const c = Math.cos(rot);
-    const sn = Math.sin(rot);
-    cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
+  // Blossoms are painted once into a handful of sprites and stamped, rather
+  // than drawn petal by petal every frame: there are hundreds of them.
+  const paintBloom = (g: CanvasRenderingContext2D, r: number, hue: number, sat: number, light: number, rot: number) => {
+    g.rotate(rot);
     if (sakura) {
       // cherry blossom: five petals with a notch at each tip, a deeper pink
       // heart and a little spray of stamens
-      const r = b.r * 1.1;
-      cctx.fillStyle = `hsl(${b.hue} ${b.sat}% ${b.light}%)`;
+      const R = r * 1.1;
+      g.fillStyle = `hsl(${hue} ${sat}% ${light}%)`;
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2;
         const c2 = Math.cos(a);
         const s2 = Math.sin(a);
         const P = (x: number, y: number): [number, number] => [x * c2 - y * s2, x * s2 + y * c2];
-        cctx.beginPath();
-        cctx.moveTo(0, 0);
-        cctx.quadraticCurveTo(...P(r * 0.35, -r * 0.62), ...P(r * 0.92, -r * 0.3));
-        cctx.lineTo(...P(r * 0.76, 0));
-        cctx.lineTo(...P(r * 0.92, r * 0.3));
-        cctx.quadraticCurveTo(...P(r * 0.35, r * 0.62), 0, 0);
-        cctx.fill();
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(...P(R * 0.35, -R * 0.62), ...P(R * 0.92, -R * 0.3));
+        g.lineTo(...P(R * 0.76, 0));
+        g.lineTo(...P(R * 0.92, R * 0.3));
+        g.quadraticCurveTo(...P(R * 0.35, R * 0.62), 0, 0);
+        g.fill();
       }
-      cctx.fillStyle = `hsl(${b.hue - 6} ${Math.min(95, b.sat + 15)}% ${b.light - 24}%)`;
-      cctx.beginPath();
-      cctx.arc(0, 0, r * 0.26, 0, Math.PI * 2);
-      cctx.fill();
-      cctx.strokeStyle = `hsl(${b.hue - 8} 60% ${b.light - 30}%)`;
-      cctx.lineWidth = 0.35 * scale;
-      cctx.fillStyle = "hsl(46 85% 72%)";
+      g.fillStyle = `hsl(${hue - 6} ${Math.min(95, sat + 15)}% ${light - 24}%)`;
+      g.beginPath();
+      g.arc(0, 0, R * 0.26, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = `hsl(${hue - 8} 60% ${light - 30}%)`;
+      g.lineWidth = R * 0.07;
+      g.fillStyle = "hsl(46 85% 72%)";
       for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + b.rot;
-        const x = Math.cos(a) * r * 0.42;
-        const y = Math.sin(a) * r * 0.42;
-        cctx.beginPath();
-        cctx.moveTo(0, 0);
-        cctx.lineTo(x, y);
-        cctx.stroke();
-        cctx.beginPath();
-        cctx.arc(x, y, 0.45 * scale, 0, Math.PI * 2);
-        cctx.fill();
+        const a = (i / 6) * Math.PI * 2;
+        const x = Math.cos(a) * R * 0.42;
+        const y = Math.sin(a) * R * 0.42;
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(x, y);
+        g.stroke();
+        g.beginPath();
+        g.arc(x, y, R * 0.09, 0, Math.PI * 2);
+        g.fill();
       }
       return;
     }
     // five soft petals, a darker heart, a speck of pollen
-    cctx.fillStyle = `hsl(${b.hue} ${b.sat}% ${b.light}%)`;
+    g.fillStyle = `hsl(${hue} ${sat}% ${light}%)`;
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
-      cctx.beginPath();
-      cctx.ellipse(Math.cos(a) * b.r * 0.62, Math.sin(a) * b.r * 0.62, b.r * 0.62, b.r * 0.46, a, 0, Math.PI * 2);
-      cctx.fill();
+      g.beginPath();
+      g.ellipse(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.62, r * 0.46, a, 0, Math.PI * 2);
+      g.fill();
     }
-    cctx.fillStyle = `hsl(${b.hue - 4} 62% ${b.light - 22}%)`;
-    cctx.beginPath();
-    cctx.arc(0, 0, b.r * 0.34, 0, Math.PI * 2);
-    cctx.fill();
-    cctx.fillStyle = "hsl(48 80% 70%)";
-    cctx.beginPath();
-    cctx.arc(0, 0, b.r * 0.14, 0, Math.PI * 2);
-    cctx.fill();
+    g.fillStyle = `hsl(${hue - 4} 62% ${light - 22}%)`;
+    g.beginPath();
+    g.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "hsl(48 80% 70%)";
+    g.beginPath();
+    g.arc(0, 0, r * 0.14, 0, Math.PI * 2);
+    g.fill();
+  };
+  type Sprite = { img: HTMLCanvasElement; half: number; px: number };
+  const SPRITES = 10;
+  let sprites: Sprite[] = [];
+  let spritesAt = 0;
+  const bloomSprite = (v: number, k: number) => {
+    if (spritesAt !== k || !sprites.length) {
+      spritesAt = k;
+      sprites = [];
+      const rr = mulberry32(77);
+      for (let i = 0; i < SPRITES; i++) {
+        const hue = sakura ? 322 + rr() * 18 : 342 + rr() * 14;
+        const light = sakura ? 84 + rr() * 10 : 86 + rr() * 8;
+        const sat = sakura ? 62 + rr() * 28 : 85;
+        const px = 4.6 * scale * k * 1.3; // a little larger than the largest bloom, so stamps only shrink
+        const size = Math.ceil(px * 2.5) + 2;
+        const img = document.createElement("canvas");
+        img.width = size;
+        img.height = size;
+        const g = img.getContext("2d")!;
+        g.translate(size / 2, size / 2);
+        g.lineCap = "round";
+        paintBloom(g, px, hue, sat, light, rr() * Math.PI);
+        sprites.push({ img, half: size / 2, px });
+      }
+    }
+    return sprites[v % SPRITES];
+  };
+
+  const drawBloom = (x: number, y: number, b: Bloom, rot: number) => {
+    const k = canopy.width / W;
+    const sp = bloomSprite(b.v, k);
+    const sc = (b.r * k) / sp.px;
+    const c = Math.cos(rot) * sc;
+    const sn = Math.sin(rot) * sc;
+    cctx.setTransform(c, sn, -sn, c, x * k, y * k);
+    cctx.drawImage(sp.img, -sp.half, -sp.half);
   };
 
   const drawVines = () => {
@@ -1610,10 +1648,7 @@ export function startPond(
     c.rotate(f.a);
     // tumbling: the petal foreshortens as it turns
     if (!f.landed) c.scale(1, 0.45 + 0.55 * Math.abs(Math.sin(f.age * 3 + f.hue)));
-    const g = c.createLinearGradient(-s, 0, s, 0);
-    g.addColorStop(0, `hsl(${f.hue} 62% 72%)`);
-    g.addColorStop(1, `hsl(${f.hue} 75% 88%)`);
-    c.fillStyle = g;
+    c.fillStyle = `hsl(${f.hue} 70% 82%)`;
     c.beginPath();
     c.moveTo(-s, 0);
     c.bezierCurveTo(-s * 0.4, -s * 0.85, s * 0.7, -s * 0.8, s, -s * 0.15);
@@ -1891,7 +1926,7 @@ export function startPond(
     nextRing: number;
   };
   const tigerLook = makeTigerLook();
-  const tigerLen = () => 2.7 * L;
+  const tigerLen = () => 3.2 * L;
   let tiger: Tiger | null = null;
   // in from the top, wading slowly down the pond toward us
   const spawnTiger = (first: boolean) => {
@@ -1962,14 +1997,157 @@ export function startPond(
     }
     if (t.y - len > H + 0.2 * len) spawnTiger(false);
   };
+  /* ---------- lily pads (tiger scene) ---------- */
+
+  type Pad = { x: number; y: number; ax: number; ay: number; vx: number; vy: number; r: number; a: number; va: number; lily: number; seed: number; img: HTMLCanvasElement | null; imgK: number };
+  const pads: Pad[] = [];
+  if (sakura) {
+    const r = mulberry32(5);
+    for (let tries = 0; pads.length < 16 && tries < 400; tries++) {
+      const pr = (14 + r() * 16) * scale;
+      const x = r() * W;
+      const y = r() * H;
+      if (pads.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + pr + 6 * scale)) continue;
+      // keep the very middle of the tiger's way mostly open
+      if (Math.abs(x - W * 0.55) < W * 0.08 && r() < 0.7) continue;
+      pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: r() < 0.38 ? 328 + r() * 18 : -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
+    }
+  }
+  // each pad is painted once into its own little canvas, then stamped
+  const padImage = (p: Pad, k: number) => {
+    if (p.img && p.imgK === k) return p.img;
+    const r = mulberry32(p.seed);
+    const R = p.r * k;
+    const size = Math.ceil(R * 2.4) + 4;
+    const img = document.createElement("canvas");
+    img.width = size;
+    img.height = size;
+    const g = img.getContext("2d")!;
+    g.translate(size / 2, size / 2);
+    const notch = 0.22 + r() * 0.12;
+    const hue = 96 + r() * 26;
+    // the pad: a disc with a slit to the middle, a darker rim, veins
+    const pad = new Path2D();
+    pad.moveTo(0, 0);
+    pad.arc(0, 0, R, notch, Math.PI * 2 - notch * 0.2);
+    pad.closePath();
+    const grad = g.createRadialGradient(-R * 0.25, -R * 0.25, R * 0.1, 0, 0, R);
+    grad.addColorStop(0, `hsl(${hue} 42% ${44 + r() * 8}%)`);
+    grad.addColorStop(1, `hsl(${hue + 8} 48% ${28 + r() * 6}%)`);
+    g.fillStyle = grad;
+    g.fill(pad);
+    g.save();
+    g.clip(pad);
+    g.strokeStyle = `hsla(${hue - 10}, 40%, 22%, 0.35)`;
+    g.lineWidth = Math.max(0.6, R * 0.03);
+    for (let i = 0; i < 11; i++) {
+      const a = notch + (i / 11) * (Math.PI * 2 - notch * 1.2);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(Math.cos(a + 0.12) * R * 0.5, Math.sin(a + 0.12) * R * 0.5, Math.cos(a) * R, Math.sin(a) * R);
+      g.stroke();
+    }
+    g.strokeStyle = `hsla(${hue}, 40%, 18%, 0.55)`;
+    g.lineWidth = Math.max(1, R * 0.07);
+    g.stroke(pad);
+    g.fillStyle = `hsla(${hue - 20}, 60%, 80%, 0.18)`;
+    g.beginPath();
+    g.ellipse(-R * 0.3, -R * 0.35, R * 0.35, R * 0.2, -0.6, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    if (p.lily >= 0) {
+      // a water lily: pointed petals in two rings, a golden heart
+      const L = R * 0.55;
+      const lx = R * 0.18;
+      const ly = -R * 0.12;
+      const petals = (n: number, len: number, wid: number, light: number, off: number) => {
+        for (let i = 0; i < n; i++) {
+          const a = off + (i / n) * Math.PI * 2;
+          g.save();
+          g.translate(lx, ly);
+          g.rotate(a);
+          g.fillStyle = `hsl(${p.lily} ${62 + r() * 10}% ${light + r() * 6}%)`;
+          g.beginPath();
+          g.moveTo(0, 0);
+          g.quadraticCurveTo(len * 0.5, -wid, len, 0);
+          g.quadraticCurveTo(len * 0.5, wid, 0, 0);
+          g.fill();
+          g.restore();
+        }
+      };
+      petals(9, L, L * 0.32, 74, 0);
+      petals(7, L * 0.72, L * 0.28, 84, 0.3);
+      g.fillStyle = "hsl(44 85% 62%)";
+      g.beginPath();
+      g.arc(lx, ly, L * 0.2, 0, Math.PI * 2);
+      g.fill();
+    }
+    p.img = img;
+    p.imgK = k;
+    return img;
+  };
+  const updatePads = (dt: number) => {
+    const ca = currentAngle();
+    for (const p of pads) {
+      // tethered by its stem: drifts a little with the current, springs back
+      let fx = (p.ax + Math.cos(ca) * 4 * scale - p.x) * 0.25;
+      let fy = (p.ay + Math.sin(ca) * 4 * scale - p.y) * 0.25;
+      if (tiger) {
+        const len = tigerLen();
+        const c = Math.cos(tiger.h);
+        const sn = Math.sin(tiger.h);
+        const u = clamp((p.x - tiger.x) * c + (p.y - tiger.y) * sn, -0.55 * len, 0.75 * len);
+        const dx = p.x - (tiger.x + c * u);
+        const dy = p.y - (tiger.y + sn * u);
+        const d = Math.hypot(dx, dy);
+        const R = 0.22 * len + p.r;
+        if (d < R && d > 0) {
+          const k = (1 - d / R) * (1 - d / R) * 260 * scale;
+          fx += (dx / d) * k;
+          fy += (dy / d) * k;
+          p.va += ((dx * sn - dy * c) / d) * (1 - d / R) * dt * 1.5;
+        }
+      }
+      p.vx = (p.vx + fx * dt) * Math.exp(-dt * 1.6);
+      p.vy = (p.vy + fy * dt) * Math.exp(-dt * 1.6);
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.va *= Math.exp(-dt * 1.2);
+      p.a += p.va * dt;
+    }
+  };
+  const drawPads = (c: CanvasRenderingContext2D) => {
+    const k = paint.width / W;
+    for (const p of pads) {
+      const img = padImage(p, k);
+      c.save();
+      c.translate(p.x, p.y);
+      c.rotate(p.a);
+      c.scale(1 / k, 1 / k);
+      c.drawImage(img, -img.width / 2, -img.height / 2);
+      c.restore();
+    }
+  };
+
+  // the tiger is painted on a layer of its own, so the parts under the
+  // surface can be thinned out without touching the pads and petals beneath
+  const tigerLayer = document.createElement("canvas");
+  const tlctx = tigerLayer.getContext("2d")!;
   const drawTiger = (c: CanvasRenderingContext2D, t: Tiger) => {
     const len = tigerLen();
-    c.save();
-    c.translate(t.x, t.y);
-    c.rotate(t.h);
-    c.scale(len, len);
-    paintTiger(c, tigerLook, tigerPose(t));
-    c.restore();
+    if (tigerLayer.width !== paint.width || tigerLayer.height !== paint.height) {
+      tigerLayer.width = paint.width;
+      tigerLayer.height = paint.height;
+    }
+    const k = paint.width / W;
+    tlctx.setTransform(1, 0, 0, 1, 0, 0);
+    tlctx.clearRect(0, 0, tigerLayer.width, tigerLayer.height);
+    tlctx.setTransform(k, 0, 0, k, 0, 0);
+    tlctx.translate(t.x, t.y);
+    tlctx.rotate(t.h);
+    tlctx.scale(len, len);
+    paintTiger(tlctx, tigerLook, tigerPose(t));
+    c.drawImage(tigerLayer, 0, 0, W, H);
   };
   for (const s of swans) pickWaypoint(s);
 
@@ -3031,6 +3209,7 @@ export function startPond(
 
     for (const s of swans) update(s, dt * motion);
     updateTiger(dt);
+    updatePads(dt);
     resolveOverlaps(dt * motion);
     updateLeaves(dt);
     updatePetals(dt);
@@ -3041,6 +3220,7 @@ export function startPond(
     const k = paint.width / W;
     pctx.setTransform(k, 0, 0, k, 0, 0);
     pctx.clearRect(0, 0, W, H);
+    drawPads(pctx);
     for (const f of leaves) drawLeaf(pctx, f);
     for (const f of petals) if (f.landed) drawPetal(pctx, f);
     for (const k of kernels) if (k.landed) drawKernel(pctx, k);

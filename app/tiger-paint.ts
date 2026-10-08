@@ -187,6 +187,11 @@ const polygon = (ctx: CanvasRenderingContext2D, pts: Array<[number, number]>) =>
   ctx.closePath();
 };
 
+/**
+ * Paint the tiger into its own (cleared) layer: the caller composites it
+ * over the pond. Parts that sit under the surface are thinned out of the
+ * layer, so the real water shows through them.
+ */
 export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose: TigerPose) {
   const sp = makeSpine(pose);
   const { lx, ly } = pose;
@@ -194,168 +199,252 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   ctx.lineJoin = "round";
   const ph = pose.phase * Math.PI * 2;
 
-  /* ---- tail: carries on the body's wave, a beat behind, the tip curling ---- */
-  {
-    const [bx, by] = sp.at(U0 + 0.012, 0);
-    const a0 = sp.angle(U0) + Math.PI;
-    const N = 30;
-    const len = 0.66;
-    const mid: Array<[number, number]> = [];
-    const nrm: Array<[number, number]> = [];
-    let x = bx;
-    let y = by;
-    let a = a0;
-    for (let i = 0; i <= N; i++) {
-      const s = i / N;
-      mid.push([x, y]);
-      nrm.push([-Math.sin(a), Math.cos(a)]);
-      a += (Math.sin(ph - 1.1 - s * 3.2) * 0.11 + Math.sin(ph * 0.5 + 2) * 0.03 + 0.03 * s) * (0.5 + s);
-      x += Math.cos(a) * (len / N);
-      y += Math.sin(a) * (len / N);
-    }
-    const wAt = (s: number) => 0.03 * (1 - s * 0.35);
-    const strip = (s0: number, s1: number) => {
-      const i0 = Math.round(s0 * N);
-      const i1 = Math.round(s1 * N);
-      const L: Array<[number, number]> = [];
-      const R: Array<[number, number]> = [];
-      for (let i = i0; i <= i1; i++) {
-        const w = wAt(i / N);
-        L.push([mid[i][0] + nrm[i][0] * w, mid[i][1] + nrm[i][1] * w]);
-        R.push([mid[i][0] - nrm[i][0] * w, mid[i][1] - nrm[i][1] * w]);
-      }
-      return [...L, ...R.reverse()];
-    };
-    ctx.fillStyle = tcss(FUR);
-    polygon(ctx, strip(0, 1));
-    ctx.fill();
-    ctx.fillStyle = tcss(INK, 0.92);
-    for (let s = 0.22; s < 0.82; s += 0.115) {
-      polygon(ctx, strip(s, s + 0.05));
-      ctx.fill();
-    }
-    polygon(ctx, strip(0.86, 1));
-    ctx.fill();
-    // round the tip
-    const tip = mid[N];
-    ctx.beginPath();
-    ctx.arc(tip[0], tip[1], wAt(1), 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  /* ---- body ---- */
-  const S = 56;
-  const left: Array<[number, number]> = [];
-  const right: Array<[number, number]> = [];
-  for (let i = 0; i <= S; i++) {
-    const u = U0 + ((U1 - U0) * i) / S;
-    left.push(sp.at(u, -sp.width(u, -1)));
-    right.push(sp.at(u, sp.width(u, 1)));
-  }
-  const outline = [...left, ...right.reverse()];
-  const body = new Path2D();
-  body.moveTo(outline[0][0], outline[0][1]);
-  for (let i = 1; i < outline.length; i++) {
-    const a = outline[i - 1];
-    const b = outline[i];
-    body.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
-  }
-  body.closePath();
-
-  {
-    const [cx, cy] = sp.at(-0.08, 0);
-    const g = ctx.createRadialGradient(cx + lx * 0.1, cy + ly * 0.06, 0, cx, cy, 0.6);
-    g.addColorStop(0, tcss(FUR_HI));
-    g.addColorStop(0.55, tcss(FUR));
-    g.addColorStop(1, tcss(FUR_DEEP));
-    ctx.fillStyle = g;
-    ctx.fill(body);
-  }
-
-  ctx.save();
-  ctx.clip(body);
-  // the back runs deeper in colour than the flanks
-  const band = (v: number): Array<[number, number]> => {
+  // a band down the body, from -v to +v across the spine (v as a fraction of the half-width)
+  const band = (f0: number, f1: number, shift = 0): Array<[number, number]> => {
     const L: Array<[number, number]> = [];
     const R: Array<[number, number]> = [];
-    for (let i = 0; i <= 24; i++) {
-      const u = U0 + 0.03 + ((U1 - U0 - 0.03) * i) / 24;
-      L.push(sp.at(u, -v));
-      R.push(sp.at(u, v));
+    for (let i = 0; i <= 40; i++) {
+      const u = U0 + 0.004 + ((U1 - U0 - 0.004) * i) / 40;
+      const wl = sp.width(u, -1);
+      const wr = sp.width(u, 1);
+      L.push(sp.at(u, -wl * f1 + shift * wl));
+      R.push(sp.at(u, wr * f0 + shift * wr));
     }
     return [...L, ...R.reverse()];
   };
-  ctx.fillStyle = tcss(FUR_DEEP, 0.28);
-  polygon(ctx, band(0.05));
-  ctx.fill();
-  ctx.fillStyle = tcss(FUR_DEEP, 0.2);
-  polygon(ctx, band(0.022));
-  ctx.fill();
-  // pale fur where the flanks turn under, toward the water
-  ctx.strokeStyle = tcss(CREAM, 0.32);
-  ctx.lineWidth = 0.04;
-  ctx.stroke(body);
-  // fur lies back along the body
-  ctx.lineWidth = 0.007;
-  for (const f of look.flecks) {
-    const w = sp.width(f.u, Math.sign(f.v) || 1);
-    if (Math.abs(f.v) > w) continue;
-    const a = sp.at(f.u, f.v);
-    const b = sp.at(f.u - f.len, f.v * 1.04);
-    ctx.strokeStyle = f.light ? tcss(FUR_HI, 0.32) : tcss(FUR_DEEP, 0.22);
-    ctx.beginPath();
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
-    ctx.stroke();
+  const pathOf = (pts: Array<[number, number]>) => {
+    const p = new Path2D();
+    p.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      p.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+    p.closePath();
+    return p;
+  };
+  // the light side of the back is the side facing the sun
+  const lit = ly < 0 ? -1 : 1;
+
+  /* ---- tail: floats behind on the body's wave, dipping under mid-way ---- */
+  const tailPts: Array<[number, number]> = [];
+  const tailNrm: Array<[number, number]> = [];
+  const TN = 30;
+  {
+    const [bx, by] = sp.at(U0 + 0.012, 0);
+    let a = sp.angle(U0) + Math.PI;
+    let x = bx;
+    let y = by;
+    const len = 0.68;
+    for (let i = 0; i <= TN; i++) {
+      const s = i / TN;
+      tailPts.push([x, y]);
+      tailNrm.push([-Math.sin(a), Math.cos(a)]);
+      a += (Math.sin(ph - 1.1 - s * 3.2) * 0.11 + Math.sin(ph * 0.5 + 2) * 0.03 + 0.035 * s) * (0.5 + s);
+      x += Math.cos(a) * (len / TN);
+      y += Math.sin(a) * (len / TN);
+    }
   }
-  // stripes, laid out across the spine and carried by it: they bend as it bends
-  ctx.fillStyle = tcss(INK, 0.93);
-  for (const st of look.stripes) {
-    const reach = (sp.width(st.u, st.side) + 0.02) * st.reach;
-    const n = 14;
+  const tailW = (s: number) => 0.033 * (1 - s * 0.35);
+  const tailStrip = (s0: number, s1: number) => {
+    const i0 = Math.round(s0 * TN);
+    const i1 = Math.round(s1 * TN);
     const L: Array<[number, number]> = [];
     const R: Array<[number, number]> = [];
+    for (let i = i0; i <= i1; i++) {
+      const w = tailW(i / TN);
+      L.push([tailPts[i][0] + tailNrm[i][0] * w, tailPts[i][1] + tailNrm[i][1] * w]);
+      R.push([tailPts[i][0] - tailNrm[i][0] * w, tailPts[i][1] - tailNrm[i][1] * w]);
+    }
+    return [...L, ...R.reverse()];
+  };
+  ctx.fillStyle = tcss(FUR);
+  polygon(ctx, tailStrip(0, 1));
+  ctx.fill();
+  ctx.fillStyle = tcss(FUR_HI, 0.6);
+  for (let i = 0; i < TN; i += 1) {
+    // a lit ridge along the top of the tail
+    const w = tailW(i / TN) * 0.35;
+    ctx.beginPath();
+    ctx.arc(tailPts[i][0] + tailNrm[i][0] * w * lit, tailPts[i][1] + tailNrm[i][1] * w * lit, w, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = tcss(INK, 0.92);
+  for (let s = 0.2; s < 0.82; s += 0.11) {
+    polygon(ctx, tailStrip(s, s + 0.045));
+    ctx.fill();
+  }
+  polygon(ctx, tailStrip(0.86, 1));
+  ctx.fill();
+  {
+    const tip = tailPts[TN];
+    ctx.beginPath();
+    ctx.arc(tip[0], tip[1], tailW(1), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // mid-way it slips under the surface
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  for (let i = 0; i < TN; i++) {
+    const s = i / TN;
+    const under = Math.max(0, Math.sin(((s - 0.28) / 0.42) * Math.PI)) * (0.55 + 0.15 * Math.sin(ph + s * 4));
+    if (under <= 0.02 || s < 0.28 || s > 0.7) continue;
+    ctx.fillStyle = `rgba(0,0,0,${under.toFixed(3)})`;
+    polygon(ctx, tailStrip(s, s + 1 / TN));
+    ctx.fill();
+  }
+  ctx.restore();
+
+  /* ---- body ---- */
+  const full = pathOf(band(1, 1));
+  {
+    const [cx, cy] = sp.at(-0.08, 0);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 0.62);
+    g.addColorStop(0, tcss(FUR));
+    g.addColorStop(1, tcss(FUR_DEEP));
+    ctx.fillStyle = g;
+    ctx.fill(full);
+  }
+  ctx.save();
+  ctx.clip(full);
+  // round the back: deeper down the flanks, warm through the middle, a lit ridge
+  ctx.fillStyle = tcss(FUR, 0.9);
+  ctx.fill(pathOf(band(0.8, 0.8, lit * 0.06)));
+  ctx.fillStyle = tcss(FUR_HI, 0.55);
+  ctx.fill(pathOf(band(0.52, 0.52, lit * 0.12)));
+  ctx.fillStyle = tcss([248, 176, 92], 0.35);
+  ctx.fill(pathOf(band(0.24, 0.24, lit * 0.2)));
+  // shoulder blades and haunches catch the light as they roll
+  for (const [u, off] of [
+    [0.17, 0.25],
+    [-0.36, 0.0],
+  ] as const) {
+    for (const side of [-1, 1]) {
+      const w = sp.width(u, side);
+      const loadNow = load(pose.phase, side < 0 ? off : off + 0.5);
+      const [x, y] = sp.at(u, side * w * 0.42);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.6);
+      g.addColorStop(0, tcss([250, 182, 100], 0.18 + 0.22 * loadNow));
+      g.addColorStop(1, tcss([250, 182, 100], 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(x - w, y - w, w * 2, w * 2);
+    }
+  }
+  // the spine: a darker seam where the stripes meet
+  ctx.fillStyle = tcss(FUR_DEEP, 0.3);
+  ctx.fill(pathOf(band(0.07, 0.07)));
+  // fur, lying back along the body
+  ctx.lineWidth = 0.006;
+  for (const light of [true, false]) {
+    ctx.strokeStyle = light ? tcss(FUR_HI, 0.3) : tcss(FUR_DEEP, 0.2);
+    ctx.beginPath();
+    for (const f of look.flecks) {
+      if (f.light !== light) continue;
+      const side = Math.sign(f.v) || 1;
+      const frac = Math.abs(f.v) / 0.13;
+      if (frac > 0.95) continue;
+      const w = sp.width(f.u, side);
+      const v = side * w * Math.sin(frac * Math.PI * 0.5);
+      const a = sp.at(f.u, v);
+      const b = sp.at(f.u - f.len, v * 1.03);
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+    }
+    ctx.stroke();
+  }
+  // stripes wrap round the barrel of the body: laid out along its surface,
+  // so they crowd together as they turn down the flanks
+  ctx.fillStyle = tcss(INK, 0.92);
+  for (const st of look.stripes) {
+    const n = 16;
+    const L: Array<[number, number]> = [];
+    const R: Array<[number, number]> = [];
+    const surf = (u: number, arc: number) => {
+      const w = sp.width(u, st.side);
+      return st.side * w * Math.sin(Math.min(1, arc) * Math.PI * 0.5);
+    };
+    const reach = 0.55 + st.reach * 0.55; // in quarter-turns round the body; past 1 it's under the water
+    const gap = st.gap / 0.13;
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const u = st.u - st.sweep * Math.pow(t, 1.3) + st.wob * Math.sin(t * Math.PI);
-      const v = st.side * (st.gap + (reach - st.gap) * t);
-      // tapered at both ends, fullest a little way down from the spine
-      const hw = st.w * Math.sin(Math.PI * (0.08 + 0.92 * t)) * (1.15 - 0.55 * t) + 0.001;
-      L.push(sp.at(u + hw, v));
-      R.push(sp.at(u - hw, v));
+      const arc = gap + (reach - gap) * t;
+      const hw = st.w * Math.sin(Math.PI * (0.08 + 0.92 * t)) * (1.15 - 0.45 * t) + 0.001;
+      L.push(sp.at(u + hw, surf(u, arc)));
+      R.push(sp.at(u - hw, surf(u, arc)));
     }
     polygon(ctx, [...L, ...R.reverse()]);
     ctx.fill();
     if (st.fork) {
       const t0 = st.fork;
       const u0 = st.u - st.sweep * Math.pow(t0, 1.3);
-      const v0 = st.side * (st.gap + (reach - st.gap) * t0);
+      const a0 = gap + (reach - gap) * t0;
       const F: Array<[number, number]> = [];
       const G: Array<[number, number]> = [];
       for (let i = 0; i <= 8; i++) {
         const t = i / 8;
         const u = u0 - 0.025 * t;
-        const v = v0 + st.side * reach * 0.3 * t;
+        const arc = a0 + 0.3 * t;
         const hw = st.w * 0.6 * Math.sin(Math.PI * (0.1 + 0.9 * t)) + 0.0008;
-        F.push(sp.at(u + hw, v));
-        G.push(sp.at(u - hw, v));
+        F.push(sp.at(u + hw, surf(u, arc)));
+        G.push(sp.at(u - hw, surf(u, arc)));
       }
       polygon(ctx, [...F, ...G.reverse()]);
       ctx.fill();
     }
   }
-  // light from above one shoulder, shade falling across the other flank
+  ctx.restore();
+
+  // the flanks go down into the water: thin them out of the layer so the pond
+  // shows through, more the deeper they go
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  for (const [f0, a] of [
+    [0.7, 0.18],
+    [0.8, 0.2],
+    [0.88, 0.22],
+    [0.95, 0.25],
+  ] as const) {
+    const ring = new Path2D();
+    ring.addPath(full);
+    ring.addPath(pathOf(band(f0, f0)));
+    ctx.fillStyle = `rgba(0,0,0,${a})`;
+    ctx.fill(ring, "evenodd");
+  }
+  ctx.restore();
+  // where fur meets water: a thin bright line, broken by the ripple of the surface
+  ctx.strokeStyle = tcss([236, 246, 244], 0.32);
+  ctx.lineWidth = 0.006;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    for (let i = 0; i <= 36; i++) {
+      const u = U0 + 0.05 + ((U1 - U0 - 0.06) * i) / 36;
+      const f = 0.84 + 0.04 * Math.sin(u * 40 + ph * 2 + side);
+      const [x, y] = sp.at(u, side * sp.width(u, side) * f);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // under the surface: the bulk of the body and legs, dim and water-dark
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-over";
   {
-    const g = ctx.createLinearGradient(-lx * 0.18, -ly * 0.18, lx * 0.18, ly * 0.18);
-    g.addColorStop(0, "rgba(30,14,8,0.26)");
-    g.addColorStop(0.5, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(255,224,176,0.14)");
-    ctx.fillStyle = g;
-    ctx.fill(body);
+    const under: Array<[number, number]> = [];
+    const under2: Array<[number, number]> = [];
+    for (let i = 0; i <= 40; i++) {
+      const u = U0 + 0.02 + ((U1 - U0) * i) / 40;
+      const legs = Math.exp(-((u - 0.17) ** 2) / 0.006) * 0.05 + Math.exp(-((u + 0.36) ** 2) / 0.008) * 0.06;
+      under.push(sp.at(u, -(sp.width(u, -1) * 1.22 + legs)));
+      under2.push(sp.at(u, sp.width(u, 1) * 1.22 + legs));
+    }
+    ctx.fillStyle = "rgba(70,44,30,0.32)";
+    polygon(ctx, [...under, ...under2.reverse()]);
+    ctx.fill();
   }
   ctx.restore();
 
-  /* ---- head: steadier than the body, as a cat's is ---- */
+  /* ---- head, from above: the broad crown, ears behind, the muzzle forward ---- */
   const [hx, hy] = sp.at(U1 - 0.035, 0);
   const ha = sp.angle(U1) * 0.35 + pose.headTurn;
   ctx.save();
@@ -364,197 +453,161 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   ctx.scale(1.15, 1.15);
   ctx.translate(Math.sin(ph * 2) * 0.004, 0);
 
-  // ruff where the neck meets the head
-  ctx.fillStyle = tcss(FUR);
-  ctx.beginPath();
-  ctx.ellipse(-0.015, 0, 0.09, 0.108, 0, 0, Math.PI * 2);
-  ctx.fill();
-
+  // ears, laid back behind the crown: fur-coloured, dark only along the back edge
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(-0.03, s * 0.082);
+    ctx.rotate(s * 0.55);
+    ctx.fillStyle = tcss(FUR_DEEP);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.02, 0.026, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = tcss(INK, 0.75);
+    ctx.lineWidth = 0.007;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.018, 0.024, 0, Math.PI * 0.75, Math.PI * 1.35);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // cheek ruffs: pale fur fanning out from the sides of the face
+  for (const s of [-1, 1]) {
+    const ruff: Array<[number, number]> = [
+      [0.0, s * 0.096],
+      [0.03, s * 0.13],
+      [0.055, s * 0.12],
+      [0.075, s * 0.146],
+      [0.1, s * 0.13],
+      [0.125, s * 0.138],
+      [0.15, s * 0.11],
+      [0.17, s * 0.08],
+      [0.1, s * 0.09],
+    ];
+    ctx.fillStyle = tcss([238, 224, 204]);
+    polygon(ctx, ruff);
+    ctx.fill();
+    ctx.strokeStyle = tcss(INK, 0.85);
+    ctx.lineWidth = 0.006;
+    for (const [x0, y0, x1, y1] of [
+      [0.06, 0.1, 0.03, 0.125],
+      [0.1, 0.1, 0.075, 0.135],
+      [0.13, 0.096, 0.115, 0.125],
+    ]) {
+      ctx.beginPath();
+      ctx.moveTo(x0, s * y0);
+      ctx.quadraticCurveTo((x0 + x1) / 2 + 0.008, (s * (y0 + y1)) / 2, x1, s * y1);
+      ctx.stroke();
+    }
+  }
+  // the crown and muzzle
   const half: Array<[number, number]> = [
-    [-0.04, 0],
-    [-0.03, 0.07],
-    [0.02, 0.098],
-    [0.085, 0.118],
-    [0.14, 0.104],
-    [0.18, 0.078],
-    [0.208, 0.052],
-    [0.228, 0.026],
+    [-0.05, 0],
+    [-0.045, 0.07],
+    [0.0, 0.104],
+    [0.06, 0.118],
+    [0.11, 0.108],
+    [0.15, 0.088],
+    [0.19, 0.06],
+    [0.218, 0.034],
+    [0.232, 0.012],
     [0.236, 0],
   ];
   const headPts: Array<[number, number]> = [
     ...half.map(([x, y]) => [x, -y] as [number, number]),
-    ...half.slice(0, -1).reverse().map(([x, y]) => [x, y] as [number, number]),
+    ...half.slice(0, -1).reverse(),
   ];
-  const head = new Path2D();
-  head.moveTo(headPts[0][0], headPts[0][1]);
-  for (let i = 1; i < headPts.length; i++) {
-    const a = headPts[i - 1];
-    const b = headPts[i];
-    head.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
-  }
-  head.closePath();
+  const head = pathOf(headPts);
   {
-    const g = ctx.createRadialGradient(0.08 + lx * 0.02, ly * 0.02, 0, 0.09, 0, 0.16);
-    g.addColorStop(0, tcss(FUR_HI));
-    g.addColorStop(0.65, tcss(FUR));
+    const g = ctx.createRadialGradient(0.06 + lx * 0.02, ly * 0.025, 0, 0.08, 0, 0.15);
+    g.addColorStop(0, tcss([246, 166, 80]));
+    g.addColorStop(0.55, tcss(FUR));
     g.addColorStop(1, tcss(FUR_DEEP));
     ctx.fillStyle = g;
     ctx.fill(head);
   }
-
   ctx.save();
   ctx.clip(head);
+  // forehead stripes, sweeping back and out from the middle of the brow
+  ctx.strokeStyle = tcss(INK, 0.9);
   for (const s of [-1, 1]) {
-    // white cheeks and ruff along the sides of the face
-    ctx.fillStyle = tcss(CREAM, 0.95);
-    polygon(ctx, [
-      [0.05, s * 0.084],
-      [0.11, s * 0.08],
-      [0.165, s * 0.066],
-      [0.2, s * 0.044],
-      [0.226, s * 0.022],
-      [0.23, s * 0.13],
-      [0.04, s * 0.14],
-    ]);
-    ctx.fill();
-    // cheek stripes, sweeping back
-    ctx.strokeStyle = tcss(INK, 0.9);
-    for (const [x0, y0, x1, y1, w] of [
-      [0.085, 0.084, 0.045, 0.118, 0.009],
-      [0.12, 0.084, 0.08, 0.124, 0.008],
-      [0.155, 0.072, 0.13, 0.11, 0.006],
-    ]) {
-      ctx.lineWidth = w;
+    for (let k = 0; k < 5; k++) {
+      const x = 0.115 - k * 0.03;
+      ctx.lineWidth = 0.004 + k * 0.0012;
       ctx.beginPath();
-      ctx.moveTo(x0, s * y0);
-      ctx.quadraticCurveTo((x0 + x1) / 2 + 0.01, (s * (y0 + y1)) / 2, x1, s * y1);
+      ctx.moveTo(x, s * (0.012 + k * 0.002));
+      ctx.quadraticCurveTo(x - 0.004, s * (0.045 + k * 0.004), x - 0.03, s * (0.07 + k * 0.006));
       ctx.stroke();
     }
-    // the dark line running back from the eye
-    ctx.lineWidth = 0.007;
+    // the dark line back from each eye
+    ctx.lineWidth = 0.006;
     ctx.beginPath();
-    ctx.moveTo(0.134, s * 0.054);
-    ctx.quadraticCurveTo(0.115, s * 0.068, 0.094, s * 0.078);
+    ctx.moveTo(0.122, s * 0.078);
+    ctx.quadraticCurveTo(0.1, s * 0.09, 0.075, s * 0.096);
     ctx.stroke();
-    // forehead marks: broken, sweeping back and out from the centre
-    for (const [x0, y0, x1, y1, w] of [
-      [0.03, 0.018, -0.005, 0.062, 0.0075],
-      [0.06, 0.022, 0.03, 0.07, 0.006],
-      [0.088, 0.024, 0.07, 0.056, 0.0045],
-      [0.012, 0.03, -0.02, 0.048, 0.005],
-    ]) {
-      ctx.lineWidth = w;
-      ctx.beginPath();
-      ctx.moveTo(x0, s * y0);
-      ctx.quadraticCurveTo((x0 + x1) / 2 + 0.006, (s * (y0 + y1)) / 2 + s * 0.004, x1, s * y1);
-      ctx.stroke();
-    }
-    // pale brow over each eye
-    ctx.fillStyle = tcss(CREAM, 0.9);
-    ctx.beginPath();
-    ctx.ellipse(0.13, s * 0.05, 0.02, 0.01, -s * 0.4, 0, Math.PI * 2);
-    ctx.fill();
   }
-  // short marks down the middle of the brow
-  ctx.strokeStyle = tcss(INK, 0.85);
-  ctx.lineWidth = 0.006;
+  ctx.lineWidth = 0.005;
   for (const [x0, x1, y] of [
-    [0.0, 0.05, 0.007],
-    [0.0, 0.05, -0.007],
-    [0.07, 0.1, 0.0],
+    [0.02, 0.09, 0.006],
+    [0.02, 0.09, -0.006],
+    [0.1, 0.135, 0],
   ]) {
     ctx.beginPath();
     ctx.moveTo(x0, y);
-    ctx.lineTo(x1, y * 0.4);
+    ctx.lineTo(x1, y * 0.5);
     ctx.stroke();
   }
-  // the bridge of the nose catches the light
-  ctx.fillStyle = tcss(FUR_HI, 0.85);
+  // the long bridge of the nose catches the light
+  ctx.fillStyle = tcss([248, 178, 96], 0.7);
   ctx.beginPath();
-  ctx.ellipse(0.188, 0, 0.042, 0.019, 0, 0, Math.PI * 2);
+  ctx.ellipse(0.19, 0, 0.046, 0.022, 0, 0, Math.PI * 2);
   ctx.fill();
-  // whisker pads
+  // brows: pale fur over each eye
+  ctx.fillStyle = tcss(CREAM, 0.85);
   for (const s of [-1, 1]) {
-    ctx.fillStyle = tcss(CREAM);
     ctx.beginPath();
-    ctx.ellipse(0.214, s * 0.028, 0.026, 0.023, s * 0.2, 0, Math.PI * 2);
+    ctx.ellipse(0.124, s * 0.062, 0.016, 0.008, -s * 0.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = tcss(INK, 0.35);
-    for (let row = 0; row < 3; row++) {
-      for (let i = 0; i < 2; i++) {
-        ctx.beginPath();
-        ctx.arc(0.206 + i * 0.009, s * (0.024 + row * 0.007 + i * 0.002), 0.0012, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
   }
   ctx.restore();
-
-  // nose leather
-  ctx.fillStyle = "rgba(146,80,74,1)";
-  ctx.beginPath();
-  ctx.moveTo(0.214, -0.013);
-  ctx.quadraticCurveTo(0.226, -0.012, 0.234, 0);
-  ctx.quadraticCurveTo(0.226, 0.012, 0.214, 0.013);
-  ctx.quadraticCurveTo(0.209, 0, 0.214, -0.013);
-  ctx.fill();
-  ctx.strokeStyle = tcss(INK, 0.3);
-  ctx.lineWidth = 0.002;
-  ctx.stroke();
-
-  // eyes: narrow, dark-rimmed, amber, both fixed straight ahead
+  // eyes, seen from above: only a hooded amber slit at the side of the head
   for (const s of [-1, 1]) {
     ctx.save();
-    ctx.translate(0.152, s * 0.043);
-    ctx.rotate(-s * 0.45);
+    ctx.translate(0.142, s * 0.074);
+    ctx.rotate(-s * 0.55);
     ctx.fillStyle = tcss(INK);
     ctx.beginPath();
-    ctx.moveTo(-0.022, 0);
-    ctx.quadraticCurveTo(0, -0.014, 0.018, 0.0);
-    ctx.quadraticCurveTo(0, 0.01, -0.022, 0);
+    ctx.moveTo(-0.017, 0);
+    ctx.quadraticCurveTo(0, -s * 0.007, 0.014, 0);
+    ctx.quadraticCurveTo(0, s * 0.005, -0.017, 0);
     ctx.fill();
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 0.011);
-    g.addColorStop(0, "rgba(236,206,96,1)");
-    g.addColorStop(1, "rgba(196,132,40,1)");
-    ctx.fillStyle = g;
+    ctx.fillStyle = "rgba(222,170,60,0.95)";
     ctx.beginPath();
-    ctx.moveTo(-0.016, 0);
-    ctx.quadraticCurveTo(0, -0.0098, 0.014, 0.0);
-    ctx.quadraticCurveTo(0, 0.0068, -0.016, 0);
+    ctx.moveTo(-0.01, s * 0.0005);
+    ctx.quadraticCurveTo(0, s * 0.0035, 0.009, s * 0.0005);
+    ctx.quadraticCurveTo(0, -s * 0.0012, -0.01, s * 0.0005);
     ctx.fill();
     ctx.restore();
-    // pupils sit in the same place in both eyes, so the gaze is level
-    ctx.fillStyle = tcss(INK);
-    ctx.beginPath();
-    ctx.ellipse(0.153, s * 0.0425, 0.0036, 0.0046, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,250,235,0.85)";
-    ctx.beginPath();
-    ctx.arc(0.1515, s * 0.0425 - 0.0024, 0.0011, 0, Math.PI * 2);
-    ctx.fill();
   }
-
-  // ears: short and rounded, set back on the skull, dark along the back edge
+  // whisker pads at the sides of the muzzle, whiskers, the tip of the nose
   for (const s of [-1, 1]) {
-    ctx.fillStyle = tcss(FUR_DEEP);
+    ctx.fillStyle = tcss(CREAM, 0.95);
     ctx.beginPath();
-    ctx.moveTo(0.012, s * 0.05);
-    ctx.quadraticCurveTo(-0.05, s * 0.06, -0.038, s * 0.1);
-    ctx.quadraticCurveTo(-0.004, s * 0.108, 0.026, s * 0.092);
-    ctx.closePath();
+    ctx.ellipse(0.206, s * 0.034, 0.022, 0.015, s * 0.25, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = tcss(INK, 0.85);
-    ctx.lineWidth = 0.008;
-    ctx.beginPath();
-    ctx.moveTo(-0.03, s * 0.066);
-    ctx.quadraticCurveTo(-0.048, s * 0.088, -0.034, s * 0.102);
-    ctx.stroke();
-    ctx.strokeStyle = tcss(CREAM, 0.5);
-    ctx.lineWidth = 0.004;
-    ctx.beginPath();
-    ctx.moveTo(0.004, s * 0.068);
-    ctx.quadraticCurveTo(-0.014, s * 0.08, -0.018, s * 0.094);
-    ctx.stroke();
+    ctx.strokeStyle = "rgba(250,248,240,0.55)";
+    ctx.lineWidth = 0.0022;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0.205, s * (0.04 + i * 0.003));
+      ctx.quadraticCurveTo(0.19, s * (0.08 + i * 0.012), 0.15 - i * 0.012, s * (0.12 + i * 0.016));
+      ctx.stroke();
+    }
   }
+  ctx.fillStyle = "rgba(140,76,72,1)";
+  ctx.beginPath();
+  ctx.moveTo(0.219, -0.012);
+  ctx.quadraticCurveTo(0.23, -0.011, 0.238, 0);
+  ctx.quadraticCurveTo(0.23, 0.011, 0.219, 0.012);
+  ctx.quadraticCurveTo(0.214, 0, 0.219, -0.012);
+  ctx.fill();
   ctx.restore();
 }
