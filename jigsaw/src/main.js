@@ -6,6 +6,7 @@ import { foamMaterial, printMaterial } from './materials.js';
 import { printTexture, tableTexture, shadowTexture } from './textures.js';
 import { PRESETS, loadPreset, pictureFromFile } from './pictures.js';
 import { createSparkles } from './sparkles.js';
+import { createSoften } from './soften.js';
 import { wakeAudio, soundLift, soundLand, soundSnap, soundDone, startMusic, stopMusic } from './audio.js';
 
 // ─── Tunables ────────────────────────────────────────────────────────────
@@ -35,17 +36,19 @@ const musicButton = document.getElementById('music');
 const presetBar = document.getElementById('presets');
 const scatterButton = document.getElementById('scatter');
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
+// Antialiasing happens in the softening pass's multisampled target instead.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'default' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NeutralToneMapping;
 
-// On 1× screens render at 2× and let the browser scale down: MSAA alone
-// leaves thin bright edges stepped. The quality guard below backs off if a
+// On 1× screens render at 1.5× and let the browser scale down, on top of
+// MSAA and the softening pass. The quality guard below backs off if a
 // machine can't keep up.
 const native = window.devicePixelRatio || 1;
-const maxDpr = native < 1.5 ? 2 : Math.min(native, 2);
+const maxDpr = native < 1.5 ? 1.5 : Math.min(native, 2);
 let dpr = maxDpr;
 renderer.setPixelRatio(dpr);
+const soften = createSoften(renderer);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(TABLE.edge);
@@ -462,6 +465,7 @@ function keepOnScreen(cl, v) {
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
+  soften.resize();
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   fitCamera();
@@ -898,7 +902,7 @@ function frame(now) {
   clusters.forEach(apply);
   if (solvedAt !== null) print.userData.paint(picture, (now - solvedAt) / 1000);
   const sparkling = sparkles.update(dt, renderer.getDrawingBufferSize(bufSize).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)));
-  renderer.render(scene, camera);
+  soften.render(scene, camera);
   adapt(elapsed);
 
   if (held || sparkling || solvedAt !== null || !clusters.every(settled)) requestAnimationFrame(frame);
@@ -925,11 +929,13 @@ function adapt(ms) {
   if (avg > 24 && dpr > 1) {
     dpr = Math.max(1, dpr - 0.25);
     renderer.setPixelRatio(dpr);
+    soften.resize();
     smooth = 0;
   } else if (avg < 18) {
     if (++smooth >= 3 && dpr < maxDpr) {
       dpr = Math.min(maxDpr, dpr + 0.25);
       renderer.setPixelRatio(dpr);
+      soften.resize();
       smooth = 0;
     }
   } else {
@@ -1041,6 +1047,7 @@ window.addEventListener('keydown', (e) => {
 // ─── Start ───────────────────────────────────────────────────────────────
 window.addEventListener('resize', resize);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
+soften.resize();
 camera.aspect = window.innerWidth / window.innerHeight;
 camera.updateProjectionMatrix();
 // Start on the first preset; if its file can't load, the next one.

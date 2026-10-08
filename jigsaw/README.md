@@ -18,6 +18,7 @@ Plain three.js + Vite, no framework.
 | `src/shape.js` | The cut: classic Bézier tabs; each grid edge is generated once and shared by both neighbours |
 | `src/materials.js` | Foam sides (procedural 3D pores, so they wrap the curves and continue across a seam) and the glossy laminated print |
 | `src/pictures.js` | The three presets (a still base painted once, a light overlay per frame) and uploads, with GIF frames decoded via gifuct-js |
+| `src/soften.js` | Finishing pass: MSAA target, a barely-there blur everywhere and a stronger one on depth edges, then tone mapping |
 | `src/sparkles.js` | The solve sparkles: one point-sprite draw call |
 | `src/textures.js` | The print canvas, the table, blurred piece silhouettes for shadows |
 | `src/audio.js` | Synthesised sounds: the snap's crunch is modelled on a recording of a foam puzzle (a ~1 ms crack, then 2–8 micro-clicks over 35 ms, mostly 3–12 kHz); generative felt-piano music |
