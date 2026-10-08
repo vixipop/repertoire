@@ -1210,19 +1210,19 @@ export function startPond(
       const n = Math.max(5, Math.round(len / (3.4 * scale)));
       const leaves: VLeaf[] = [];
       // cherry boughs are mostly blossom, with only a few young leaves
-      const leafy = sakura ? 0.3 : 1;
+      const leafy = sakura ? 0.12 : 1;
       for (let i = 0; i < n; i++) {
         if (r() > leafy) continue;
         const t = 0.12 + (i / n) * 0.88;
         leaves.push(leaf(t, (r() - 0.5) * 7 * scale, (4.8 + r() * 3) * (1.1 - t * 0.3)));
       }
       // the clump at the tip
-      const clump = sakura ? 3 + Math.floor(r() * 4) : 10 + Math.floor(r() * 8);
+      const clump = sakura ? 1 + Math.floor(r() * 3) : 10 + Math.floor(r() * 8);
       for (let i = 0; i < clump; i++) {
         leaves.push(leaf(0.82 + r() * 0.2, (r() - 0.5) * 26 * scale, 4.4 + r() * 3.2));
       }
       const blooms: Bloom[] = [];
-      const nb = sakura ? Math.round(n * 0.9 + 14) : Math.round(n * 0.18 + clump * 0.35);
+      const nb = sakura ? Math.round(n * 1.3 + 18) : Math.round(n * 0.18 + clump * 0.35);
       for (let i = 0; i < nb; i++) {
         blooms.push({
           t: sakura ? 0.12 + r() * 0.98 : 0.35 + r() * 0.7,
@@ -1266,6 +1266,8 @@ export function startPond(
       grow(1.06 * W, 0.98 * H, Math.PI + 0.62, 0.19 * W, 2, 0),
       grow(-0.07 * W, 0.8 * H, -0.22, 0.14 * W, 2, 0),
     ];
+    // under the sakura, a long pale bough reaches in across the top-left
+    if (sakura) branches.push(grow(-0.08 * W, 0.04 * H, 0.18, 0.46 * W, 3, 0));
   };
 
   const drawVineLeaf = (x: number, y: number, l: VLeaf, rot: number) => {
@@ -1309,6 +1311,45 @@ export function startPond(
     const c = Math.cos(rot);
     const sn = Math.sin(rot);
     cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
+    if (sakura) {
+      // cherry blossom: five petals with a notch at each tip, a deeper pink
+      // heart and a little spray of stamens
+      const r = b.r * 1.1;
+      cctx.fillStyle = `hsl(${b.hue} ${b.sat}% ${b.light}%)`;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const c2 = Math.cos(a);
+        const s2 = Math.sin(a);
+        const P = (x: number, y: number): [number, number] => [x * c2 - y * s2, x * s2 + y * c2];
+        cctx.beginPath();
+        cctx.moveTo(0, 0);
+        cctx.quadraticCurveTo(...P(r * 0.35, -r * 0.62), ...P(r * 0.92, -r * 0.3));
+        cctx.lineTo(...P(r * 0.76, 0));
+        cctx.lineTo(...P(r * 0.92, r * 0.3));
+        cctx.quadraticCurveTo(...P(r * 0.35, r * 0.62), 0, 0);
+        cctx.fill();
+      }
+      cctx.fillStyle = `hsl(${b.hue - 6} ${Math.min(95, b.sat + 15)}% ${b.light - 24}%)`;
+      cctx.beginPath();
+      cctx.arc(0, 0, r * 0.26, 0, Math.PI * 2);
+      cctx.fill();
+      cctx.strokeStyle = `hsl(${b.hue - 8} 60% ${b.light - 30}%)`;
+      cctx.lineWidth = 0.35 * scale;
+      cctx.fillStyle = "hsl(46 85% 72%)";
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + b.rot;
+        const x = Math.cos(a) * r * 0.42;
+        const y = Math.sin(a) * r * 0.42;
+        cctx.beginPath();
+        cctx.moveTo(0, 0);
+        cctx.lineTo(x, y);
+        cctx.stroke();
+        cctx.beginPath();
+        cctx.arc(x, y, 0.45 * scale, 0, Math.PI * 2);
+        cctx.fill();
+      }
+      return;
+    }
     // five soft petals, a darker heart, a speck of pollen
     cctx.fillStyle = `hsl(${b.hue} ${b.sat}% ${b.light}%)`;
     for (let i = 0; i < 5; i++) {
@@ -1366,14 +1407,35 @@ export function startPond(
       };
 
       cctx.setTransform(k, 0, 0, k, 0, 0);
-      cctx.strokeStyle = sakura ? "rgba(52,34,34,0.92)" : "rgba(58,52,34,0.9)";
       cctx.lineCap = "round";
-      for (let i = 0; i < segs; i++) {
-        cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
-        cctx.beginPath();
-        cctx.moveTo(pts[i][0], pts[i][1]);
-        cctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
-        cctx.stroke();
+      if (sakura) {
+        // pale bark, like the white-limbed cherries: a soft grey underside, a lit top edge
+        for (const [col, wk, off] of [
+          ["rgba(112,104,112,0.85)", 1.25, 0.25],
+          ["rgba(236,232,230,0.97)", 1, 0],
+          ["rgba(255,255,255,0.6)", 0.4, -0.25],
+        ] as const) {
+          cctx.strokeStyle = col;
+          for (let i = 0; i < segs; i++) {
+            const w = br.width * 2.8 * (1 - (i / segs) * 0.75);
+            const nx = -Math.sin(pts[i][2]) * w * off;
+            const ny = Math.cos(pts[i][2]) * w * off;
+            cctx.lineWidth = w * wk;
+            cctx.beginPath();
+            cctx.moveTo(pts[i][0] + nx, pts[i][1] + ny);
+            cctx.lineTo(pts[i + 1][0] + nx, pts[i + 1][1] + ny);
+            cctx.stroke();
+          }
+        }
+      } else {
+        cctx.strokeStyle = "rgba(58,52,34,0.9)";
+        for (let i = 0; i < segs; i++) {
+          cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
+          cctx.beginPath();
+          cctx.moveTo(pts[i][0], pts[i][1]);
+          cctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
+          cctx.stroke();
+        }
       }
       for (const kid of br.kids) {
         const q = at(kid.at, 0);
@@ -1823,7 +1885,6 @@ export function startPond(
     phase: number;
     bend: number;
     turn: number;
-    tail: number;
     trail: Array<{ x: number; y: number; h: number; v: number; t: number }>;
     lastTrail: number;
     prevP: number[];
@@ -1843,7 +1904,6 @@ export function startPond(
       phase: 0,
       bend: 0,
       turn: 0,
-      tail: rand(0, 6),
       trail: [],
       lastTrail: -1,
       prevP: [0, 0, 0, 0],
@@ -1855,9 +1915,8 @@ export function startPond(
     const rot = t.h;
     return {
       phase: t.phase,
-      bend: t.bend,
-      headTurn: Math.sin(clock * 0.37) * 0.1 + Math.sin(clock * 0.13 + 2) * 0.06,
-      tail: t.tail,
+      curve: t.bend,
+      headTurn: Math.sin(clock * 0.29) * 0.07 + Math.sin(clock * 0.11 + 2) * 0.05,
       lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
       ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
     };
@@ -1866,17 +1925,19 @@ export function startPond(
     const t = tiger;
     if (!t) return;
     const len = tigerLen();
-    // drift toward the lower middle, turning very gently
-    const want = Math.atan2(H + len - t.y, W * 0.48 - t.x);
-    const turn = clamp(wrapAngle(want - t.h), -0.6, 0.6) * 0.08;
-    t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.8));
+    // a slow, sinuous path toward the lower middle: it weaves a little as it comes
+    const want = Math.atan2(H + len - t.y, W * 0.48 - t.x) + Math.sin(clock * 0.42 + 0.6) * 0.22;
+    const turn = clamp(wrapAngle(want - t.h), -0.6, 0.6) * 0.22;
+    t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.9));
     t.h += t.turn * dt;
-    t.x += Math.cos(t.h) * t.v * dt;
-    t.y += Math.sin(t.h) * t.v * dt;
-    t.phase = (t.phase + (t.v * dt) / (STRIDE * len)) % 1;
-    // the spine flexes side to side with each step
-    t.bend = Math.sin(t.phase * Math.PI * 2) * 0.32 + t.turn * 2;
-    t.tail += dt * 0.7;
+    // a soft surge with each footfall
+    const v = t.v * (1 + 0.07 * Math.sin(t.phase * Math.PI * 4 - 0.6));
+    t.x += Math.cos(t.h) * v * dt;
+    t.y += Math.sin(t.h) * v * dt;
+    t.phase = (t.phase + (v * dt) / (STRIDE * len)) % 1;
+    // the body arcs into the turn, easing in and out
+    const arc = clamp(t.turn * 4.5, -0.6, 0.6);
+    t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 1.5));
     if (clock - t.lastTrail > 0.09) {
       t.trail.push({ x: t.x, y: t.y, h: t.h, v: t.v, t: clock });
       t.lastTrail = clock;
