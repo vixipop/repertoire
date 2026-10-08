@@ -36,8 +36,8 @@ export type MeadowParams = {
   brush: number;
   /** how soft the paint is underneath the dabs */
   blur: number;
-  /** the fur of the grass where the sun catches it */
-  fuzz: number;
+  /** how strongly the sunlit grass stands out from the shade */
+  sunlight: number;
   skyHue: number;
   skyDepth: number;
   /** sunlit grass: golden (0) to green (1) */
@@ -58,10 +58,10 @@ export const MEADOW_DEFAULTS: MeadowParams = {
   paint: 0.6,
   brush: 0.2,
   blur: 0.35,
-  fuzz: 0.5,
+  sunlight: 0.65,
   skyHue: 0.45,
   skyDepth: 0.6,
-  grassSun: 0.45,
+  grassSun: 0.3,
   grassShade: 0.55,
   grassRich: 0.7,
 };
@@ -278,7 +278,10 @@ void main() {
     if (t0 < 260.0) {
       const int N = 40;
       float ds = (t1 - t0) / float(N);
-      float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      // a scattered start for each pixel, so the steps leave no pattern
+      vec2 jp = fract(gl_FragCoord.xy * vec2(0.1031, 0.1030));
+      jp += dot(jp, jp.yx + 33.33);
+      float jit = fract((jp.x + jp.y) * jp.x);
       float t = t0 + ds * jit;
       float mu = dot(rd, uSun);
       float phase = mix(hg(mu, 0.6), hg(mu, -0.2), 0.45);
@@ -339,7 +342,15 @@ const BACK_FRAG = `
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D uSky;
-void main() { gl_FragColor = texture2D(uSky, vUv); }
+uniform vec2 uSkyPx;
+void main() {
+  vec4 c = texture2D(uSky, vUv) * 0.4;
+  c += texture2D(uSky, vUv + uSkyPx * vec2(1.1, 0.4)) * 0.15;
+  c += texture2D(uSky, vUv + uSkyPx * vec2(-0.4, 1.1)) * 0.15;
+  c += texture2D(uSky, vUv + uSkyPx * vec2(-1.1, -0.4)) * 0.15;
+  c += texture2D(uSky, vUv + uSkyPx * vec2(0.4, -1.1)) * 0.15;
+  gl_FragColor = c;
+}
 `;
 
 const SURFACE_LIB = `
@@ -396,6 +407,7 @@ uniform float uPix;
 uniform vec3 uGrassSun;
 uniform vec3 uGrassShade;
 uniform float uFuzz;
+uniform float uSunlight;
 ${CLOUD_LIB}
 ${SURFACE_LIB}
 
@@ -419,7 +431,7 @@ void main() {
   // how much sun reaches this grass: the low sun picks out every slope
   float lam = clamp(dot(N, uSun) * 2.6 - 0.12, 0.0, 1.0);
   float light = lam * ridgeShadow(vW) * cloudShadow(vW);
-  float lit = smoothstep(0.22, 0.6, light);
+  float lit = smoothstep(0.12, 0.5, light);
 
   // the grass is painted in two colours, sun and shade, each with its patches
   float patch = vn(xz * 0.022 + 3.0) * 0.6 + vn(xz * 0.1 + 7.0) * 0.4;
@@ -430,9 +442,10 @@ void main() {
   float across = dot(xz, vec2(-uWindDir.y, uWindDir.x));
   float wave = 0.5 + 0.5 * sin(along * 0.33 - uTime * 1.7) * (0.65 + 0.35 * sin(across * 0.07 + uTime * 0.3));
   sunG *= 1.0 + (wave - 0.5) * 0.22 * uWindAmt * 2.0;
-  vec3 col = mix(shadeG, sunG, lit);
-  // where the light just reaches, a warm, glowing edge
-  col += uSunCol * 0.18 * lit * (1.0 - lit) * 4.0 * vec3(1.0, 0.9, 0.4);
+  // how far the sun lifts the grass from its shade
+  vec3 col = mix(shadeG, sunG, lit * (0.2 + 0.8 * uSunlight));
+  // where the light just reaches, a faint warm edge
+  col += uSunCol * 0.04 * uSunlight * lit * (1.0 - lit) * 4.0;
 
   // fuzz: only where the sun catches it, fading as it shrinks below a pixel
   float fur = vn(xz * 9.0 + 1.0) * 0.45 + vn(xz * 23.0 + 5.0) * 0.35 + vn(xz * 55.0) * 0.2;
@@ -441,7 +454,7 @@ void main() {
   // and backlit, the fur glows
   vec3 V = normalize(uEye - vW);
   float back = pow(max(dot(-V, uSun), 0.0), 3.0);
-  col += uSunCol * vec3(1.0, 0.85, 0.35) * back * lit * uFuzz * (0.25 + 0.5 * fur * fade);
+  col += uSunCol * 0.4 * back * lit * uFuzz * uSunlight * (0.25 + 0.5 * fur * fade);
 
   // drifts of small white flowers, specks while they're big enough, then a haze of white
   float drift = smoothstep(0.55, 0.8, vn(xz * 0.04 + 21.0));
@@ -778,7 +791,7 @@ const SURFACE_UNIFORMS = ["uEye", "uShadow", "uGrid", "uSunI", "uHaze"];
 
 // the polar grid the land is built on
 const ROWS = 230;
-const COLS = 170;
+const COLS = 280;
 const R0 = 1.0;
 const R1 = 7000;
 const A0 = -0.95;
@@ -795,9 +808,9 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
   const sky = link(gl, QUAD_VERT, SKY_FRAG, ["aPos"], [...CLOUD_UNIFORMS, "uRight", "uUp", "uFwd", "uTanV", "uAspect", "uSkyTop", "uSkyHor"]);
-  const back = link(gl, QUAD_VERT, BACK_FRAG, ["aPos"], ["uSky"]);
+  const back = link(gl, QUAD_VERT, BACK_FRAG, ["aPos"], ["uSky", "uSkyPx"]);
   const surf = [...CLOUD_UNIFORMS, ...SURFACE_UNIFORMS, "uVP"];
-  const terrain = link(gl, TERRAIN_VERT, TERRAIN_FRAG, ["aPos", "aNrm"], [...surf, "uWindAmt", "uWindDir", "uPix", "uGrassSun", "uGrassShade", "uFuzz"]);
+  const terrain = link(gl, TERRAIN_VERT, TERRAIN_FRAG, ["aPos", "aNrm"], [...surf, "uWindAmt", "uWindDir", "uPix", "uGrassSun", "uGrassShade", "uFuzz", "uSunlight"]);
   const flowers = link(gl, FLOWER_VERT, FLOWER_FRAG, ["aCorner", "aRoot", "aBlade"], [...surf, "uWindAmt", "uWindDir", "uCamRight", "uCamUp"]);
   const flies = link(gl, FLY_VERT, FLY_FRAG, ["aPos", "aInfo"], surf);
   const blur = link(gl, QUAD_VERT, BLUR_FRAG, ["aPos"], ["uSrc", "uStep"]);
@@ -904,13 +917,32 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
           const px = x + sx * d;
           const pz = z + sz * d;
           const clear = y + sy * d - groundHeight(px, pz);
-          res = Math.min(res, (10 * clear) / d);
+          res = Math.min(res, (5 * clear) / d);
           if (res < 0) break;
           d *= 1.2;
           if (d > 1500) break;
         }
         shadowData[i * COLS + j] = Math.round(Math.max(0.12, Math.min(1, res * 0.5 + 0.5 * Math.min(1, Math.max(0, res)))) * 255);
       }
+    // smooth it, so shadow edges are soft and never step along the grid
+    const tmp = new Float32Array(ROWS * COLS);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < ROWS; i++)
+        for (let j = 0; j < COLS; j++) {
+          let sum = 0;
+          let n2 = 0;
+          for (let di = -1; di <= 1; di++)
+            for (let dj = -2; dj <= 2; dj++) {
+              const ii = i + di;
+              const jj = j + dj;
+              if (ii < 0 || jj < 0 || ii >= ROWS || jj >= COLS) continue;
+              sum += shadowData[ii * COLS + jj];
+              n2++;
+            }
+          tmp[i * COLS + j] = sum / n2;
+        }
+      for (let q = 0; q < tmp.length; q++) shadowData[q] = Math.round(tmp[q]);
+    }
     gl.bindTexture(gl.TEXTURE_2D, shadowTex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, COLS, ROWS, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, shadowData);
@@ -1149,7 +1181,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     }
     // the picture under the paint is soft anyway, so it's drawn at a fraction
     // of the screen's pixels, as on the pond
-    const pk = fixedWidth ? 0.8 : 0.65;
+    const pk = 1;
     const pw = Math.max(2, Math.round(w * pk));
     const ph = Math.max(2, Math.round(h * pk));
     if (pw !== sceneW || ph !== sceneH) {
@@ -1219,7 +1251,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       skyTop: hsl(skyHue + 6, 0.88, 0.44 - params.skyDepth * 0.27),
       skyHor: hsl(skyHue - 4, 0.62, 0.74 - params.skyDepth * 0.08),
       haze: lerp3(hsl(skyHue - 6, 0.5, 0.8), [0.95, 0.88, 0.76], params.warm * 0.35),
-      grassSun: hsl(40 + params.grassSun * 55, 0.5 + 0.48 * rich, 0.48),
+      grassSun: hsl(62 + params.grassSun * 55, 0.45 + 0.42 * rich, 0.5),
       grassShade: hsl(95 + params.grassShade * 60, 0.35 + 0.5 * rich, 0.17 + 0.05 * (1 - rich)),
     };
   };
@@ -1301,6 +1333,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, skyTex);
     gl.uniform1i(back.u.uSky, 2);
+    gl.uniform2f(back.u.uSkyPx, 1 / skyW, 1 / skyH);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     clearAttrs();
 
@@ -1317,7 +1350,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.uniform1f(terrain.u.uPix, (2 * TAN_V) / sceneH);
     gl.uniform3f(terrain.u.uGrassSun, C.grassSun[0], C.grassSun[1], C.grassSun[2]);
     gl.uniform3f(terrain.u.uGrassShade, C.grassShade[0], C.grassShade[1], C.grassShade[2]);
-    gl.uniform1f(terrain.u.uFuzz, params.fuzz);
+    gl.uniform1f(terrain.u.uFuzz, 0.25);
+    gl.uniform1f(terrain.u.uSunlight, params.sunlight);
     attr(terrPos, 0, 3, 0, 0, 0);
     attr(terrNrm, 1, 3, 0, 0, 0);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrIdx);
@@ -1421,7 +1455,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         fast++;
         slow = 0;
       }
-      if (slow > 15 && k > 0.25) {
+      if (slow > 15 && k > 0.35) {
         k *= 0.85;
         slow = 0;
       } else if (fast > 180 && k < 0.6) {
