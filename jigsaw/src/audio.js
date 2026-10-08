@@ -78,3 +78,13 @@ export function soundSnap() {
   burst(t + 0.028, 0.025, 'bandpass', 2600, 1.8, 0.16);
   burst(t + 0.03, 0.08, 'lowpass', 500, 0.7, 0.14);
 }
+
+// Last piece in: three soft, low notes, like tapping the finished board.
+export function soundDone() {
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.2;
+  [196, 247, 294].forEach((f, i) => {
+    thump(t + i * 0.11, f, f * 0.98, 0.5, 0.1);
+    burst(t + i * 0.11, 0.03, 'bandpass', 2400, 1.6, 0.05);
+  });
+}

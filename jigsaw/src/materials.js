@@ -108,15 +108,17 @@ export function foamMaterial({ top, cardT, backT, print, sheet, pad }) {
           foam = mix(foam, uFoamDeep, smoothstep(0.05, 0.85, pore));
 
           // The printed card on top and the white backing card underneath.
-          float card = smoothstep(uTop - uCardT - 0.002, uTop - uCardT + 0.002, y);
-          float back = 1.0 - smoothstep(uBackT - 0.002, uBackT + 0.002, y);
+          // Edges are a pixel wide whatever the zoom, so the lines don't stair-step.
+          float fy = max(fwidth(y), 1e-4) * 0.75;
+          float card = smoothstep(uTop - uCardT - fy, uTop - uCardT + fy, y);
+          float back = 1.0 - smoothstep(uBackT - fy, uBackT + fy, y);
           // Darker where the foam meets the table.
           foam *= mix(0.62, 1.0, smoothstep(0.0, 0.14, y));
           // The card's cut edge: print colour wrapping over the bevel, with a
           // hairline of white card core under it. Sheet coords come from slab.
           vec2 sheet = vec2(vFoamP.x, -vFoamP.z);
           vec3 printed = texture2D(uPrint, (sheet + uPad) / uSheet).rgb * 0.82;
-          float core = smoothstep(uTop - uCardT * 0.45, uTop - uCardT * 0.35, y);
+          float core = smoothstep(uTop - uCardT * 0.4 - fy, uTop - uCardT * 0.4 + fy, y);
           vec3 edge = mix(uCard, printed, core);
           vec3 col = mix(foam, edge, card);
           col = mix(col, uBacking, back);
@@ -138,7 +140,7 @@ export function foamMaterial({ top, cardT, backT, print, sheet, pad }) {
         }`
       );
   };
-  mat.customProgramCacheKey = () => 'foam-v2';
+  mat.customProgramCacheKey = () => 'foam-v3';
   return mat;
 }
 

@@ -77,3 +77,30 @@ body.ready .hint { opacity: 1; transform: translate(-50%, 0); transition-delay: 
 }
 
 @media (hover: none) { .again kbd { display: none; } }
+
+/* Debug: swap the print for your own image (also drag-and-drop or paste). */
+.upload {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease;
+}
+.upload:hover { color: var(--ink); background: rgba(0, 0, 0, 0.04); }
+#file:focus-visible + .upload, .upload:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
+
+body.dropping::after {
+  content: "drop to print it on the puzzle";
+  position: fixed;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed #b9b5ab;
+  border-radius: 14px;
+  background: rgba(226, 224, 218, 0.55);
+  color: var(--ink);
+  pointer-events: none;
+}

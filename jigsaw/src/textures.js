@@ -12,8 +12,8 @@ function grain(ctx, w, h, amount) {
   ctx.putImageData(img, 0, 0);
 }
 
-// Placeholder artwork for the print: a quiet lake at golden hour.
-// It spans the whole uncut sheet, so neighbouring pieces continue it.
+// The print spans the whole uncut sheet, so neighbouring pieces continue it.
+// It starts as a painted lake and can be swapped for any image.
 export function printTexture(renderer, aspect) {
   const w = 2048;
   const h = Math.round(w / aspect);
@@ -21,7 +21,27 @@ export function printTexture(renderer, aspect) {
   cv.width = w;
   cv.height = h;
   const ctx = cv.getContext('2d');
+  paintLake(ctx, w, h);
 
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+
+  // Cover-crop an image onto the sheet, like a photo printed edge to edge.
+  tex.userData.setImage = (img) => {
+    const iw = img.width;
+    const ih = img.height;
+    const scale = Math.max(w / iw, h / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    tex.needsUpdate = true;
+  };
+  return tex;
+}
+
+function paintLake(ctx, w, h) {
   const horizon = h * 0.52;
   const sky = ctx.createLinearGradient(0, 0, 0, horizon);
   sky.addColorStop(0, '#5f8fc4');
@@ -88,11 +108,6 @@ export function printTexture(renderer, aspect) {
   }
 
   grain(ctx, w, h, 14);
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  return tex;
 }
 
 // Big, flat, slightly warm table with a gentle falloff to the edges.
@@ -116,7 +131,7 @@ export function tableTexture(center, edge) {
 // Drawn far off-canvas so only its canvas shadow lands — shadowBlur works
 // everywhere, unlike ctx.filter.
 export function shadowTexture(outline, size, blur) {
-  const ppu = 160;
+  const ppu = 72; // it's a blur — low resolution is invisible and keeps 24+ pieces light
   const px = Math.ceil(size * ppu);
   const cv = document.createElement('canvas');
   cv.width = cv.height = px;

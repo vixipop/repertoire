@@ -1,6 +1,8 @@
 # Foam
 
-Two foam jigsaw pieces on a table. Pick one up, press it into the other.
+A 24-piece foam jigsaw (6×4). Pick a piece up, press it into its neighbour; build it in the dotted area in the middle.
+
+`use your own image` (top right), drag-and-drop or paste swaps the print. `?debug` exposes internals for scripted tests.
 
 ```bash
 npm install
@@ -25,7 +27,8 @@ and the squish live in `step()`.
 
 ## Performance
 
+- Every piece is generated from its outline at load (no model files); all 24 share two materials and one print texture. About 100 draw calls and 50k triangles.
 - Draws only while something moves; idle costs nothing.
 - Shadows are pre-blurred silhouettes, not shadow maps.
-- Pixel ratio capped at 2 and stepped down if frames run long, back up when smooth.
+- Renders at 2× on 1× screens to keep edges smooth; steps down in 30-frame windows if frames run long (ignoring compile and wake-up stalls) and back up after three smooth windows.
 - The foam shader runs only on the side walls; fine pores fade out when they'd shimmer.

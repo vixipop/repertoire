@@ -8,8 +8,10 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <canvas id="scene" aria-label="Two foam jigsaw pieces on a table. Drag one into the other."></canvas>
-    <p id="hint" class="hint">pick one up, press it into the other</p>
+    <canvas id="scene" aria-label="Twenty-four foam jigsaw pieces scattered on a table. Drag pieces into their neighbours."></canvas>
+    <p id="hint" class="hint">24 pieces · pick one up, press it into its neighbour</p>
+    <label class="upload" for="file">use your own image</label>
+    <input id="file" type="file" accept="image/*" hidden />
     <button id="again" class="again" type="button">scatter <kbd>R</kbd></button>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -12,7 +12,7 @@ const TAB = [
   [62, -5, 60, 0, 63, 5],
   [63, 5, 65, 15, 100, 0],
 ];
-const STEPS = 12; // samples per Bézier
+const STEPS = 9; // samples per Bézier — smooth enough at any size we draw
 
 function mulberry32(seed) {
   return () => {
