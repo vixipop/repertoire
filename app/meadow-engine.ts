@@ -38,6 +38,10 @@ export type MeadowParams = {
   blur: number;
   /** how strongly the sunlit grass stands out from the shade */
   sunlight: number;
+  /** fine grass strokes where the sun catches the grass */
+  fuzz: number;
+  /** how long those strokes are */
+  blade: number;
   skyHue: number;
   skyDepth: number;
   /** sunlit grass: golden (0) to green (1) */
@@ -59,6 +63,8 @@ export const MEADOW_DEFAULTS: MeadowParams = {
   brush: 0.2,
   blur: 0.35,
   sunlight: 0.65,
+  fuzz: 0.55,
+  blade: 0.5,
   skyHue: 0.45,
   skyDepth: 0.6,
   grassSun: 0.3,
@@ -333,7 +339,7 @@ void main() {
   }
   // alpha: open sky toward the sun, where the rays come from
   float glow = pow(max(dot(rd, uSun), 0.0), 1.6);
-  gl_FragColor = vec4(col, open * glow);
+  gl_FragColor = vec4(col, 0.5 * open * glow);
 }
 `;
 
@@ -466,7 +472,9 @@ void main() {
   col = mix(col, mix(vec3(0.74, 0.78, 0.86), vec3(1.0, 0.98, 0.9), lit), flowers);
 
   col = aerial(col, vW);
-  gl_FragColor = vec4(col, 0.0);
+  // alpha above a half marks grass, and how sunlit it is, for the fuzz
+  float near = 1.0 - smoothstep(150.0, 900.0, dist);
+  gl_FragColor = vec4(col, 0.5 + 0.5 * lit * near);
 }
 `;
 
@@ -623,6 +631,8 @@ uniform float uBrush;
 uniform float uBlur;
 uniform float uScale;
 uniform float uTime;
+uniform float uFuzz;
+uniform float uBlade;
 
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -689,6 +699,39 @@ void main() {
   painted = mix(painted, mix(base, d3.rgb, d3.a * 0.85), detail);
   vec3 col = mix(base, painted, uPaint);
 
+  // grass fuzz: fine strokes of light and shade, leaning with the wind,
+  // laid only where the sun is on the grass
+  float ga = texture2D(uScene, uvOf(p)).a;
+  float sunGrass = ga > 0.5 ? (ga - 0.5) * 2.0 : 0.0;
+  if (uFuzz > 0.001 && sunGrass > 0.01) {
+    float cell = 2.6 * uScale;
+    float len = cell * (1.5 + uBlade * 4.0);
+    float fz = 0.0;
+    vec2 gid = floor(p / cell);
+    for (int j = -3; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec2 c = gid + vec2(float(i), float(j));
+        vec2 h = vec2(hash(c + 3.7), hash(c + 8.1));
+        vec2 root = (c + h) * cell;
+        // each blade leans downwind and sways a little
+        float lean = 0.35 + (h.x - 0.5) * 0.5 + sin(uTime * 1.6 + root.x * 0.05 + h.y * 6.0) * 0.12;
+        vec2 dir = vec2(sin(lean), -cos(lean));
+        vec2 d = p - root;
+        float along = dot(d, dir);
+        float across = abs(d.x * dir.y - d.y * dir.x);
+        float bl = len * (0.6 + 0.4 * h.y);
+        if (along > 0.0 && along < bl) {
+          float w = mix(1.5, 0.4, along / bl) * uScale;
+          float m = 1.0 - smoothstep(w * 0.5, w, across);
+          // most blades catch the light; a few fall dark between them
+          fz = max(fz, m * (h.x > 0.25 ? (0.35 + 0.65 * along / bl) : -0.7));
+          if (h.x <= 0.25) fz = min(fz, -0.7 * m);
+        }
+      }
+    }
+    col *= 1.0 + fz * 0.5 * uFuzz * sunGrass;
+  }
+
   // bloom and haze
   vec3 bl = vec3(0.0);
   vec3 hz = vec3(0.0);
@@ -714,7 +757,8 @@ void main() {
     float s = (float(i) + jt) / 32.0;
     vec2 q = uv + toSun * s;
     if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) continue;
-    rays += texture2D(uSoftTex, q).a * (1.0 - s * 0.6);
+    float ra = texture2D(uSoftTex, q).a;
+    rays += (ra < 0.5 ? ra * 2.0 : 0.0) * (1.0 - s * 0.6);
   }
   rays /= 18.0;
   // the beams themselves: bright spokes fanning from the sun, slowly shifting
@@ -814,7 +858,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   const flowers = link(gl, FLOWER_VERT, FLOWER_FRAG, ["aCorner", "aRoot", "aBlade"], [...surf, "uWindAmt", "uWindDir", "uCamRight", "uCamUp"]);
   const flies = link(gl, FLY_VERT, FLY_FRAG, ["aPos", "aInfo"], surf);
   const blur = link(gl, QUAD_VERT, BLUR_FRAG, ["aPos"], ["uSrc", "uStep"]);
-  const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime"]);
+  const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime", "uFuzz", "uBlade"]);
 
   // noise table for the clouds: red random, green the red one z-layer on
   const rnd = mulberry32(7);
@@ -1426,6 +1470,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.uniform1f(finish.u.uBrush, params.brush);
     gl.uniform1f(finish.u.uBlur, params.blur);
     gl.uniform1f(finish.u.uTime, t);
+    gl.uniform1f(finish.u.uFuzz, params.fuzz);
+    gl.uniform1f(finish.u.uBlade, params.blade);
     // brush sizes are the pond's, measured against its 680px-wide frame
     gl.uniform1f(finish.u.uScale, w / 680);
     attr(quadBuf, 0, 2, 0, 0, 0);
