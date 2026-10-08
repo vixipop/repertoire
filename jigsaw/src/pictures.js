@@ -1,4 +1,4 @@
-import { parseGIF, decompressFrames } from 'gifuct-js';
+import { parseGIF, decompressFrame } from 'gifuct-js';
 
 // A picture is what gets printed on the puzzle:
 //   aspect        width / height
@@ -272,60 +272,96 @@ async function bitmapOf(file) {
   }
 }
 
-// GIF frames are patches over the previous frame; composite them into full
-// frames once, downscaled, and keep at most 150 of them.
-function decodeGif(buffer) {
+// A GIF player that decodes frames as it reaches them, instead of holding
+// every frame in memory. Memory stays at the file's size plus one frame, so a
+// GIF of any length plays to the end. Each frame is a patch over the previous
+// one; playing in order and honouring each frame's disposal rebuilds it.
+function gifPlayer(buffer) {
   const gif = parseGIF(buffer);
-  const frames = decompressFrames(gif, true);
-  if (frames.length < 2) return null;
+  const raw = gif.frames.filter((f) => f.image);
+  if (raw.length < 2) return null;
   const W = gif.lsd.width;
   const H = gif.lsd.height;
-  const scale = Math.min(1, 1280 / Math.max(W, H));
+  // Browsers treat delays under 20 ms as 100 ms; so do we.
+  const delays = raw.map((f) => {
+    const d = (f.gce?.delay ?? 10) * 10;
+    return (d < 20 ? 100 : d) / 1000;
+  });
+  const starts = [];
+  let total = 0;
+  for (const d of delays) {
+    starts.push(total);
+    total += d;
+  }
+
   const full = canvas(W, H);
   const fctx = full.getContext('2d');
   const patch = canvas(1, 1);
   const pctx = patch.getContext('2d');
-  const out = [];
-  for (const f of frames.slice(0, 150)) {
+  let index = -1;
+  let prev = null; // { disposal, rect, saved }
+
+  function next() {
+    if (prev) {
+      if (prev.disposal === 2) fctx.clearRect(...prev.rect);
+      else if (prev.disposal === 3 && prev.saved) fctx.putImageData(prev.saved, 0, 0);
+    }
+    index++;
+    const f = decompressFrame(raw[index], gif.gct, true);
     const { width, height, top, left } = f.dims;
-    const before = f.disposalType === 3 ? fctx.getImageData(0, 0, W, H) : null;
+    const saved = f.disposalType === 3 ? fctx.getImageData(0, 0, W, H) : null;
     patch.width = width;
     patch.height = height;
     pctx.putImageData(new ImageData(f.patch, width, height), 0, 0);
     fctx.drawImage(patch, left, top);
-    const snap = canvas(Math.round(W * scale), Math.round(H * scale));
-    snap.getContext('2d').drawImage(full, 0, 0, snap.width, snap.height);
-    out.push({ img: snap, delay: Math.max(20, f.delay || 100) / 1000 });
-    if (f.disposalType === 2) fctx.clearRect(left, top, width, height);
-    else if (before) fctx.putImageData(before, 0, 0);
+    prev = { disposal: f.disposalType, rect: [left, top, width, height], saved };
   }
-  return { frames: out, width: W, height: H };
+
+  function seek(target) {
+    if (target < index) {
+      // Looped: start over from a clean canvas.
+      fctx.clearRect(0, 0, W, H);
+      index = -1;
+      prev = null;
+    }
+    while (index < target) next();
+  }
+
+  const frame = (t) => {
+    const m = t % total;
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= m) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+
+  return {
+    width: W,
+    height: H,
+    frames: raw.length,
+    frame,
+    draw(ctx, w, h, t) {
+      seek(frame(t));
+      cover(ctx, full, w, h);
+    },
+  };
 }
 
 export async function pictureFromFile(file, name = file.name) {
   if (file.type === 'image/gif') {
     try {
-      const gif = decodeGif(await file.arrayBuffer());
+      const gif = gifPlayer(await file.arrayBuffer());
       if (gif) {
-        const total = gif.frames.reduce((s, f) => s + f.delay, 0);
-        const starts = [];
-        let acc = 0;
-        for (const f of gif.frames) {
-          starts.push(acc);
-          acc += f.delay;
-        }
-        const frame = (t) => {
-          const m = t % total;
-          let i = starts.length - 1;
-          while (i > 0 && starts[i] > m) i--;
-          return i;
-        };
         return {
           name,
           aspect: gif.width / gif.height,
           animated: true,
-          frame,
-          draw: (ctx, w, h, t) => cover(ctx, gif.frames[frame(t)].img, w, h),
+          frame: gif.frame,
+          draw: gif.draw,
         };
       }
     } catch {

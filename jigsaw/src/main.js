@@ -364,7 +364,7 @@ function buildPuzzle(pic) {
   topMat.map = print;
   sideMat.userData.uniforms.uPrint.value = print;
   sideMat.userData.uniforms.uSheet.value.set(board.w, board.d);
-  old.dispose();
+  old?.dispose();
 
   const cut = cutPuzzle(board.cols, board.rows, { seed: 11 + Math.floor(Math.random() * 1000), outerTabs: false, corner: CORNER });
   pieces = cut.map(({ c, r, outline }) =>
@@ -377,6 +377,84 @@ function buildPuzzle(pic) {
   buildZone();
   fitCamera();
   scatter();
+}
+
+// ─── Keeping each picture's puzzle ───────────────────────────────────────
+// Switching pictures parks the current puzzle as it is (pieces where they
+// lie, joined groups, locks, solved or not) and brings it back on return.
+// Uploads aren't kept: switching away from one, or uploading another, drops it.
+const parked = new Map();
+const presetPictures = new Set();
+
+function discard(k) {
+  k.clusters.forEach((cl) => cl.dispose());
+  k.pieces.forEach(disposePiece);
+  k.shadowPlane?.dispose();
+  k.print?.dispose();
+}
+
+function park() {
+  if (!picture) return;
+  held = null;
+  hovered = null;
+  pointerId = null;
+  document.body.classList.remove('grabbing', 'can-grab');
+  for (const cl of clusters) {
+    if (cl.held) {
+      cl.held = false;
+      cl.liftTo = 0;
+    }
+    scene.remove(cl.root);
+  }
+  const keep = {
+    board: { ...board },
+    pieces,
+    meshes,
+    byCell,
+    clusters,
+    print,
+    reach,
+    shadowPlane,
+    shadowSize,
+    solvedFor: solvedAt === null ? null : performance.now() - solvedAt,
+  };
+  if (presetPictures.has(picture)) parked.set(picture, keep);
+  else discard(keep);
+  pieces = [];
+  meshes = [];
+  byCell = new Map();
+  clusters = [];
+  print = null;
+  shadowPlane = null;
+}
+
+// Show a picture's puzzle: the parked one if there is one, else a fresh cut.
+function show(pic) {
+  park();
+  sparkles.clear();
+  const k = parked.get(pic);
+  if (!k) {
+    buildPuzzle(pic);
+    return;
+  }
+  parked.delete(pic);
+  picture = pic;
+  Object.assign(board, k.board);
+  ({ pieces, meshes, byCell, clusters, print, reach, shadowPlane, shadowSize } = k);
+  clusters.forEach((cl) => scene.add(cl.root));
+  topMat.map = print;
+  sideMat.userData.uniforms.uPrint.value = print;
+  sideMat.userData.uniforms.uSheet.value.set(board.w, board.d);
+  solvedAt = k.solvedFor === null ? null : performance.now() - k.solvedFor;
+  buildZone();
+  fitCamera();
+  clusters.forEach((cl) => {
+    if (cl.locked) return;
+    keepOnScreen(cl, cl.target);
+    keepOnScreen(cl, cl.pos);
+  });
+  setDone(clusters.length === 1);
+  wake();
 }
 
 // ─── Camera and what's on screen ─────────────────────────────────────────
@@ -953,7 +1031,7 @@ async function useImage(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const pic = await pictureFromFile(file).catch(() => null);
   if (!pic) return;
-  buildPuzzle(pic);
+  show(pic);
   markPreset(-1);
 }
 fileInput.addEventListener('change', () => {
@@ -1027,6 +1105,7 @@ PRESETS.forEach((entry, i) => {
   b.append(thumb, label);
   loadPreset(entry)
     .then((pic) => {
+      presetPictures.add(pic);
       thumb.width = Math.round(44 * pic.aspect) * 2;
       pic.draw(thumb.getContext('2d'), thumb.width, thumb.height, 0);
     })
@@ -1034,7 +1113,7 @@ PRESETS.forEach((entry, i) => {
   b.addEventListener('click', async () => {
     const pic = await loadPreset(entry).catch(() => null);
     if (!pic || picture === pic) return;
-    buildPuzzle(pic);
+    show(pic);
     markPreset(i);
   });
   presetBar.append(b);
@@ -1059,7 +1138,8 @@ camera.updateProjectionMatrix();
   for (let i = 0; i < PRESETS.length; i++) {
     const pic = await loadPreset(PRESETS[i]).catch(() => null);
     if (!pic) continue;
-    buildPuzzle(pic);
+    presetPictures.add(pic);
+    show(pic);
     markPreset(i);
     return;
   }
