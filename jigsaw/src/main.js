@@ -1026,9 +1026,16 @@ function adapt(ms) {
 }
 
 // ─── Your own image (debug) ──────────────────────────────────────────────
-// A new picture cuts a new puzzle in its shape. A GIF plays once solved.
+// A new picture cuts a new puzzle in its shape. Uploads are stills only:
+// PNG or JPEG. (Animated pictures are presets.)
+const UPLOADABLE = ['image/png', 'image/jpeg'];
 async function useImage(file) {
-  if (!file || !file.type.startsWith('image/')) return;
+  if (!file) return;
+  if (!UPLOADABLE.includes(file.type)) {
+    hint.textContent = 'use a PNG or JPEG';
+    hint.classList.remove('gone');
+    return;
+  }
   const pic = await pictureFromFile(file).catch(() => null);
   if (!pic) return;
   show(pic);
@@ -1051,7 +1058,7 @@ window.addEventListener('drop', (e) => {
   useImage(e.dataTransfer?.files?.[0]);
 });
 window.addEventListener('paste', (e) => {
-  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  const item = [...(e.clipboardData?.items || [])].find((i) => UPLOADABLE.includes(i.type));
   if (item) useImage(item.getAsFile());
 });
 

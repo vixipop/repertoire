@@ -222,11 +222,16 @@ const procedural = (name, aspect, draw) => ({
 // The pictures offered at the top. A file entry (a GIF plays once solved, a
 // still stays still) lives in public/presets/; swap or add files there.
 // Lake and Night are painted stand-ins until the real GIFs arrive.
+// A video entry can name the moment to show as its still (`still`, seconds),
+// chosen by eye, since a first frame can be a bad one; once solved it plays
+// on from there. `crop` trims a baked-in border, in source pixels per side.
 export const PRESETS = [
   { name: 'Swans', src: 'presets/swans.webp' },
-  procedural('Lake', 1.5, drawLake),
+  // WebM first (a quarter of the MP4's size, same look), MP4 for browsers without VP9.
+  { name: 'Tiger', video: ['presets/tiger.webm', 'presets/tiger.mp4'], still: 9, crop: 48 },
   procedural('Night', 1.6, drawNight),
 ];
+void drawLake; // kept as a spare painted preset
 
 // Resolve a preset entry to a picture, loading its file the first time.
 const loaded = new Map();
@@ -235,12 +240,14 @@ export function loadPreset(entry) {
   if (!loaded.has(entry)) {
     loaded.set(
       entry,
-      fetch(entry.src)
-        .then((r) => {
-          if (!r.ok) throw new Error(`${entry.src}: ${r.status}`);
-          return r.blob();
-        })
-        .then((blob) => pictureFromFile(blob, entry.name))
+      entry.video
+        ? pictureFromVideo(playable(entry.video), entry.name, entry)
+        : fetch(entry.src)
+            .then((r) => {
+              if (!r.ok) throw new Error(`${entry.src}: ${r.status}`);
+              return r.blob();
+            })
+            .then((blob) => pictureFromFile(blob, entry.name))
     );
   }
   return loaded.get(entry);
@@ -347,6 +354,61 @@ function gifPlayer(buffer) {
     draw(ctx, w, h, t) {
       seek(frame(t));
       cover(ctx, full, w, h);
+    },
+  };
+}
+
+// The first source this browser says it can play.
+function playable(sources) {
+  const probe = document.createElement('video');
+  const type = (src) => (/\.webm$/i.test(src) ? 'video/webm; codecs="vp9"' : 'video/mp4; codecs="avc1.640028"');
+  return sources.find((src) => probe.canPlayType(type(src))) || sources[sources.length - 1];
+}
+
+// A video plays once solved, like a GIF, but far smaller for the same length
+// and quality. Muted and inline, so browsers let it start on its own. The
+// frame at `still` is kept as the picture shown while the puzzle is in
+// pieces, and playback picks up from that same moment.
+export async function pictureFromVideo(url, name, { still: at = 0, crop = 0 } = {}) {
+  const v = document.createElement('video');
+  v.muted = true;
+  v.loop = true;
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.src = url;
+  await new Promise((resolve, reject) => {
+    v.addEventListener('loadeddata', resolve, { once: true });
+    v.addEventListener('error', () => reject(new Error(`can't play ${name}`)), { once: true });
+  });
+  const seek = (time) =>
+    new Promise((resolve) => {
+      if (Math.abs(v.currentTime - time) < 0.001) return resolve();
+      v.addEventListener('seeked', resolve, { once: true });
+      v.currentTime = time;
+    });
+  await seek(at);
+  const sw = v.videoWidth - crop * 2;
+  const sh = v.videoHeight - crop * 2;
+  const still = canvas(sw, sh);
+  still.getContext('2d').drawImage(v, crop, crop, sw, sh, 0, 0, sw, sh);
+  const live = canvas(sw, sh);
+  const lctx = live.getContext('2d');
+  return {
+    name,
+    aspect: sw / sh,
+    animated: true,
+    // A new key whenever the video shows a new frame (or rewinds to the still).
+    frame: (t) => (t === 0 ? -1 : Math.floor(v.currentTime * 60)),
+    draw(ctx, w, h, t) {
+      if (t === 0) {
+        if (!v.paused) v.pause();
+        if (Math.abs(v.currentTime - at) > 0.001) v.currentTime = at;
+        cover(ctx, still, w, h);
+        return;
+      }
+      if (v.paused) v.play().catch(() => {});
+      lctx.drawImage(v, crop, crop, sw, sh, 0, 0, sw, sh);
+      cover(ctx, live, w, h);
     },
   };
 }

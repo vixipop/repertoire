@@ -161,7 +161,7 @@ body.ready .hint { opacity: 1; transform: translate(-50%, 0); transition-delay: 
 }
 
 body.dropping::after {
-  content: "drop to print it on a new puzzle";
+  content: "drop a PNG or JPEG to make a new puzzle";
   position: fixed;
   inset: 12px;
   display: grid;
