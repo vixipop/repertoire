@@ -125,194 +125,6 @@ function drawLake(ctx, w, h, t) {
   }
 }
 
-// ─── Swan pond, from above ───────────────────────────────────────────────
-const pondPads = (() => {
-  const r = seeded(31);
-  const pads = [];
-  const corners = [
-    [0.08, 0.1],
-    [0.9, 0.12],
-    [0.1, 0.86],
-    [0.88, 0.88],
-    [0.5, 0.06],
-  ];
-  for (const [cx, cy] of corners) {
-    const n = 4 + Math.floor(r() * 4);
-    for (let i = 0; i < n; i++) {
-      pads.push({ x: cx + (r() - 0.5) * 0.16, y: cy + (r() - 0.5) * 0.16, r: 0.016 + r() * 0.02, a: r() * TAU, flower: r() < 0.45, bob: r() * TAU });
-    }
-  }
-  return pads;
-})();
-
-const pondBase = cachedBase((ctx, w, h) => {
-  const g = ctx.createRadialGradient(w * 0.5, h * 0.45, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.75);
-  g.addColorStop(0, '#6fa79a');
-  g.addColorStop(0.6, '#4f8a80');
-  g.addColorStop(1, '#2f5f5a');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  // Soft light patches on the water.
-  const r = seeded(5);
-  for (let i = 0; i < 40; i++) {
-    const x = r() * w;
-    const y = r() * h;
-    const rad = (0.04 + r() * 0.12) * w;
-    const p = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    p.addColorStop(0, `rgba(200,235,220,${0.05 + r() * 0.06})`);
-    p.addColorStop(1, 'rgba(200,235,220,0)');
-    ctx.fillStyle = p;
-    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  // Weeds under the surface.
-  ctx.strokeStyle = 'rgba(40,80,60,0.35)';
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 60; i++) {
-    const x = r() * w;
-    const y = r() * h;
-    const len = (0.04 + r() * 0.08) * w;
-    const a = r() * TAU;
-    ctx.lineWidth = (1 + r() * 2.5) * (w / 1280);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + Math.cos(a + 0.6) * len * 0.5, y + Math.sin(a + 0.6) * len * 0.5, x + Math.cos(a) * len, y + Math.sin(a) * len);
-    ctx.stroke();
-  }
-  grain(ctx, w, h, 10);
-});
-
-function drawPad(ctx, x, y, rad, a, flower) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(a);
-  ctx.fillStyle = 'rgba(20,50,35,0.25)';
-  ctx.beginPath();
-  ctx.ellipse(rad * 0.08, rad * 0.1, rad, rad * 0.94, 0, 0.25, TAU - 0.05);
-  ctx.lineTo(0, 0);
-  ctx.fill();
-  ctx.fillStyle = '#5c8f4a';
-  ctx.beginPath();
-  ctx.ellipse(0, 0, rad, rad * 0.94, 0, 0.25, TAU - 0.05);
-  ctx.lineTo(0, 0);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(30,70,40,0.35)';
-  ctx.lineWidth = rad * 0.05;
-  for (let i = 0; i < 6; i++) {
-    const b = 0.6 + (i / 6) * (TAU - 0.9);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(b) * rad * 0.85, Math.sin(b) * rad * 0.8);
-    ctx.stroke();
-  }
-  if (flower) {
-    for (let i = 0; i < 7; i++) {
-      const b = (i / 7) * TAU;
-      ctx.fillStyle = i % 2 ? '#f2a7a0' : '#f7c1b6';
-      ctx.beginPath();
-      ctx.ellipse(Math.cos(b) * rad * 0.32 - rad * 0.2, Math.sin(b) * rad * 0.32, rad * 0.26, rad * 0.12, b, 0, TAU);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#f6d36b';
-    ctx.beginPath();
-    ctx.arc(-rad * 0.2, 0, rad * 0.12, 0, TAU);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-// Each swan glides on a slow loop; a = heading.
-const SWANS = [
-  { cx: 0.32, cy: 0.3, rx: 0.16, ry: 0.1, speed: 0.07, phase: 0.3 },
-  { cx: 0.62, cy: 0.52, rx: 0.2, ry: 0.13, speed: -0.055, phase: 2.2 },
-  { cx: 0.4, cy: 0.74, rx: 0.14, ry: 0.08, speed: 0.08, phase: 4.1 },
-];
-
-function swanAt(s, t, w, h) {
-  const p = s.phase + t * s.speed * TAU * 0.25;
-  const x = (s.cx + Math.cos(p) * s.rx) * w;
-  const y = (s.cy + Math.sin(p) * s.ry) * h;
-  const dir = Math.sign(s.speed);
-  const heading = Math.atan2(Math.cos(p) * s.ry * h * dir, -Math.sin(p) * s.rx * w * dir);
-  return { x, y, heading };
-}
-
-function drawSwan(ctx, x, y, heading, size) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(heading);
-  // Shadow on the water.
-  ctx.fillStyle = 'rgba(15,40,35,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(-size * 0.05, size * 0.12, size * 0.55, size * 0.3, 0, 0, TAU);
-  ctx.fill();
-  // Body: a teardrop, tail behind.
-  ctx.fillStyle = '#fbf7f0';
-  ctx.beginPath();
-  ctx.moveTo(size * 0.45, 0);
-  ctx.bezierCurveTo(size * 0.4, -size * 0.3, -size * 0.35, -size * 0.32, -size * 0.6, 0);
-  ctx.bezierCurveTo(-size * 0.35, size * 0.32, size * 0.4, size * 0.3, size * 0.45, 0);
-  ctx.fill();
-  // Folded wing.
-  ctx.fillStyle = '#ece6dc';
-  ctx.beginPath();
-  ctx.ellipse(-size * 0.1, 0, size * 0.32, size * 0.16, 0, 0, TAU);
-  ctx.fill();
-  // Neck, head and beak.
-  ctx.strokeStyle = '#fbf7f0';
-  ctx.lineCap = 'round';
-  ctx.lineWidth = size * 0.11;
-  ctx.beginPath();
-  ctx.moveTo(size * 0.35, 0);
-  ctx.lineTo(size * 0.66, 0);
-  ctx.stroke();
-  ctx.fillStyle = '#fbf7f0';
-  ctx.beginPath();
-  ctx.arc(size * 0.7, 0, size * 0.09, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#e8873f';
-  ctx.beginPath();
-  ctx.moveTo(size * 0.77, -size * 0.04);
-  ctx.lineTo(size * 0.9, 0);
-  ctx.lineTo(size * 0.77, size * 0.04);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawPond(ctx, w, h, t) {
-  ctx.drawImage(pondBase(w, h), 0, 0);
-  const size = Math.min(w, h) * 0.13;
-  for (const s of SWANS) {
-    // Wake: two lines fanning out behind, along the path just swum, fading.
-    ctx.lineCap = 'round';
-    ctx.lineWidth = size * 0.04;
-    for (const side of [-1, 1]) {
-      let prev = null;
-      for (let k = 0; k <= 10; k++) {
-        const back = swanAt(s, t - k * 0.3, w, h);
-        const spread = size * (0.12 + k * 0.07) * side;
-        const pt = [
-          back.x - Math.cos(back.heading) * size * 0.45 + Math.cos(back.heading + Math.PI / 2) * spread,
-          back.y - Math.sin(back.heading) * size * 0.45 + Math.sin(back.heading + Math.PI / 2) * spread,
-        ];
-        if (prev) {
-          ctx.strokeStyle = `rgba(230,250,245,${0.3 * (1 - k / 11)})`;
-          ctx.beginPath();
-          ctx.moveTo(prev[0], prev[1]);
-          ctx.lineTo(pt[0], pt[1]);
-          ctx.stroke();
-        }
-        prev = pt;
-      }
-    }
-    const now = swanAt(s, t, w, h);
-    drawSwan(ctx, now.x, now.y, now.heading, size);
-  }
-  for (const p of pondPads) {
-    const bob = t === 0 ? 0 : Math.sin(t * 0.8 + p.bob) * 0.04;
-    drawPad(ctx, p.x * w, p.y * h, p.r * Math.min(w, h) * 2.2, p.a + bob, p.flower);
-  }
-}
-
 // ─── Night meadow with fireflies ─────────────────────────────────────────
 const nightStars = (() => {
   const r = seeded(43);
@@ -407,11 +219,32 @@ const procedural = (name, aspect, draw) => ({
   frame: (t) => Math.floor(t * 24), // presets animate at 24 fps
 });
 
+// The pictures offered at the top. A file entry (a GIF plays once solved, a
+// still stays still) lives in public/presets/; swap or add files there.
+// Lake and Night are painted stand-ins until the real GIFs arrive.
 export const PRESETS = [
+  { name: 'Swans', src: 'presets/swans.webp' },
   procedural('Lake', 1.5, drawLake),
-  procedural('Pond', 1, drawPond),
   procedural('Night', 1.6, drawNight),
 ];
+
+// Resolve a preset entry to a picture, loading its file the first time.
+const loaded = new Map();
+export function loadPreset(entry) {
+  if (entry.draw) return Promise.resolve(entry);
+  if (!loaded.has(entry)) {
+    loaded.set(
+      entry,
+      fetch(entry.src)
+        .then((r) => {
+          if (!r.ok) throw new Error(`${entry.src}: ${r.status}`);
+          return r.blob();
+        })
+        .then((blob) => pictureFromFile(blob, entry.name))
+    );
+  }
+  return loaded.get(entry);
+}
 
 // ─── Uploads ─────────────────────────────────────────────────────────────
 // Cover-crop, like a photo printed edge to edge.
@@ -469,7 +302,7 @@ function decodeGif(buffer) {
   return { frames: out, width: W, height: H };
 }
 
-export async function pictureFromFile(file) {
+export async function pictureFromFile(file, name = file.name) {
   if (file.type === 'image/gif') {
     try {
       const gif = decodeGif(await file.arrayBuffer());
@@ -488,7 +321,7 @@ export async function pictureFromFile(file) {
           return i;
         };
         return {
-          name: file.name,
+          name,
           aspect: gif.width / gif.height,
           animated: true,
           frame,
@@ -501,7 +334,7 @@ export async function pictureFromFile(file) {
   }
   const img = await bitmapOf(file);
   return {
-    name: file.name,
+    name,
     aspect: img.width / img.height,
     animated: false,
     frame: () => 0,

@@ -2,7 +2,7 @@
 
 A foam jigsaw of about 24 pieces. Pick a piece up, press it into its neighbour, or drop it in its true place inside the dotted area, where it locks until you scatter (R).
 
-Three pictures to choose from (Lake, Pond, Night), painted in code. Solve one and sparkles pop up around it and the picture comes alive. Your own image works too; an animated GIF plays once solved, a still stays still.
+Three pictures to choose from. Presets are files in `public/presets/` (listed in `PRESETS` in `src/pictures.js`); Lake and Night are painted in code as stand-ins. Solve one and sparkles pop up around it and the picture comes alive. Your own image works too; an animated GIF plays once solved, a still stays still.
 
 `use your own image` (top right), drag-and-drop or paste cuts a new puzzle in that picture's shape (the grid and the dotted area follow it). `M` or the top-left button toggles the music. `?debug` exposes internals for scripted tests.
 

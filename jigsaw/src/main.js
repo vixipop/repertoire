@@ -4,17 +4,20 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPuzzle } from './shape.js';
 import { foamMaterial, printMaterial } from './materials.js';
 import { printTexture, tableTexture, shadowTexture } from './textures.js';
-import { PRESETS, pictureFromFile } from './pictures.js';
+import { PRESETS, loadPreset, pictureFromFile } from './pictures.js';
 import { createSparkles } from './sparkles.js';
 import { wakeAudio, soundLift, soundLand, soundSnap, soundDone, startMusic, stopMusic } from './audio.js';
 
 // ─── Tunables ────────────────────────────────────────────────────────────
 const PIECES = 24; // roughly; the grid follows the picture's shape
-const THICK = 0.34; // foam body, in piece widths
-const BEVEL = 0.034; // rounded cut edge, top and bottom
-const HEIGHT = THICK + 2 * BEVEL;
-const CARD_T = 0.03; // the print wraps over the rounded top edge
-const BACK_T = 0.02; // backing card underneath
+const THICK = 0.25; // straight foam wall, in piece widths
+// A soft round-over on every edge, top and bottom: taller than it is deep, so
+// it reads as rounded from above without opening wide grooves at the seams.
+const ROUND_H = 0.075;
+const ROUND_W = 0.035;
+const HEIGHT = THICK + 2 * ROUND_H;
+const CARD_T = 0.035; // the print wraps the top half of the round-over; foam shows the rest
+const BACK_T = 0.05; // backing card around the rounded bottom edge
 const LIFT = 0.42; // how high a held piece floats
 const HOVER = 0.025;
 const SNAP_R = 0.24; // how close counts as "it fits"
@@ -94,7 +97,7 @@ function gridFor(aspect) {
 }
 
 let print = printTexture(renderer, 1.5);
-let picture = PRESETS[0];
+let picture = null;
 let solvedAt = null; // performance.now() when the last piece went in
 const sparkles = createSparkles(scene);
 const topMat = printMaterial(print);
@@ -124,18 +127,18 @@ function buildPiece({ c, r, outline }) {
   let geo = new THREE.ExtrudeGeometry(shape, {
     depth: THICK,
     bevelEnabled: true,
-    bevelThickness: BEVEL,
-    bevelSize: BEVEL,
-    bevelOffset: -BEVEL,
-    bevelSegments: 5,
+    bevelThickness: ROUND_H,
+    bevelSize: ROUND_W,
+    bevelOffset: -ROUND_W,
+    bevelSegments: 8,
     UVGenerator: uvGen,
   });
-  geo.translate(-cx, -cy, BEVEL);
+  geo.translate(-cx, -cy, ROUND_H);
   geo.rotateX(-Math.PI / 2);
   // Smooth the curved walls but keep the cap edges crisp. The helper hashes
   // positions to 0.01, so run it at 100× to keep the bevel rings apart.
   geo.scale(100, 100, 100);
-  geo = toCreasedNormals(geo, THREE.MathUtils.degToRad(50));
+  geo = toCreasedNormals(geo, THREE.MathUtils.degToRad(40));
   geo.scale(0.01, 0.01, 0.01);
 
   // Where this piece was in the uncut foam slab, so pores line up at seams.
@@ -1001,20 +1004,26 @@ function setDone(done) {
 scatterButton.addEventListener('click', () => scatter(true));
 
 // Three pictures to choose from, each with a thumbnail painted from itself.
-PRESETS.forEach((pic, i) => {
+PRESETS.forEach((entry, i) => {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'preset';
   b.setAttribute('aria-pressed', 'false');
   const thumb = document.createElement('canvas');
-  thumb.width = Math.round(44 * pic.aspect) * 2;
   thumb.height = 88;
-  pic.draw(thumb.getContext('2d'), thumb.width, thumb.height, 0);
+  thumb.width = 132;
   const label = document.createElement('span');
-  label.textContent = pic.name;
+  label.textContent = entry.name;
   b.append(thumb, label);
-  b.addEventListener('click', () => {
-    if (picture === pic) return;
+  loadPreset(entry)
+    .then((pic) => {
+      thumb.width = Math.round(44 * pic.aspect) * 2;
+      pic.draw(thumb.getContext('2d'), thumb.width, thumb.height, 0);
+    })
+    .catch(() => b.remove());
+  b.addEventListener('click', async () => {
+    const pic = await loadPreset(entry).catch(() => null);
+    if (!pic || picture === pic) return;
     buildPuzzle(pic);
     markPreset(i);
   });
@@ -1034,8 +1043,16 @@ window.addEventListener('resize', resize);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 camera.aspect = window.innerWidth / window.innerHeight;
 camera.updateProjectionMatrix();
-buildPuzzle(PRESETS[0]);
-markPreset(0);
+// Start on the first preset; if its file can't load, the next one.
+(async () => {
+  for (let i = 0; i < PRESETS.length; i++) {
+    const pic = await loadPreset(PRESETS[i]).catch(() => null);
+    if (!pic) continue;
+    buildPuzzle(pic);
+    markPreset(i);
+    return;
+  }
+})();
 document.fonts?.ready.then(() => document.body.classList.add('ready'));
 setTimeout(() => document.body.classList.add('ready'), 400);
 
