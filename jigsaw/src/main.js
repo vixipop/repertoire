@@ -4,11 +4,10 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPuzzle } from './shape.js';
 import { foamMaterial, printMaterial } from './materials.js';
 import { printTexture, tableTexture, shadowTexture } from './textures.js';
-import { wakeAudio, soundLift, soundLand, soundSnap, soundDone } from './audio.js';
+import { wakeAudio, soundLift, soundLand, soundSnap, soundDone, startMusic, stopMusic } from './audio.js';
 
 // ─── Tunables ────────────────────────────────────────────────────────────
-const COLS = 6;
-const ROWS = 4;
+const PIECES = 24; // roughly; the grid follows the picture's shape
 const THICK = 0.34; // foam body, in piece widths
 const BEVEL = 0.009; // soft cut edge
 const HEIGHT = THICK + 2 * BEVEL;
@@ -19,7 +18,7 @@ const HOVER = 0.025;
 const SNAP_R = 0.24; // how close counts as "it fits"
 const MAGNET_R = 0.42; // where the pull starts while you're still holding it
 const GRAVITY = 26;
-const SPREAD = 3.3; // table area per piece when scattered, in piece widths²
+const SPREAD = 3.3; // table area per loose piece, in piece widths²
 const LIGHT = new THREE.Vector3(-2.4, 6, 2.2); // key light; shadows fall away from it
 const TABLE = { center: '#f3f2ee', edge: '#e2e0da' };
 
@@ -28,6 +27,7 @@ const canvas = document.getElementById('scene');
 const hint = document.getElementById('hint');
 const again = document.getElementById('again');
 const fileInput = document.getElementById('file');
+const musicButton = document.getElementById('music');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -44,15 +44,17 @@ renderer.setPixelRatio(dpr);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(TABLE.edge);
 
+// Soft, even light: a dim environment for gentle shading, a broad sky fill,
+// and one warm key for direction. Nothing strong enough to glint.
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.55;
+scene.environmentIntensity = 0.35;
 pmrem.dispose();
-
-const key = new THREE.DirectionalLight('#fff6ea', 2.1);
+scene.add(new THREE.HemisphereLight('#fbf8f2', '#d8d2c6', 0.7));
+const key = new THREE.DirectionalLight('#fff6ea', 1.7);
 key.position.copy(LIGHT);
 scene.add(key);
-const fill = new THREE.DirectionalLight('#dfe8ff', 0.5);
+const fill = new THREE.DirectionalLight('#dfe8ff', 0.35);
 fill.position.set(3, 2, 4);
 scene.add(fill);
 
@@ -66,25 +68,38 @@ const table = new THREE.Mesh(
 table.rotation.x = -Math.PI / 2;
 scene.add(table);
 
-// ─── Pieces ──────────────────────────────────────────────────────────────
-// Every piece is generated from its outline at load: no model files. The
-// whole puzzle shares two materials and one print texture.
-const print = printTexture(renderer, COLS / ROWS);
+// ─── The board ───────────────────────────────────────────────────────────
+// A picture decides the grid: about 24 pieces, as many columns and rows as
+// suit its shape, then each cell is stretched a little so the board matches
+// the picture exactly (real puzzle pieces aren't square either).
+const board = { cols: 6, rows: 4, cw: 1, ch: 1, w: 6, d: 4 };
+
+function gridFor(aspect) {
+  let best = null;
+  for (let rows = 2; rows <= 8; rows++) {
+    for (let cols = 2; cols <= 10; cols++) {
+      const n = cols * rows;
+      if (n < PIECES - 4 || n > PIECES + 4) continue;
+      const cost = Math.abs(Math.log(cols / rows / aspect)) * 4 + Math.abs(n - PIECES) / PIECES;
+      if (!best || cost < best.cost) best = { cols, rows, cost };
+    }
+  }
+  // Keep cells within 25% of square; a very wide picture gets cropped instead.
+  const stretch = THREE.MathUtils.clamp(aspect / (best.cols / best.rows), 0.8, 1.25);
+  const cw = Math.sqrt(stretch);
+  return { cols: best.cols, rows: best.rows, cw, ch: 1 / cw };
+}
+
+let print = printTexture(renderer, 1.5);
 const topMat = printMaterial(print);
-const sideMat = foamMaterial({
-  top: HEIGHT,
-  cardT: CARD_T,
-  backT: BACK_T,
-  print,
-  sheet: new THREE.Vector2(COLS, ROWS),
-  pad: 0,
-});
+const sideMat = foamMaterial({ top: HEIGHT, cardT: CARD_T, backT: BACK_T, print, sheet: new THREE.Vector2(6, 4), pad: 0 });
 const shadowTint = new THREE.Color('#2b2418');
-const shadowPlane = new THREE.PlaneGeometry(2.2, 2.2).rotateX(-Math.PI / 2);
+let shadowPlane = null;
+let shadowSize = 2.2;
 
 const uvGen = {
   generateTopUV(_g, v, a, b, c) {
-    return [a, b, c].map((i) => new THREE.Vector2(v[i * 3] / COLS, v[i * 3 + 1] / ROWS));
+    return [a, b, c].map((i) => new THREE.Vector2(v[i * 3] / board.w, v[i * 3 + 1] / board.d));
   },
   generateSideWallUV() {
     return [0, 0, 0, 0].map(() => new THREE.Vector2());
@@ -93,11 +108,12 @@ const uvGen = {
 
 // Where piece (c, r) sits in the finished puzzle, centred on the table.
 // Sheet y runs away from you.
-const layoutOf = (c, r) => new THREE.Vector3(c + 0.5 - COLS / 2, 0, -(r + 0.5 - ROWS / 2));
+const layoutOf = (c, r) =>
+  new THREE.Vector3((c + 0.5) * board.cw - board.w / 2, 0, -((r + 0.5) * board.ch - board.d / 2));
 
 function buildPiece({ c, r, outline }) {
-  const cx = c + 0.5;
-  const cy = r + 0.5;
+  const cx = (c + 0.5) * board.cw;
+  const cy = (r + 0.5) * board.ch;
   const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
   let geo = new THREE.ExtrudeGeometry(shape, {
     depth: THICK,
@@ -132,7 +148,7 @@ function buildPiece({ c, r, outline }) {
       shadowPlane,
       new THREE.MeshBasicMaterial({
         color: shadowTint,
-        alphaMap: shadowTexture(local, 2.2, blur),
+        alphaMap: shadowTexture(local, shadowSize, blur),
         transparent: true,
         depthWrite: false,
       })
@@ -159,8 +175,17 @@ function buildPiece({ c, r, outline }) {
   return piece;
 }
 
+function disposePiece(p) {
+  p.mesh.geometry.dispose();
+  for (const s of [p.soft, p.contact]) {
+    s.material.alphaMap.dispose();
+    s.material.dispose();
+  }
+}
+
 // A cluster is whatever moves together: one loose piece, or several that
-// have snapped. root slides on the table; body lifts and tilts.
+// have snapped. root slides on the table; body lifts and tilts. A cluster
+// seated in its true place on the board is locked until the next scatter.
 class Cluster {
   constructor(x, z) {
     this.root = new THREE.Group();
@@ -179,6 +204,7 @@ class Cluster {
     this.tiltV = new THREE.Vector2();
     this.held = false;
     this.snap = null;
+    this.locked = false;
     this.droppedAt = -1e9;
   }
   add(piece, offset) {
@@ -190,7 +216,8 @@ class Cluster {
     piece.mesh.position.copy(offset);
     this.foot = null;
   }
-  // The layout point that this cluster's origin stands for.
+  // The layout point that this cluster's origin stands for. When the
+  // cluster's position equals it, every piece is in its true place.
   ref() {
     const p = this.pieces[0];
     return p.layout.clone().sub(p.offset);
@@ -214,34 +241,41 @@ class Cluster {
   }
 }
 
-const pieces = cutPuzzle(COLS, ROWS, { seed: 11, outerTabs: false }).map(buildPiece);
-const byCell = new Map(pieces.map((p) => [`${p.c},${p.r}`, p]));
+let pieces = [];
+let meshes = [];
+let byCell = new Map();
 let clusters = [];
 let simTime = 0;
 
-// ─── Table, assembly area and camera ─────────────────────────────────────
-// The finished puzzle sits in a dotted area in the middle; loose pieces lie
-// in a ring around it. The table takes the screen's shape, then the camera
-// backs off until all of it is in frame.
-const ZONE = { w: COLS + 0.9, d: ROWS + 0.9 }; // dotted area, a little bigger than the puzzle
+// ─── The dotted area ─────────────────────────────────────────────────────
+// Where the finished puzzle goes, a little bigger than it. Loose pieces lie
+// in a ring around it.
+const ZONE_PAD = 0.45;
 const RING = 1.7; // loose pieces keep this far outside the dotted line
-const REACH = 0.7; // a piece's half-width including its knobs
-const area = { w: 8, d: 6 };
-const corner = new THREE.Vector3();
+const zone = { w: 0, d: 0, mesh: null };
+let reach = 0.7; // a piece's half-width including its knobs
 
-const zone = (() => {
+function buildZone() {
+  if (zone.mesh) {
+    scene.remove(zone.mesh);
+    zone.mesh.geometry.dispose();
+    zone.mesh.material.map.dispose();
+    zone.mesh.material.dispose();
+  }
+  zone.w = board.w + ZONE_PAD * 2;
+  zone.d = board.d + ZONE_PAD * 2;
   const ppu = 160;
-  const cv = document.createElement('canvas');
   const pad = 0.1;
-  cv.width = Math.round((ZONE.w + pad * 2) * ppu);
-  cv.height = Math.round((ZONE.d + pad * 2) * ppu);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round((zone.w + pad * 2) * ppu);
+  cv.height = Math.round((zone.d + pad * 2) * ppu);
   const ctx = cv.getContext('2d');
   // Dots walked along a rounded rectangle, evenly spaced, corners included.
   const r = 0.28;
   const x0 = pad;
   const z0 = pad;
-  const x1 = pad + ZONE.w;
-  const z1 = pad + ZONE.d;
+  const x1 = pad + zone.w;
+  const z1 = pad + zone.d;
   const path = [];
   const arc = (cx, cz, a0) => {
     for (let i = 0; i <= 12; i++) {
@@ -277,20 +311,62 @@ const zone = (() => {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(ZONE.w + pad * 2, ZONE.d + pad * 2).rotateX(-Math.PI / 2),
+  zone.mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(zone.w + pad * 2, zone.d + pad * 2).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false })
   );
-  mesh.position.y = 0.001;
-  scene.add(mesh);
-  return mesh;
-})();
+  zone.mesh.position.y = 0.001;
+  scene.add(zone.mesh);
+}
+
+// ─── Building a puzzle ───────────────────────────────────────────────────
+// Cuts a new puzzle for a picture of the given shape. `paint` draws the
+// picture onto the fresh print; the default is the painted lake.
+function buildPuzzle(aspect, paint) {
+  Object.assign(board, gridFor(aspect));
+  board.w = board.cols * board.cw;
+  board.d = board.rows * board.ch;
+  reach = 0.5 * Math.max(board.cw, board.ch) + 0.2;
+
+  clusters.forEach((cl) => cl.dispose());
+  clusters = [];
+  pieces.forEach(disposePiece);
+  shadowPlane?.dispose();
+  shadowSize = 2.2 * Math.max(board.cw, board.ch);
+  shadowPlane = new THREE.PlaneGeometry(shadowSize, shadowSize).rotateX(-Math.PI / 2);
+
+  const old = print;
+  print = printTexture(renderer, board.w / board.d);
+  if (paint) paint(print);
+  topMat.map = print;
+  sideMat.userData.uniforms.uPrint.value = print;
+  sideMat.userData.uniforms.uSheet.value.set(board.w, board.d);
+  old.dispose();
+
+  const cut = cutPuzzle(board.cols, board.rows, { seed: 11 + Math.floor(Math.random() * 1000), outerTabs: false });
+  pieces = cut.map(({ c, r, outline }) =>
+    buildPiece({ c, r, outline: outline.map(([x, y]) => [x * board.cw, y * board.ch]) })
+  );
+  meshes = pieces.map((p) => p.mesh);
+  byCell = new Map(pieces.map((p) => [`${p.c},${p.r}`, p]));
+  hint.textContent = `${pieces.length} pieces · build it inside the dots`;
+
+  buildZone();
+  fitCamera();
+  scatter();
+}
+
+// ─── Camera and what's on screen ─────────────────────────────────────────
+// The table takes the screen's shape, then the camera backs off until all of
+// it is in frame.
+const area = { w: 8, d: 6 };
+const corner = new THREE.Vector3();
 
 function fitCamera() {
-  const total = ZONE.w * ZONE.d + pieces.length * SPREAD;
+  const total = zone.w * zone.d + pieces.length * SPREAD;
   const a = THREE.MathUtils.clamp(camera.aspect * 1.05, 0.75, 2.2);
-  area.w = Math.max(Math.sqrt(total * a), ZONE.w + 2 * RING);
-  area.d = Math.max(total / area.w, ZONE.d + 2 * RING);
+  area.w = Math.max(Math.sqrt(total * a), zone.w + 2 * RING);
+  area.d = Math.max(total / area.w, zone.d + 2 * RING);
 
   const fits = (dist) => {
     camera.position.set(0, Math.sin(ELEV) * dist, Math.cos(ELEV) * dist);
@@ -298,7 +374,7 @@ function fitCamera() {
     camera.updateMatrixWorld();
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        corner.set(sx * area.w / 2, 0, sz * area.d / 2).project(camera);
+        corner.set((sx * area.w) / 2, 0, (sz * area.d) / 2).project(camera);
         if (Math.abs(corner.x) > 0.94 || corner.y > 0.86 || corner.y < -0.84) return false;
       }
     }
@@ -328,12 +404,10 @@ function planeAt(nx, ny, h) {
 }
 function trapezoid(h) {
   // A small margin, plus room for the words at top and bottom.
-  const mx = 0.97;
-  const top = 0.86;
-  const bottom = -0.86;
-  const far = planeAt(mx, top, h);
-  const near = planeAt(mx, bottom, h);
-  return { zFar: far.z, zNear: near.z, a: far.x - far.z * ((near.x - far.x) / (near.z - far.z)), b: (near.x - far.x) / (near.z - far.z) };
+  const far = planeAt(0.97, 0.86, h);
+  const near = planeAt(0.97, -0.86, h);
+  const b = (near.x - far.x) / (near.z - far.z);
+  return { zFar: far.z, zNear: near.z, a: far.x - far.z * b, b };
 }
 function measureView() {
   view.low = trapezoid(0);
@@ -344,10 +418,10 @@ function measureView() {
 function footprint(cl) {
   const f = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
   for (const p of cl.pieces) {
-    f.x0 = Math.min(f.x0, p.offset.x - REACH);
-    f.x1 = Math.max(f.x1, p.offset.x + REACH);
-    f.z0 = Math.min(f.z0, p.offset.z - REACH);
-    f.z1 = Math.max(f.z1, p.offset.z + REACH);
+    f.x0 = Math.min(f.x0, p.offset.x - reach);
+    f.x1 = Math.max(f.x1, p.offset.x + reach);
+    f.z0 = Math.min(f.z0, p.offset.z - reach);
+    f.z1 = Math.max(f.z1, p.offset.z + reach);
   }
   return f;
 }
@@ -371,13 +445,12 @@ function keepOnScreen(cl, v) {
 }
 
 function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  renderer.setSize(w, h, false);
-  camera.aspect = w / h;
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   fitCamera();
   clusters.forEach((cl) => {
+    if (cl.locked) return;
     keepOnScreen(cl, cl.target);
     keepOnScreen(cl, cl.pos);
   });
@@ -389,9 +462,9 @@ function resize() {
 // outside the ring, and fully on screen. Loosens the spacing if the screen
 // is tight rather than ever piling pieces up.
 function slots(n) {
-  const probe = { foot: { x0: -REACH, x1: REACH, z0: -REACH, z1: REACH } };
+  const probe = { foot: { x0: -reach, x1: reach, z0: -reach, z1: reach } };
   const v = new THREE.Vector2();
-  const outsideZone = (x, z) => Math.abs(x) > ZONE.w / 2 + RING * 0.75 || Math.abs(z) > ZONE.d / 2 + RING * 0.75;
+  const outsideZone = (x, z) => Math.abs(x) > zone.w / 2 + RING * 0.75 || Math.abs(z) > zone.d / 2 + RING * 0.75;
   let best = [];
   for (let gap = 1.6; gap >= 1.15; gap -= 0.05) {
     const out = [];
@@ -419,7 +492,9 @@ function slots(n) {
 
 function scatter(pop = false) {
   const spots = slots(pieces.length);
-  const from = pieces.map((p) => (p.cluster ? new THREE.Vector2(p.cluster.pos.x + p.offset.x, p.cluster.pos.y + p.offset.z) : null));
+  const from = pieces.map((p) =>
+    p.cluster && !p.cluster.dead ? new THREE.Vector2(p.cluster.pos.x + p.offset.x, p.cluster.pos.y + p.offset.z) : null
+  );
   clusters.forEach((cl) => cl.dispose());
   clusters = pieces.map((p, i) => {
     const [x, z] = spots[i];
@@ -429,11 +504,13 @@ function scatter(pop = false) {
       cl.liftV = 2.2 + Math.random() * 1.2;
       p.squashV = -2;
     }
+    p.kicks = [];
     cl.add(p, new THREE.Vector3());
     return cl;
   });
   held = null;
   hovered = null;
+  document.body.classList.remove('grabbing', 'can-grab');
   setDone(false);
   wake();
 }
@@ -446,9 +523,15 @@ const NEIGHBOURS = [
   [0, -1],
 ];
 
-// Nearest place this cluster would fit against any neighbour, measured from `at`.
-function findFit(cl, at) {
+// The nearest place this cluster would fit, measured from `at`: against a
+// neighbouring cluster, or in its own true place on the board.
+function findFit(cl, at, { board = true } = {}) {
+  const own = cl.ref();
   let best = null;
+  if (board) {
+    best = { board: true, other: null, want: new THREE.Vector2(own.x, own.z), mine: cl.pieces[0] };
+    best.dist = best.want.distanceTo(at);
+  }
   for (const p of cl.pieces) {
     for (const [dc, dr] of NEIGHBOURS) {
       const q = byCell.get(`${p.c + dc},${p.r + dr}`);
@@ -457,7 +540,7 @@ function findFit(cl, at) {
       const d = cl.ref().sub(other.ref());
       const want = new THREE.Vector2(other.pos.x + d.x, other.pos.y + d.z);
       const dist = want.distanceTo(at);
-      if (!best || dist < best.dist) best = { other, want, dist, mine: p, theirs: q };
+      if (!best || dist < best.dist) best = { board: false, other, want, dist, mine: p, theirs: q };
     }
   }
   return best;
@@ -472,26 +555,40 @@ function ripple(cl, origin, strength, speed, delay = 0) {
   }
 }
 
-function merge(from, into, at) {
+function absorb(from, into) {
   const ref = into.ref();
   for (const p of from.pieces) into.add(p, p.layout.clone().sub(ref));
   from.pieces = [];
   from.dead = true;
   from.dispose();
   clusters = clusters.filter((c) => c !== from);
+  into.locked = into.locked || from.locked;
   into.recenter();
-  const seam = at.offset.clone();
+}
+
+// A cluster has just come to rest in a fit: join it up, take in anything
+// that now lines up with it, and lock it if it sits in its true place.
+function seat(cl, fit) {
+  let into = cl;
+  if (!fit.board) {
+    // The still cluster absorbs the moving one, so the board doesn't jump.
+    into = fit.other;
+    absorb(cl, into);
+  }
+  for (;;) {
+    const more = findFit(into, into.pos, { board: false });
+    if (!more || more.dist > 0.03) break;
+    absorb(more.other, into);
+  }
+  const own = into.ref();
+  if (into.pos.distanceTo(tmp2.set(own.x, own.z)) < 0.03) into.locked = true;
+  const seam = fit.mine.offset.clone();
   ripple(into, seam, 3.2, 14);
   into.tiltV.set((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6);
-
-  // Seating one piece can line up another cluster that was already sitting
-  // in the right place: take those in too.
-  const more = findFit(into, into.pos);
-  if (more && more.dist < 0.03) {
-    merge(more.other, into, more.theirs);
-    return;
+  if (into.locked) {
+    into.liftTo = 0;
+    into.target.copy(into.pos);
   }
-
   soundSnap();
   navigator.vibrate?.(12);
   if (clusters.length === 1) {
@@ -511,7 +608,6 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const hit = new THREE.Vector3();
-const meshes = pieces.map((p) => p.mesh);
 
 function pointerNdc(e) {
   const r = canvas.getBoundingClientRect();
@@ -525,17 +621,22 @@ function onPlane(x, y, height) {
   return raycaster.ray.intersectPlane(plane, hit);
 }
 
+// The loose cluster under the pointer. Pieces locked into the board are
+// solid but can't be picked up, so a click on them does nothing.
 function pick(e) {
   const [x, y] = pointerNdc(e);
   ndc.set(x, y);
   raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects(meshes, false);
-  return hits.length ? hits[0].object.userData.piece.cluster : null;
+  if (!hits.length) return null;
+  const cl = hits[0].object.userData.piece.cluster;
+  return cl.locked ? null : cl;
 }
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (held) return;
   wakeAudio();
+  if (musicOn) startMusic();
+  if (held) return;
   const cl = pick(e);
   if (!cl) return;
   held = cl;
@@ -605,6 +706,15 @@ function spring(x, v, to, k, zeta, dt) {
 
 const tmp2 = new THREE.Vector2();
 
+function wantOf(cl, fit) {
+  if (fit.board) {
+    const own = cl.ref();
+    return fit.want.set(own.x, own.z);
+  }
+  const d = cl.ref().sub(fit.other.ref());
+  return fit.want.set(fit.other.pos.x + d.x, fit.other.pos.y + d.z);
+}
+
 function step(cl, dt) {
   // Slide.
   let to = cl.target;
@@ -616,9 +726,7 @@ function step(cl, dt) {
       to = keepOnScreen(cl, tmp2.copy(cl.target).lerp(fit.want, pull));
     }
   } else if (cl.snap) {
-    const d = cl.ref().sub(cl.snap.other.ref());
-    cl.snap.want.set(cl.snap.other.pos.x + d.x, cl.snap.other.pos.y + d.z);
-    to = cl.snap.want;
+    to = wantOf(cl, cl.snap);
     cl.target.copy(to);
   }
   const prevX = cl.pos.x;
@@ -638,7 +746,7 @@ function step(cl, dt) {
       cl.lift = cl.liftTo;
       if (impact > 0.5 && cl.liftTo === 0) {
         for (const p of cl.pieces) p.squashV -= impact * 0.9;
-        soundLand(impact / 6);
+        if (!cl.snap) soundLand(impact / 6);
       }
       cl.liftV = impact > 0.8 ? impact * 0.1 : 0; // foam barely bounces
     }
@@ -667,19 +775,18 @@ function step(cl, dt) {
   // Seat it.
   if (cl.snap && cl.lift === 0 && cl.pos.distanceTo(cl.snap.want) < 0.004) {
     cl.pos.copy(cl.snap.want);
-    const { other, mine } = cl.snap;
+    const fit = cl.snap;
     cl.snap = null;
-    // The still cluster absorbs the moving one, so the board doesn't jump.
-    merge(cl, other, mine);
+    seat(cl, fit);
   }
 }
 
 // A piece dropped on top of another slides off instead of clipping through.
 // Only freshly dropped clusters get pushed, so the cost stays tiny.
 function separate(dt) {
-  const MIN = 1.16;
+  const MIN = 1.16 * Math.sqrt(board.cw * board.ch);
   for (const mover of clusters) {
-    if (mover.held || mover.snap || mover.lift > 0.05 || simTime - mover.droppedAt > 1.2) continue;
+    if (mover.held || mover.snap || mover.locked || mover.lift > 0.05 || simTime - mover.droppedAt > 1.2) continue;
     for (const still of clusters) {
       if (still === mover || still.lift > 0.05 || still.snap) continue;
       for (const p of mover.pieces) {
@@ -806,23 +913,27 @@ function adapt(ms) {
 }
 
 // ─── Your own image (debug) ──────────────────────────────────────────────
+// A new picture cuts a new puzzle in its shape.
 async function useImage(file) {
   if (!file || !file.type.startsWith('image/')) return;
+  let img;
   try {
-    const img = await createImageBitmap(file);
-    print.userData.setImage(img);
-    img.close?.();
+    img = await createImageBitmap(file);
   } catch {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      print.userData.setImage(img);
-      URL.revokeObjectURL(url);
-      wake();
-    };
-    img.src = url;
+    img = await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const el = new Image();
+      el.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(el);
+      };
+      el.onerror = reject;
+      el.src = url;
+    }).catch(() => null);
   }
-  wake();
+  if (!img) return;
+  buildPuzzle(img.width / img.height, (tex) => tex.userData.setImage(img));
+  img.close?.();
 }
 fileInput.addEventListener('change', () => {
   useImage(fileInput.files[0]);
@@ -845,23 +956,60 @@ window.addEventListener('paste', (e) => {
   if (item) useImage(item.getAsFile());
 });
 
-// ─── Words ───────────────────────────────────────────────────────────────
+// ─── Music ───────────────────────────────────────────────────────────────
+// On by default, starting with the first touch (browsers won't play sound
+// before one). The choice is remembered on this device.
+let musicOn = true;
+try {
+  musicOn = localStorage.getItem('foam-music') !== 'off';
+} catch {}
+function showMusic() {
+  musicButton.textContent = musicOn ? 'music on' : 'music off';
+  musicButton.setAttribute('aria-pressed', String(musicOn));
+}
+function toggleMusic() {
+  musicOn = !musicOn;
+  try {
+    localStorage.setItem('foam-music', musicOn ? 'on' : 'off');
+  } catch {}
+  wakeAudio();
+  if (musicOn) startMusic();
+  else stopMusic();
+  showMusic();
+}
+musicButton.addEventListener('click', toggleMusic);
+showMusic();
+
+// ─── Words and keys ──────────────────────────────────────────────────────
 function setDone(done) {
   again.classList.toggle('shown', done);
 }
 again.addEventListener('click', () => scatter(true));
 window.addEventListener('keydown', (e) => {
-  if ((e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) scatter(true);
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'r' || e.key === 'R') scatter(true);
+  if (e.key === 'm' || e.key === 'M') toggleMusic();
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────
 window.addEventListener('resize', resize);
-resize();
-scatter();
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+buildPuzzle(1.5);
 document.fonts?.ready.then(() => document.body.classList.add('ready'));
 setTimeout(() => document.body.classList.add('ready'), 400);
 
 // ?debug exposes internals for scripted tests.
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__foam = { THREE, camera, pieces, LIFT, HEIGHT, clusters: () => clusters, stats: () => renderer.info.render, dpr: () => dpr };
+  window.__foam = {
+    THREE,
+    camera,
+    LIFT,
+    HEIGHT,
+    pieces: () => pieces,
+    clusters: () => clusters,
+    stats: () => renderer.info.render,
+    dpr: () => dpr,
+  };
 }

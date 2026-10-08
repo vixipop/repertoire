@@ -140,17 +140,18 @@ export function foamMaterial({ top, cardT, backT, print, sheet, pad }) {
         }`
       );
   };
+  mat.userData.uniforms = uniforms;
   mat.customProgramCacheKey = () => 'foam-v3';
   return mat;
 }
 
-// The laminated print: glossy on top, plain card underneath.
+// The print: matte card, soft like the foam under it. No clearcoat, high
+// roughness, so a tilted piece shades smoothly instead of glinting.
 export function printMaterial(map) {
-  const mat = new THREE.MeshPhysicalMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     map,
-    roughness: 0.42,
-    clearcoat: 0.8,
-    clearcoatRoughness: 0.22,
+    roughness: 0.86,
+    metalness: 0,
   });
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader

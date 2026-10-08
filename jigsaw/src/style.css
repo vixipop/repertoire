@@ -79,7 +79,7 @@ body.ready .hint { opacity: 1; transform: translate(-50%, 0); transition-delay: 
 @media (hover: none) { .again kbd { display: none; } }
 
 /* Debug: swap the print for your own image (also drag-and-drop or paste). */
-.upload {
+.upload, .music {
   position: fixed;
   top: max(16px, env(safe-area-inset-top));
   right: 16px;
@@ -89,7 +89,16 @@ body.ready .hint { opacity: 1; transform: translate(-50%, 0); transition-delay: 
   cursor: pointer;
   transition: color 200ms ease, background 200ms ease;
 }
-.upload:hover { color: var(--ink); background: rgba(0, 0, 0, 0.04); }
+.upload:hover, .music:hover { color: var(--ink); background: rgba(0, 0, 0, 0.04); }
+.music {
+  right: auto;
+  left: 16px;
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+.music:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
 #file:focus-visible + .upload, .upload:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
 
 body.dropping::after {
