@@ -76,7 +76,7 @@ uniform float uPitch;
 const float BASE = 1.5;
 const float TOP = 3.3;
 const float SIG = 20.0;
-const float FAR = 90.0;
+const float FAR = 260.0;
 
 // 3D value noise from a 2D table whose green channel is the red one shifted
 // a layer along z
@@ -151,7 +151,7 @@ void main() {
   vec3 sky = skyCol(rd);
   vec3 col = sky;
 
-  if (rd.y > 0.015) {
+  if (rd.y > 0.004) {
     float t0 = BASE / rd.y;
     float t1 = min(TOP / rd.y, FAR);
     if (t0 < FAR) {
@@ -198,7 +198,8 @@ void main() {
       }
       // the farther the cloud, the more it melts into the haze
       float far = firstHit < 0.0 ? t0 : firstHit;
-      float fog = 1.0 - exp(-far * 0.022);
+      // far clouds melt into the haze long before the march gives out
+      float fog = 1.0 - exp(-far * 0.024);
       vec3 haze = mix(sky, vec3(0.86, 0.91, 0.97), 0.4);
       col = sky * T + mix(acc, haze * (1.0 - T), fog);
     }
