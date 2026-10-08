@@ -138,6 +138,8 @@ export type PondController = {
   setHighQuality(width: number | null): void;
   /** What a plain tap or left click does: splash the water (default) or toss corn. */
   setTapMode(mode: "splash" | "feed"): void;
+  /** Tiger scene: how furry the coat looks and how soft the tiger is, each 0..1. */
+  setTigerStyle(style: Partial<{ fur: number; blur: number }>): void;
   /** Have a swan or two say something now (for previewing the lettering). */
   chatter(): void;
   destroy(): void;
@@ -1924,35 +1926,44 @@ export function startPond(
     lastTrail: number;
     prevP: number[];
     nextRing: number;
+    // lounging: mostly resting, now and then shifting with a slow step or two
+    shifting: boolean;
+    until: number;
+    aim: number;
   };
   const tigerLook = makeTigerLook();
+  const tigerStyle = { fur: 0.5, blur: 0 };
   const tigerLen = () => 2.4 * L;
   let tiger: Tiger | null = null;
-  // in from the top, wading slowly down the pond toward us
-  const spawnTiger = (first: boolean) => {
-    const len = tigerLen();
+  // settled in the middle of the pond, lying low in the water, at an angle
+  const spawnTiger = () => {
     tiger = {
-      x: W * (first ? 0.6 : rand(0.45, 0.66)),
-      y: first ? H * 0.12 - 0.62 * len : -0.75 * len,
-      h: Math.PI / 2 + (first ? 0.1 : rand(-0.08, 0.16)),
-      v: 0.19 * len * motion,
-      phase: 0,
+      x: W * 0.52,
+      y: H * 0.5,
+      h: Math.PI / 2 + 0.55,
+      v: 0,
+      phase: 0.1,
       bend: 0,
       turn: 0,
       trail: [],
       lastTrail: -1,
-      prevP: [0, 0, 0, 0],
-      nextRing: 0.6,
+      prevP: [0.1, 0.35, 0.6, 0.85],
+      nextRing: 0.8,
+      shifting: false,
+      until: clock + rand(5, 8),
+      aim: Math.PI / 2 + 0.55,
     };
   };
-  if (scene === "tiger") spawnTiger(true);
+  if (scene === "tiger") spawnTiger();
   const tigerPose = (t: Tiger): TigerPose => {
     const rot = t.h;
     return {
       phase: t.phase,
       curve: t.bend,
-      headTurn: Math.sin(clock * 0.29) * 0.12 + Math.sin(clock * 0.11 + 2) * 0.08,
+      // idly looking about
+      headTurn: Math.sin(clock * 0.21) * 0.16 + Math.sin(clock * 0.13 + 2) * 0.1 + Math.sin(clock * 0.47 + 1) * 0.04,
       time: clock,
+      fur: tigerStyle.fur,
       lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
       ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
     };
@@ -1961,19 +1972,31 @@ export function startPond(
     const t = tiger;
     if (!t) return;
     const len = tigerLen();
-    // a slow, sinuous path toward the lower middle: it weaves a little as it comes
-    const want = Math.atan2(H + len - t.y, W * 0.48 - t.x) + Math.sin(clock * 0.42 + 0.6) * 0.22;
-    const turn = clamp(wrapAngle(want - t.h), -0.6, 0.6) * 0.22;
-    t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.9));
+    // mostly it rests; every so often it shifts its weight, a slow step or two
+    // and a new angle, never far from its spot in the middle of the pond
+    if (clock >= t.until) {
+      t.shifting = !t.shifting;
+      if (t.shifting) {
+        const home = Math.atan2(H * 0.5 - t.y, W * 0.52 - t.x);
+        const far = Math.hypot(H * 0.5 - t.y, W * 0.52 - t.x) / len;
+        // drift back toward the middle if it has wandered; otherwise just turn a little
+        t.aim = far > 0.35 ? home : Math.PI / 2 + 0.55 + rand(-0.6, 0.6);
+        t.until = clock + rand(2.4, 4);
+      } else {
+        t.until = clock + rand(6, 11);
+      }
+    }
+    const vWant = t.shifting ? 0.075 * len * motion : 0;
+    t.v += (vWant - t.v) * (1 - Math.exp(-dt * 0.9));
+    const turn = t.shifting ? clamp(wrapAngle(t.aim - t.h), -0.5, 0.5) * 0.35 : 0;
+    t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.8));
     t.h += t.turn * dt;
-    // a soft surge with each footfall
-    const v = t.v * (1 + 0.07 * Math.sin(t.phase * Math.PI * 4 - 0.6));
-    t.x += Math.cos(t.h) * v * dt;
-    t.y += Math.sin(t.h) * v * dt;
-    t.phase = (t.phase + (v * dt) / (STRIDE * len)) % 1;
-    // the body arcs into the turn, easing in and out
-    const arc = clamp(t.turn * 4.5, -0.6, 0.6);
-    t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 1.5));
+    t.x += Math.cos(t.h) * t.v * dt;
+    t.y += Math.sin(t.h) * t.v * dt;
+    t.phase = (t.phase + (t.v * dt) / (STRIDE * len)) % 1;
+    // a lazy curve to the body that drifts as it settles, and leans into a turn
+    const arc = clamp(Math.sin(clock * 0.09 + 1) * 0.22 + Math.sin(clock * 0.05) * 0.12 + t.turn * 3, -0.6, 0.6);
+    t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 0.8));
     if (clock - t.lastTrail > 0.09) {
       t.trail.push({ x: t.x, y: t.y, h: t.h, v: t.v, t: clock });
       t.lastTrail = clock;
@@ -1990,13 +2013,12 @@ export function startPond(
       else if (prev < STANCE && f.p >= STANCE) addRipple(wx, wy, 0.35);
       t.prevP[i] = f.p;
     });
-    // and slow rings spread from where its chest meets the water
+    // and soft rings spread from where its chest meets the water as it breathes
     t.nextRing -= dt;
     if (t.nextRing <= 0) {
-      addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, 1.8);
-      t.nextRing = rand(1.2, 1.8);
+      addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, t.shifting ? 1.4 : 0.9);
+      t.nextRing = t.shifting ? rand(1, 1.6) : rand(2.4, 4);
     }
-    if (t.y - len > H + 0.2 * len) spawnTiger(false);
   };
   /* ---------- lily pads (tiger scene) ---------- */
 
@@ -2009,8 +2031,8 @@ export function startPond(
       const x = r() * W;
       const y = r() * H;
       if (pads.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + pr + 6 * scale)) continue;
-      // keep the very middle of the tiger's way mostly open
-      if (Math.abs(x - W * 0.55) < W * 0.08 && r() < 0.7) continue;
+      // leave room around where the tiger lies
+      if (Math.hypot(x - W * 0.52, y - H * 0.5) < tigerLen() * 0.75 + pr) continue;
       pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
     }
   }
@@ -2134,6 +2156,8 @@ export function startPond(
   // surface can be thinned out without touching the pads and petals beneath
   const tigerLayer = document.createElement("canvas");
   const tlctx = tigerLayer.getContext("2d")!;
+  const tigerSoft = document.createElement("canvas");
+  const tsctx = tigerSoft.getContext("2d")!;
   const drawTiger = (c: CanvasRenderingContext2D, t: Tiger) => {
     const len = tigerLen();
     if (tigerLayer.width !== paint.width || tigerLayer.height !== paint.height) {
@@ -2148,7 +2172,23 @@ export function startPond(
     tlctx.rotate(t.h);
     tlctx.scale(len, len);
     paintTiger(tlctx, tigerLook, tigerPose(t));
-    c.drawImage(tigerLayer, 0, 0, W, H);
+    if (tigerStyle.blur > 0.01) {
+      // soften: shrink the layer and let it be smoothed back up
+      const f = 1 / (1 + tigerStyle.blur * 5);
+      const bw = Math.max(1, Math.round(tigerLayer.width * f));
+      const bh = Math.max(1, Math.round(tigerLayer.height * f));
+      if (tigerSoft.width !== bw || tigerSoft.height !== bh) {
+        tigerSoft.width = bw;
+        tigerSoft.height = bh;
+      }
+      tsctx.clearRect(0, 0, bw, bh);
+      tsctx.imageSmoothingQuality = "high";
+      tsctx.drawImage(tigerLayer, 0, 0, bw, bh);
+      c.imageSmoothingQuality = "high";
+      c.drawImage(tigerSoft, 0, 0, W, H);
+    } else {
+      c.drawImage(tigerLayer, 0, 0, W, H);
+    }
   };
   for (const s of swans) pickWaypoint(s);
 
@@ -3337,6 +3377,10 @@ export function startPond(
     onFrame(cb) {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
+    },
+    setTigerStyle(style) {
+      if (typeof style.fur === "number") tigerStyle.fur = clamp(style.fur, 0, 1);
+      if (typeof style.blur === "number") tigerStyle.blur = clamp(style.blur, 0, 1);
     },
     setTapMode(mode) {
       tapFeeds = mode === "feed";

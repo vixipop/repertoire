@@ -754,8 +754,8 @@ function makeTigerLook(seed = 11) {
         }
     }
     const flecks = [];
-    for (let i = 0; i < 140; i++) {
-        flecks.push({ u: -0.52 + r() * 0.9, v: (r() - 0.5) * 0.26, len: 0.015 + r() * 0.025, light: r() < 0.5 });
+    for (let i = 0; i < 700; i++) {
+        flecks.push({ u: -0.52 + r() * 0.9, v: (r() - 0.5) * 0.26, len: 0.012 + r() * 0.022, light: r() < 0.5 });
     }
     return { stripes, flecks };
 }
@@ -831,7 +831,9 @@ function makeSpine(pose) {
     const width = (u, side) => {
         const front = side < 0 ? load(pose.phase, 0.25) : load(pose.phase, 0.75);
         const hind = side < 0 ? load(pose.phase, 0) : load(pose.phase, 0.5);
-        return (baseWidth(u) +
+        // slow breathing swells the ribcage
+        const breath = 1 + 0.016 * Math.sin(pose.time * 1.4) * Math.exp(-(u * u) / 0.06);
+        return (baseWidth(u) * breath +
             Math.exp(-((u - 0.17) ** 2) / 0.0035) * (front - 0.5) * 0.018 +
             Math.exp(-((u + 0.36) ** 2) / 0.005) * (hind - 0.5) * 0.016);
     };
@@ -940,8 +942,12 @@ function paintTiger(ctx, look, pose) {
             const s = i / TN;
             tailPts.push([x, y]);
             tailNrm.push([-Math.sin(a), Math.cos(a)]);
-            // swings with the stride, plus a slow sway of its own (on continuous time, so it never jumps)
-            a += (Math.sin(ph - 1.1 - s * 3.2) * 0.11 + Math.sin(pose.time * 0.7 + 2 - s * 1.5) * 0.035 + 0.035 * s) * (0.5 + s);
+            // a lazy, wandering sway of its own: slow motions at unrelated speeds,
+            // travelling down the tail, so it never settles into one repeating
+            // loop; only a light echo of the stride
+            const t = pose.time - s * 1.4;
+            const wander = 0.6 * Math.sin(t * 0.53 + 1.3) + 0.45 * Math.sin(t * 0.97 + 4.1) + 0.3 * Math.sin(t * 1.71 + 2.2) + 0.35 * Math.sin(t * 0.29 + 0.4);
+            a += (wander * 0.075 + Math.sin(ph - 1.1 - s * 3.2) * 0.03 + 0.03 * s) * (0.5 + s);
             x += Math.cos(a) * (len / TN);
             y += Math.sin(a) * (len / TN);
         }
@@ -1017,20 +1023,43 @@ function paintTiger(ctx, look, pose) {
         line([[0.49, s * 0.13], [0.5, s * 0.152], [0.49, s * 0.168]], 0.008, tcss(INK, 0.85));
         line([[0.53, s * 0.13], [0.54, s * 0.15], [0.532, s * 0.164]], 0.007, tcss(INK, 0.85));
     }
-    /* ---- ears: rounded, black-backed, set at the back corners of the skull ---- */
+    /* ---- ears: soft and rounded, like a big cat's, standing out at the sides ---- */
     for (const s of [-1, 1]) {
-        const ear = [
-            [0.458, 0.108],
-            [0.452, 0.152],
-            [0.43, 0.174],
-            [0.404, 0.162],
-            [0.396, 0.112],
-        ].map(([u, v]) => sp.at(u, s * v));
-        ctx.fillStyle = tcss(INK, 0.95);
-        polygon(ctx, ear);
+        const P = (u, v) => sp.at(u, s * v);
+        const [b1x, b1y] = P(0.472, 0.108);
+        const [c1x, c1y] = P(0.468, 0.16);
+        const [tx, ty] = P(0.44, 0.176);
+        const [c2x, c2y] = P(0.41, 0.164);
+        const [b2x, b2y] = P(0.402, 0.106);
+        ctx.fillStyle = tcss(FUR);
+        ctx.beginPath();
+        ctx.moveTo(b1x, b1y);
+        ctx.quadraticCurveTo(c1x, c1y, tx, ty);
+        ctx.quadraticCurveTo(c2x, c2y, b2x, b2y);
+        ctx.closePath();
         ctx.fill();
-        // the pale spot on the back of a tiger's ear
-        blob(0.428, s * 0.15, 0.011, 0.008, tcss(CREAM, 0.9));
+        // a soft, slightly darker rim toward the tip
+        ctx.strokeStyle = tcss(FUR_DEEP, 0.55);
+        ctx.lineWidth = 0.007;
+        ctx.beginPath();
+        const [r1x, r1y] = P(0.463, 0.15);
+        const [r2x, r2y] = P(0.418, 0.152);
+        ctx.moveTo(r1x, r1y);
+        ctx.quadraticCurveTo(tx, ty, r2x, r2y);
+        ctx.stroke();
+        // the fluffy pale inside
+        const [i1x, i1y] = P(0.458, 0.114);
+        const [ic1x, ic1y] = P(0.455, 0.15);
+        const [itx, ity] = P(0.44, 0.16);
+        const [ic2x, ic2y] = P(0.423, 0.15);
+        const [i2x, i2y] = P(0.418, 0.112);
+        ctx.fillStyle = "rgba(246,218,204,0.92)";
+        ctx.beginPath();
+        ctx.moveTo(i1x, i1y);
+        ctx.quadraticCurveTo(ic1x, ic1y, itx, ity);
+        ctx.quadraticCurveTo(ic2x, ic2y, i2x, i2y);
+        ctx.closePath();
+        ctx.fill();
     }
     /* ---- body and head, one silhouette ---- */
     const full = pathOf(strip(k(1), k(1)));
@@ -1064,12 +1093,14 @@ function paintTiger(ctx, look, pose) {
     // the spine: a darker seam where the stripes meet
     ctx.fillStyle = tcss(FUR_DEEP, 0.3);
     ctx.fill(pathOf(strip(k(0.07), k(0.07), U0 + 0.02, 0.42)));
-    // fur, lying back along the body
-    ctx.lineWidth = 0.006;
+    // fur, lying back along the body: more strokes, and longer, the furrier the coat
+    const furN = Math.round(look.flecks.length * pose.fur);
+    ctx.lineWidth = 0.0045 + 0.002 * pose.fur;
     for (const light of [true, false]) {
-        ctx.strokeStyle = light ? tcss(FUR_HI, 0.3) : tcss(FUR_DEEP, 0.2);
+        ctx.strokeStyle = light ? tcss(FUR_HI, 0.32) : tcss(FUR_DEEP, 0.24);
         ctx.beginPath();
-        for (const f of look.flecks) {
+        for (let i = 0; i < furN; i++) {
+            const f = look.flecks[i];
             if (f.light !== light || f.u > 0.38)
                 continue;
             const side = Math.sign(f.v) || 1;
@@ -1079,7 +1110,7 @@ function paintTiger(ctx, look, pose) {
             const w = sp.width(f.u, side);
             const v = side * w * Math.sin(frac * Math.PI * 0.5);
             const a = sp.at(f.u, v);
-            const b = sp.at(f.u - f.len, v * 1.03);
+            const b = sp.at(f.u - f.len * (0.6 + pose.fur), v * 1.03);
             ctx.moveTo(a[0], a[1]);
             ctx.lineTo(b[0], b[1]);
         }
@@ -1149,10 +1180,6 @@ function paintTiger(ctx, look, pose) {
         line([[0.596, s * 0.063], [0.584, s * 0.071]], 0.0035, "rgba(224,172,62,0.95)");
         // and the dark line running back from it across the cheek
         line([[0.572, s * 0.08], [0.545, s * 0.093], [0.515, s * 0.1]], 0.006, tcss(INK, 0.9));
-        // white whisker pads either side of the muzzle, and whiskers
-        blob(0.636, s * 0.034, 0.028, 0.02, tcss(CREAM, 0.95));
-        for (let i = 0; i < 4; i++)
-            line([[0.644, s * (0.044 + i * 0.003)], [0.625, s * (0.085 + i * 0.012)], [0.6 - i * 0.012, s * (0.12 + i * 0.016)]], 0.0022, "rgba(250,248,240,0.55)");
     }
     // the nose leather at the very tip
     {
@@ -1167,6 +1194,29 @@ function paintTiger(ctx, look, pose) {
         ctx.fill();
     }
     ctx.restore();
+    /* ---- soft fur breaking the edge of the silhouette ---- */
+    if (pose.fur > 0.02) {
+        const len = 0.022 * pose.fur;
+        ctx.lineWidth = 0.004;
+        for (const light of [false, true]) {
+            ctx.strokeStyle = light ? tcss(FUR_HI, 0.55 * pose.fur) : tcss(FUR, 0.7 * pose.fur);
+            ctx.beginPath();
+            for (const side of [-1, 1]) {
+                for (let u = U0 + 0.03; u < UN - 0.03; u += 0.0045) {
+                    const h = Math.sin(u * 912.7 + side * 37.1) * 43758.5453;
+                    const rnd = h - Math.floor(h);
+                    if (light !== rnd > 0.6)
+                        continue;
+                    const w = sp.width(u, side);
+                    const a = sp.at(u, side * w * 0.9);
+                    const b = sp.at(u - len * (0.5 + rnd), side * (w + len * (0.4 + rnd * 0.8)));
+                    ctx.moveTo(a[0], a[1]);
+                    ctx.lineTo(b[0], b[1]);
+                }
+            }
+            ctx.stroke();
+        }
+    }
     /* ---- where the body goes into the water ---- */
     // the flanks are thinned out of the layer so the pond shows through, more
     // the deeper they go; it eases off toward the neck, which rides above
@@ -2924,34 +2974,39 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
     for (let i = 0; i < (scene === "swans" ? SWAN_COUNT : 0); i++)
         swans.push(makeSwan(i));
     const tigerLook = makeTigerLook();
+    const tigerStyle = { fur: 0.5, blur: 0 };
     const tigerLen = () => 2.4 * L;
     let tiger = null;
-    // in from the top, wading slowly down the pond toward us
-    const spawnTiger = (first) => {
-        const len = tigerLen();
+    // settled in the middle of the pond, lying low in the water, at an angle
+    const spawnTiger = () => {
         tiger = {
-            x: W * (first ? 0.6 : rand(0.45, 0.66)),
-            y: first ? H * 0.12 - 0.62 * len : -0.75 * len,
-            h: Math.PI / 2 + (first ? 0.1 : rand(-0.08, 0.16)),
-            v: 0.19 * len * motion,
-            phase: 0,
+            x: W * 0.52,
+            y: H * 0.5,
+            h: Math.PI / 2 + 0.55,
+            v: 0,
+            phase: 0.1,
             bend: 0,
             turn: 0,
             trail: [],
             lastTrail: -1,
-            prevP: [0, 0, 0, 0],
-            nextRing: 0.6,
+            prevP: [0.1, 0.35, 0.6, 0.85],
+            nextRing: 0.8,
+            shifting: false,
+            until: clock + rand(5, 8),
+            aim: Math.PI / 2 + 0.55,
         };
     };
     if (scene === "tiger")
-        spawnTiger(true);
+        spawnTiger();
     const tigerPose = (t) => {
         const rot = t.h;
         return {
             phase: t.phase,
             curve: t.bend,
-            headTurn: Math.sin(clock * 0.29) * 0.12 + Math.sin(clock * 0.11 + 2) * 0.08,
+            // idly looking about
+            headTurn: Math.sin(clock * 0.21) * 0.16 + Math.sin(clock * 0.13 + 2) * 0.1 + Math.sin(clock * 0.47 + 1) * 0.04,
             time: clock,
+            fur: tigerStyle.fur,
             lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
             ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
         };
@@ -2961,19 +3016,32 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
         if (!t)
             return;
         const len = tigerLen();
-        // a slow, sinuous path toward the lower middle: it weaves a little as it comes
-        const want = Math.atan2(H + len - t.y, W * 0.48 - t.x) + Math.sin(clock * 0.42 + 0.6) * 0.22;
-        const turn = clamp(wrapAngle(want - t.h), -0.6, 0.6) * 0.22;
-        t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.9));
+        // mostly it rests; every so often it shifts its weight, a slow step or two
+        // and a new angle, never far from its spot in the middle of the pond
+        if (clock >= t.until) {
+            t.shifting = !t.shifting;
+            if (t.shifting) {
+                const home = Math.atan2(H * 0.5 - t.y, W * 0.52 - t.x);
+                const far = Math.hypot(H * 0.5 - t.y, W * 0.52 - t.x) / len;
+                // drift back toward the middle if it has wandered; otherwise just turn a little
+                t.aim = far > 0.35 ? home : Math.PI / 2 + 0.55 + rand(-0.6, 0.6);
+                t.until = clock + rand(2.4, 4);
+            }
+            else {
+                t.until = clock + rand(6, 11);
+            }
+        }
+        const vWant = t.shifting ? 0.075 * len * motion : 0;
+        t.v += (vWant - t.v) * (1 - Math.exp(-dt * 0.9));
+        const turn = t.shifting ? clamp(wrapAngle(t.aim - t.h), -0.5, 0.5) * 0.35 : 0;
+        t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.8));
         t.h += t.turn * dt;
-        // a soft surge with each footfall
-        const v = t.v * (1 + 0.07 * Math.sin(t.phase * Math.PI * 4 - 0.6));
-        t.x += Math.cos(t.h) * v * dt;
-        t.y += Math.sin(t.h) * v * dt;
-        t.phase = (t.phase + (v * dt) / (STRIDE * len)) % 1;
-        // the body arcs into the turn, easing in and out
-        const arc = clamp(t.turn * 4.5, -0.6, 0.6);
-        t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 1.5));
+        t.x += Math.cos(t.h) * t.v * dt;
+        t.y += Math.sin(t.h) * t.v * dt;
+        t.phase = (t.phase + (t.v * dt) / (STRIDE * len)) % 1;
+        // a lazy curve to the body that drifts as it settles, and leans into a turn
+        const arc = clamp(Math.sin(clock * 0.09 + 1) * 0.22 + Math.sin(clock * 0.05) * 0.12 + t.turn * 3, -0.6, 0.6);
+        t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 0.8));
         if (clock - t.lastTrail > 0.09) {
             t.trail.push({ x: t.x, y: t.y, h: t.h, v: t.v, t: clock });
             t.lastTrail = clock;
@@ -2993,14 +3061,12 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
                 addRipple(wx, wy, 0.35);
             t.prevP[i] = f.p;
         });
-        // and slow rings spread from where its chest meets the water
+        // and soft rings spread from where its chest meets the water as it breathes
         t.nextRing -= dt;
         if (t.nextRing <= 0) {
-            addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, 1.8);
-            t.nextRing = rand(1.2, 1.8);
+            addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, t.shifting ? 1.4 : 0.9);
+            t.nextRing = t.shifting ? rand(1, 1.6) : rand(2.4, 4);
         }
-        if (t.y - len > H + 0.2 * len)
-            spawnTiger(false);
     };
     const pads = [];
     if (sakura) {
@@ -3011,8 +3077,8 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
             const y = r() * H;
             if (pads.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + pr + 6 * scale))
                 continue;
-            // keep the very middle of the tiger's way mostly open
-            if (Math.abs(x - W * 0.55) < W * 0.08 && r() < 0.7)
+            // leave room around where the tiger lies
+            if (Math.hypot(x - W * 0.52, y - H * 0.5) < tigerLen() * 0.75 + pr)
                 continue;
             pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
         }
@@ -3137,6 +3203,8 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
     // surface can be thinned out without touching the pads and petals beneath
     const tigerLayer = document.createElement("canvas");
     const tlctx = tigerLayer.getContext("2d");
+    const tigerSoft = document.createElement("canvas");
+    const tsctx = tigerSoft.getContext("2d");
     const drawTiger = (c, t) => {
         const len = tigerLen();
         if (tigerLayer.width !== paint.width || tigerLayer.height !== paint.height) {
@@ -3151,7 +3219,24 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
         tlctx.rotate(t.h);
         tlctx.scale(len, len);
         paintTiger(tlctx, tigerLook, tigerPose(t));
-        c.drawImage(tigerLayer, 0, 0, W, H);
+        if (tigerStyle.blur > 0.01) {
+            // soften: shrink the layer and let it be smoothed back up
+            const f = 1 / (1 + tigerStyle.blur * 5);
+            const bw = Math.max(1, Math.round(tigerLayer.width * f));
+            const bh = Math.max(1, Math.round(tigerLayer.height * f));
+            if (tigerSoft.width !== bw || tigerSoft.height !== bh) {
+                tigerSoft.width = bw;
+                tigerSoft.height = bh;
+            }
+            tsctx.clearRect(0, 0, bw, bh);
+            tsctx.imageSmoothingQuality = "high";
+            tsctx.drawImage(tigerLayer, 0, 0, bw, bh);
+            c.imageSmoothingQuality = "high";
+            c.drawImage(tigerSoft, 0, 0, W, H);
+        }
+        else {
+            c.drawImage(tigerLayer, 0, 0, W, H);
+        }
     };
     for (const s of swans)
         pickWaypoint(s);
@@ -4327,6 +4412,12 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
         onFrame(cb) {
             frameListeners.add(cb);
             return () => frameListeners.delete(cb);
+        },
+        setTigerStyle(style) {
+            if (typeof style.fur === "number")
+                tigerStyle.fur = clamp(style.fur, 0, 1);
+            if (typeof style.blur === "number")
+                tigerStyle.blur = clamp(style.blur, 0, 1);
         },
         setTapMode(mode) {
             tapFeeds = mode === "feed";

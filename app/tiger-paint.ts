@@ -35,6 +35,8 @@ export type TigerPose = {
   headTurn: number;
   /** seconds, running continuously (for slow motions not tied to the stride) */
   time: number;
+  /** how furry the coat looks, 0..1: hair strokes over it and soft fur at the edges */
+  fur: number;
   /** light direction in the tiger's own frame */
   lx: number;
   ly: number;
@@ -85,8 +87,8 @@ export function makeTigerLook(seed = 11): TigerLook {
     }
   }
   const flecks: Fleck[] = [];
-  for (let i = 0; i < 140; i++) {
-    flecks.push({ u: -0.52 + r() * 0.9, v: (r() - 0.5) * 0.26, len: 0.015 + r() * 0.025, light: r() < 0.5 });
+  for (let i = 0; i < 700; i++) {
+    flecks.push({ u: -0.52 + r() * 0.9, v: (r() - 0.5) * 0.26, len: 0.012 + r() * 0.022, light: r() < 0.5 });
   }
   return { stripes, flecks };
 }
@@ -167,8 +169,10 @@ function makeSpine(pose: TigerPose) {
   const width = (u: number, side: number) => {
     const front = side < 0 ? load(pose.phase, 0.25) : load(pose.phase, 0.75);
     const hind = side < 0 ? load(pose.phase, 0) : load(pose.phase, 0.5);
+    // slow breathing swells the ribcage
+    const breath = 1 + 0.016 * Math.sin(pose.time * 1.4) * Math.exp(-(u * u) / 0.06);
     return (
-      baseWidth(u) +
+      baseWidth(u) * breath +
       Math.exp(-((u - 0.17) ** 2) / 0.0035) * (front - 0.5) * 0.018 +
       Math.exp(-((u + 0.36) ** 2) / 0.005) * (hind - 0.5) * 0.016
     );
@@ -284,8 +288,12 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
       const s = i / TN;
       tailPts.push([x, y]);
       tailNrm.push([-Math.sin(a), Math.cos(a)]);
-      // swings with the stride, plus a slow sway of its own (on continuous time, so it never jumps)
-      a += (Math.sin(ph - 1.1 - s * 3.2) * 0.11 + Math.sin(pose.time * 0.7 + 2 - s * 1.5) * 0.035 + 0.035 * s) * (0.5 + s);
+      // a lazy, wandering sway of its own: slow motions at unrelated speeds,
+      // travelling down the tail, so it never settles into one repeating
+      // loop; only a light echo of the stride
+      const t = pose.time - s * 1.4;
+      const wander = 0.6 * Math.sin(t * 0.53 + 1.3) + 0.45 * Math.sin(t * 0.97 + 4.1) + 0.3 * Math.sin(t * 1.71 + 2.2) + 0.35 * Math.sin(t * 0.29 + 0.4);
+      a += (wander * 0.075 + Math.sin(ph - 1.1 - s * 3.2) * 0.03 + 0.03 * s) * (0.5 + s);
       x += Math.cos(a) * (len / TN);
       y += Math.sin(a) * (len / TN);
     }
@@ -363,22 +371,43 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
     line([[0.53, s * 0.13], [0.54, s * 0.15], [0.532, s * 0.164]], 0.007, tcss(INK, 0.85));
   }
 
-  /* ---- ears: rounded, black-backed, set at the back corners of the skull ---- */
+  /* ---- ears: soft and rounded, like a big cat's, standing out at the sides ---- */
   for (const s of [-1, 1]) {
-    const ear: Pt[] = (
-      [
-        [0.458, 0.108],
-        [0.452, 0.152],
-        [0.43, 0.174],
-        [0.404, 0.162],
-        [0.396, 0.112],
-      ] as Pt[]
-    ).map(([u, v]) => sp.at(u, s * v));
-    ctx.fillStyle = tcss(INK, 0.95);
-    polygon(ctx, ear);
+    const P = (u: number, v: number) => sp.at(u, s * v);
+    const [b1x, b1y] = P(0.472, 0.108);
+    const [c1x, c1y] = P(0.468, 0.16);
+    const [tx, ty] = P(0.44, 0.176);
+    const [c2x, c2y] = P(0.41, 0.164);
+    const [b2x, b2y] = P(0.402, 0.106);
+    ctx.fillStyle = tcss(FUR);
+    ctx.beginPath();
+    ctx.moveTo(b1x, b1y);
+    ctx.quadraticCurveTo(c1x, c1y, tx, ty);
+    ctx.quadraticCurveTo(c2x, c2y, b2x, b2y);
+    ctx.closePath();
     ctx.fill();
-    // the pale spot on the back of a tiger's ear
-    blob(0.428, s * 0.15, 0.011, 0.008, tcss(CREAM, 0.9));
+    // a soft, slightly darker rim toward the tip
+    ctx.strokeStyle = tcss(FUR_DEEP, 0.55);
+    ctx.lineWidth = 0.007;
+    ctx.beginPath();
+    const [r1x, r1y] = P(0.463, 0.15);
+    const [r2x, r2y] = P(0.418, 0.152);
+    ctx.moveTo(r1x, r1y);
+    ctx.quadraticCurveTo(tx, ty, r2x, r2y);
+    ctx.stroke();
+    // the fluffy pale inside
+    const [i1x, i1y] = P(0.458, 0.114);
+    const [ic1x, ic1y] = P(0.455, 0.15);
+    const [itx, ity] = P(0.44, 0.16);
+    const [ic2x, ic2y] = P(0.423, 0.15);
+    const [i2x, i2y] = P(0.418, 0.112);
+    ctx.fillStyle = "rgba(246,218,204,0.92)";
+    ctx.beginPath();
+    ctx.moveTo(i1x, i1y);
+    ctx.quadraticCurveTo(ic1x, ic1y, itx, ity);
+    ctx.quadraticCurveTo(ic2x, ic2y, i2x, i2y);
+    ctx.closePath();
+    ctx.fill();
   }
 
   /* ---- body and head, one silhouette ---- */
@@ -413,12 +442,14 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   // the spine: a darker seam where the stripes meet
   ctx.fillStyle = tcss(FUR_DEEP, 0.3);
   ctx.fill(pathOf(strip(k(0.07), k(0.07), U0 + 0.02, 0.42)));
-  // fur, lying back along the body
-  ctx.lineWidth = 0.006;
+  // fur, lying back along the body: more strokes, and longer, the furrier the coat
+  const furN = Math.round(look.flecks.length * pose.fur);
+  ctx.lineWidth = 0.0045 + 0.002 * pose.fur;
   for (const light of [true, false]) {
-    ctx.strokeStyle = light ? tcss(FUR_HI, 0.3) : tcss(FUR_DEEP, 0.2);
+    ctx.strokeStyle = light ? tcss(FUR_HI, 0.32) : tcss(FUR_DEEP, 0.24);
     ctx.beginPath();
-    for (const f of look.flecks) {
+    for (let i = 0; i < furN; i++) {
+      const f = look.flecks[i];
       if (f.light !== light || f.u > 0.38) continue;
       const side = Math.sign(f.v) || 1;
       const frac = Math.abs(f.v) / 0.13;
@@ -426,7 +457,7 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
       const w = sp.width(f.u, side);
       const v = side * w * Math.sin(frac * Math.PI * 0.5);
       const a = sp.at(f.u, v);
-      const b = sp.at(f.u - f.len, v * 1.03);
+      const b = sp.at(f.u - f.len * (0.6 + pose.fur), v * 1.03);
       ctx.moveTo(a[0], a[1]);
       ctx.lineTo(b[0], b[1]);
     }
@@ -497,9 +528,6 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
     line([[0.596, s * 0.063], [0.584, s * 0.071]], 0.0035, "rgba(224,172,62,0.95)");
     // and the dark line running back from it across the cheek
     line([[0.572, s * 0.08], [0.545, s * 0.093], [0.515, s * 0.1]], 0.006, tcss(INK, 0.9));
-    // white whisker pads either side of the muzzle, and whiskers
-    blob(0.636, s * 0.034, 0.028, 0.02, tcss(CREAM, 0.95));
-    for (let i = 0; i < 4; i++) line([[0.644, s * (0.044 + i * 0.003)], [0.625, s * (0.085 + i * 0.012)], [0.6 - i * 0.012, s * (0.12 + i * 0.016)]], 0.0022, "rgba(250,248,240,0.55)");
   }
   // the nose leather at the very tip
   {
@@ -514,6 +542,29 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
     ctx.fill();
   }
   ctx.restore();
+
+  /* ---- soft fur breaking the edge of the silhouette ---- */
+  if (pose.fur > 0.02) {
+    const len = 0.022 * pose.fur;
+    ctx.lineWidth = 0.004;
+    for (const light of [false, true]) {
+      ctx.strokeStyle = light ? tcss(FUR_HI, 0.55 * pose.fur) : tcss(FUR, 0.7 * pose.fur);
+      ctx.beginPath();
+      for (const side of [-1, 1]) {
+        for (let u = U0 + 0.03; u < UN - 0.03; u += 0.0045) {
+          const h = Math.sin(u * 912.7 + side * 37.1) * 43758.5453;
+          const rnd = h - Math.floor(h);
+          if (light !== rnd > 0.6) continue;
+          const w = sp.width(u, side);
+          const a = sp.at(u, side * w * 0.9);
+          const b = sp.at(u - len * (0.5 + rnd), side * (w + len * (0.4 + rnd * 0.8)));
+          ctx.moveTo(a[0], a[1]);
+          ctx.lineTo(b[0], b[1]);
+        }
+      }
+      ctx.stroke();
+    }
+  }
 
   /* ---- where the body goes into the water ---- */
   // the flanks are thinned out of the layer so the pond shows through, more
