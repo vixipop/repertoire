@@ -21,6 +21,8 @@ const FUR: RGB = [208, 104, 34];
 const FUR_DEEP: RGB = [140, 58, 22];
 const CREAM: RGB = [244, 232, 214];
 const INK: RGB = [18, 12, 10];
+// the stripes: a deep warm brown, softer than black against the orange
+const STRIPE: RGB = [84, 36, 18];
 
 type Stripe = { u: number; side: number; gap: number; reach: number; w: number; sweep: number; wob: number; fork: number };
 type Fleck = { u: number; v: number; len: number; light: boolean };
@@ -277,7 +279,7 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   /* ---- tail: floats behind on the body's wave, dipping under mid-way ---- */
   const tailPts: Pt[] = [];
   const tailNrm: Pt[] = [];
-  const TN = 30;
+  const TN = 100;
   {
     const [bx, by] = sp.at(U0 + 0.012, 0);
     let a = sp.angle(U0) + Math.PI;
@@ -321,11 +323,13 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
     ctx.arc(tailPts[i][0] + tailNrm[i][0] * w * lit, tailPts[i][1] + tailNrm[i][1] * w * lit, w, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.fillStyle = tcss(INK, 0.92);
-  for (let s = 0.2; s < 0.82; s += 0.11) {
-    polygon(ctx, tailStrip(s, s + 0.045));
+  // evenly spaced rings, each the same width
+  ctx.fillStyle = tcss(STRIPE, 0.88);
+  for (let s = 0.2; s < 0.82; s += 0.1) {
+    polygon(ctx, tailStrip(s, s + 0.04));
     ctx.fill();
   }
+  ctx.fillStyle = tcss([52, 24, 14], 0.92);
   polygon(ctx, tailStrip(0.86, 1));
   ctx.fill();
   {
@@ -348,32 +352,23 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   }
   ctx.restore();
 
-  /* ---- cheek ruffs: pale fur fanning out from the sides of the face ---- */
+  /* ---- ears: soft and rounded, like a big cat's; they swivel, and now and then flick ---- */
   for (const s of [-1, 1]) {
-    const ruff: Pt[] = (
-      [
-        [0.455, 0.12],
-        [0.472, 0.166],
-        [0.497, 0.158],
-        [0.518, 0.182],
-        [0.543, 0.164],
-        [0.565, 0.17],
-        [0.585, 0.134],
-        [0.6, 0.104],
-        [0.55, 0.11],
-        [0.5, 0.12],
-      ] as Pt[]
-    ).map(([u, v]) => sp.at(u, s * v));
-    ctx.fillStyle = tcss([236, 222, 202]);
-    polygon(ctx, ruff);
-    ctx.fill();
-    line([[0.49, s * 0.13], [0.5, s * 0.152], [0.49, s * 0.168]], 0.008, tcss(INK, 0.85));
-    line([[0.53, s * 0.13], [0.54, s * 0.15], [0.532, s * 0.164]], 0.007, tcss(INK, 0.85));
-  }
-
-  /* ---- ears: soft and rounded, like a big cat's, standing out at the sides ---- */
-  for (const s of [-1, 1]) {
-    const P = (u: number, v: number) => sp.at(u, s * v);
+    // a slow turn about, plus a quick twitch every so often, at different moments on each side
+    const cyc = pose.time * (0.11 + (s > 0 ? 0.023 : 0)) + (s > 0 ? 0.37 : 0);
+    const f = cyc - Math.floor(cyc);
+    const flick = f < 0.05 ? Math.sin((f / 0.05) * Math.PI) : 0;
+    const turn = 0.2 * Math.sin(pose.time * 0.5 + s * 1.7) + 0.12 * Math.sin(pose.time * 0.23 + s) + 0.38 * flick;
+    const cu = 0.437;
+    const cv = 0.107;
+    const c = Math.cos(turn);
+    const sn = Math.sin(turn);
+    // rotate about the base of the ear, in the head's own frame
+    const P = (u: number, v: number) => {
+      const du = u - cu;
+      const dv = v - cv;
+      return sp.at(cu + du * c - dv * sn, s * (cv + du * sn + dv * c));
+    };
     const [b1x, b1y] = P(0.472, 0.108);
     const [c1x, c1y] = P(0.468, 0.16);
     const [tx, ty] = P(0.44, 0.176);
@@ -463,26 +458,63 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
     }
     ctx.stroke();
   }
+  // pale cheeks: one soft sweep of cream down each side of the face, deepening
+  // toward the edge, crescent-shaped so it fades out at both ends
+  {
+    const cheek = (f0: number) => (u: number) => 1 - (1 - f0) * Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.45) / 0.17)));
+    const outer = pathOf(strip(k(1), k(1), 0.45, 0.62, 0, 24));
+    for (const [f0, a] of [
+      [0.35, 0.22],
+      [0.5, 0.26],
+      [0.65, 0.3],
+      [0.8, 0.32],
+    ] as const) {
+      const ring = new Path2D();
+      ring.addPath(outer);
+      ring.addPath(pathOf(strip(cheek(f0), cheek(f0), 0.45, 0.62, 0, 24)));
+      ctx.fillStyle = tcss([242, 228, 208], a);
+      ctx.fill(ring, "evenodd");
+    }
+    // dark stripes across the white of the cheeks
+    for (const s of [-1, 1]) {
+      line([[0.485, s * 0.07], [0.495, s * 0.105], [0.486, s * 0.135]], 0.008, tcss(STRIPE, 0.85));
+      line([[0.52, s * 0.075], [0.53, s * 0.108], [0.522, s * 0.136]], 0.007, tcss(STRIPE, 0.85));
+      line([[0.553, s * 0.072], [0.56, s * 0.098], [0.553, s * 0.118]], 0.0055, tcss(STRIPE, 0.8));
+    }
+  }
   // stripes wrap round the barrel of the body: laid out along its surface,
   // so they crowd together as they turn down the flanks
-  ctx.fillStyle = tcss(INK, 0.92);
+  ctx.fillStyle = tcss(STRIPE, 0.8);
   for (const st of look.stripes) {
-    const n = 16;
-    const L: Pt[] = [];
-    const R: Pt[] = [];
     const surf = (u: number, arc: number) => st.side * sp.width(u, st.side) * Math.sin(Math.min(1, arc) * Math.PI * 0.5);
     const reach = 0.55 + st.reach * 0.55; // quarter-turns round the body; past 1 it's under the water
     const gap = st.gap / 0.13;
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      const u = st.u - st.sweep * Math.pow(t, 1.3) + st.wob * Math.sin(t * Math.PI);
-      const arc = gap + (reach - gap) * t;
-      const hw = st.w * Math.sin(Math.PI * (0.08 + 0.92 * t)) * (1.15 - 0.45 * t) + 0.001;
-      L.push(sp.at(u + hw, surf(u, arc)));
-      R.push(sp.at(u - hw, surf(u, arc)));
-    }
-    polygon(ctx, [...L, ...R.reverse()]);
-    ctx.fill();
+    // a gentle wave along each stripe, and some broken into two pieces
+    const h = Math.sin(st.u * 917.3 + st.side * 13.1) * 43758.5453;
+    const rnd = h - Math.floor(h);
+    const brk = rnd < 0.45 ? 0.3 + rnd * 0.6 : -1;
+    const piece = (t0: number, t1: number, broken: boolean) => {
+      const n = 14;
+      const L: Pt[] = [];
+      const R: Pt[] = [];
+      for (let i = 0; i <= n; i++) {
+        const t = t0 + ((t1 - t0) * i) / n;
+        const u = st.u - st.sweep * Math.pow(t, 1.3) + st.wob * Math.sin(t * Math.PI) + 0.006 * Math.sin(t * 8 + st.u * 40);
+        const arc = gap + (reach - gap) * t;
+        // tapered at both ends; a broken stripe's pieces are rounded off where they part
+        const end = Math.sin(Math.PI * ((t - t0) / (t1 - t0)));
+        const profile = broken ? 0.1 + 0.9 * Math.sqrt(end) : Math.sin(Math.PI * (0.08 + 0.92 * t));
+        const hw = st.w * 0.85 * profile * (1.1 - 0.4 * t) + 0.001;
+        L.push(sp.at(u + hw, surf(u, arc)));
+        R.push(sp.at(u - hw, surf(u, arc)));
+      }
+      polygon(ctx, [...L, ...R.reverse()]);
+      ctx.fill();
+    };
+    if (brk > 0) {
+      piece(0, brk - 0.05, true);
+      piece(brk + 0.05, 1, true);
+    } else piece(0, 1, false);
     if (st.fork) {
       const t0 = st.fork;
       const u0 = st.u - st.sweep * Math.pow(t0, 1.3);
@@ -493,7 +525,7 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
         const t = i / 8;
         const u = u0 - 0.025 * t;
         const arc = a0 + 0.3 * t;
-        const hw = st.w * 0.6 * Math.sin(Math.PI * (0.1 + 0.9 * t)) + 0.0008;
+        const hw = st.w * 0.5 * Math.sin(Math.PI * (0.1 + 0.9 * t)) + 0.0008;
         F.push(sp.at(u + hw, surf(u, arc)));
         G.push(sp.at(u - hw, surf(u, arc)));
       }
@@ -505,8 +537,8 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   /* ---- the face, from above ---- */
   // neck stripes running up onto the back of the head
   for (const s of [-1, 1]) {
-    line([[0.4, s * 0.02], [0.405, s * 0.06], [0.392, s * 0.1]], 0.008, tcss(INK, 0.9));
-    line([[0.428, s * 0.016], [0.434, s * 0.05], [0.424, s * 0.08]], 0.006, tcss(INK, 0.9));
+    line([[0.4, s * 0.02], [0.405, s * 0.06], [0.392, s * 0.1]], 0.008, tcss(STRIPE, 0.9));
+    line([[0.428, s * 0.016], [0.434, s * 0.05], [0.424, s * 0.08]], 0.006, tcss(STRIPE, 0.9));
   }
   // the long bridge of the nose, lit
   ctx.fillStyle = tcss([248, 178, 96], 0.6);
@@ -515,19 +547,62 @@ export function paintTiger(ctx: CanvasRenderingContext2D, look: TigerLook, pose:
   for (const s of [-1, 1]) {
     for (let i = 0; i < 4; i++) {
       const u = 0.585 - i * 0.03;
-      line([[u, s * 0.012], [u - 0.008, s * 0.042], [u - 0.032, s * (0.07 + i * 0.006)]], 0.0055 + i * 0.0014, tcss(INK, 0.92));
+      line([[u, s * 0.012], [u - 0.008, s * 0.042], [u - 0.032, s * (0.07 + i * 0.006)]], 0.0055 + i * 0.0014, tcss(STRIPE, 0.92));
     }
   }
-  line([[0.47, 0.007], [0.53, 0.004]], 0.005, tcss(INK, 0.85));
-  line([[0.47, -0.007], [0.53, -0.004]], 0.005, tcss(INK, 0.85));
-  line([[0.545, 0], [0.575, 0]], 0.005, tcss(INK, 0.85));
+  line([[0.47, 0.007], [0.53, 0.004]], 0.005, tcss(STRIPE, 0.85));
+  line([[0.47, -0.007], [0.53, -0.004]], 0.005, tcss(STRIPE, 0.85));
+  line([[0.545, 0], [0.575, 0]], 0.005, tcss(STRIPE, 0.85));
   for (const s of [-1, 1]) {
-    // a pale brow, then the eye: a hooded amber slit at the side of the head
-    blob(0.59, s * 0.05, 0.009, 0.0055, tcss(CREAM, 0.85));
-    line([[0.6, s * 0.06], [0.588, s * 0.071], [0.572, s * 0.078]], 0.009, tcss(INK));
-    line([[0.596, s * 0.063], [0.584, s * 0.071]], 0.0035, "rgba(224,172,62,0.95)");
-    // and the dark line running back from it across the cheek
-    line([[0.572, s * 0.08], [0.545, s * 0.093], [0.515, s * 0.1]], 0.006, tcss(INK, 0.9));
+    // the eye: set in a soft hollow under a pale brow, about two-thirds of
+    // the way along the head; almond-shaped, amber, sleepy and half-lidded
+    const A: Pt = [0.584, 0.038]; // inner corner, toward the nose
+    const B: Pt = [0.546, 0.07]; // outer corner, back and out
+    const du = B[0] - A[0];
+    const dv = B[1] - A[1];
+    const dl = Math.hypot(du, dv);
+    const nu = -Math.abs(dv / dl); // the upper lid faces back, toward the crown
+    const nv = (du / dl) * Math.sign(-dv / dl || 1) * -1;
+    // a slow blink now and then
+    const bc = pose.time * 0.17 + 0.3;
+    const bf = bc - Math.floor(bc);
+    const open = 0.62 * (bf < 0.035 ? 1 - Math.sin((bf / 0.035) * Math.PI) : 1);
+    const lid = (t: number, up: number, grow = 1): Pt => {
+      const h = 0.013 * grow * Math.pow(Math.sin(Math.PI * t), 0.8);
+      const u = A[0] + du * t + nu * h * up;
+      const v = A[1] + dv * t + nv * h * up;
+      return [u, s * v];
+    };
+    const almond = (upper: number, lower: number, grow: number) => {
+      const pts: Pt[] = [];
+      for (let i = 0; i <= 12; i++) pts.push(lid(i / 12, upper, grow));
+      for (let i = 12; i >= 0; i--) pts.push(lid(i / 12, -lower, grow));
+      return pts.map(([u, v]) => sp.at(u, v));
+    };
+    blob(0.562, s * 0.058, 0.03, 0.02, tcss(FUR_DEEP, 0.4)); // the socket's shadow
+    blob(0.553, s * 0.046, 0.016, 0.0075, tcss(CREAM, 0.8)); // pale brow
+    line([lid(0.15, -1.6), lid(0.5, -1.7), lid(0.88, -1.4)], 0.006, tcss(CREAM, 0.75)); // pale fur under the eye
+    ctx.fillStyle = tcss(INK);
+    polygon(ctx, almond(open + 0.25, 0.75, 1.15)); // dark rim
+    ctx.fill();
+    ctx.fillStyle = "rgba(214,160,56,1)";
+    polygon(ctx, almond(open, 0.55, 0.95)); // amber iris
+    ctx.fill();
+    // pupil and a glint, in the middle of the opening, the same in both eyes
+    const [pu, pv] = lid(0.5, 0);
+    const [px, py] = sp.at(pu, pv);
+    ctx.fillStyle = tcss(INK);
+    ctx.beginPath();
+    ctx.ellipse(px, py, 0.0045, 0.0045 * Math.max(0.3, open), sp.angle(pu), 0, Math.PI * 2);
+    ctx.fill();
+    if (open > 0.3) {
+      ctx.fillStyle = "rgba(255,250,236,0.85)";
+      ctx.beginPath();
+      ctx.arc(px - 0.002, py - 0.002, 0.0014, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // and the dark line running back from the outer corner across the cheek
+    line([[B[0], s * B[1]], [0.522, s * 0.086], [0.497, s * 0.096]], 0.006, tcss(STRIPE, 0.9));
   }
   // the nose leather at the very tip
   {
