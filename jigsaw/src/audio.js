@@ -1,11 +1,10 @@
 // Every sound is synthesised: no files to fetch, nothing to decode.
 //
-// The snap is modelled on a recording of someone assembling a foam puzzle.
-// Measured there: a bright crack about a millisecond long (energy mostly
-// 3–12 kHz, almost no low end), then a handful of quieter micro-clicks
-// spread over the next 2–35 ms at 20–60% of its height, and nothing left
-// after ~40 ms. Handling between snaps is a soft rustle: many tiny clicks
-// over ~100 ms. Each sound is rendered fresh, so no two are identical.
+// The snap's rhythm is modelled on a recording of someone assembling a foam
+// puzzle: one main tick, then a few quieter ones over the next ~30 ms. Its
+// colour is deliberately softer than the recording's — muffled and smeared —
+// so it sounds like foam settling, not tape tearing. Each sound is rendered
+// fresh, so no two are identical.
 
 let ctx = null;
 let sfx = null;
@@ -35,42 +34,65 @@ export function wakeAudio() {
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-// ─── Crunch: a buffer of clicks, rendered sample by sample ───────────────
-// Each click is a sliver of noise plus a short ring (the card's tick).
-function renderClicks(clicks, length) {
+// ─── Crunch: a buffer of soft ticks, rendered sample by sample ───────────
+// Each tick is a smear of noise with a gentle attack and a few ms of decay:
+// no tonal ring (that read as sticky tape), and the whole thing is muffled
+// and given a little room, so it lands as a soft, blurred crunch.
+function renderTicks(ticks, length) {
   const sr = ctx.sampleRate;
   const buf = ctx.createBuffer(1, Math.ceil(length * sr), sr);
   const out = buf.getChannelData(0);
-  for (const c of clicks) {
-    const start = Math.floor(c.at * sr);
-    const n = Math.floor(c.len * sr);
-    const tauN = c.len * 0.3 * sr;
-    const tauR = c.ring * sr;
-    const w = (2 * Math.PI * c.freq) / sr;
-    const ringN = Math.min(out.length - start, Math.floor(tauR * 5));
-    for (let i = 0; i < Math.max(n, ringN) && start + i < out.length; i++) {
-      const grain = i < n ? (Math.random() * 2 - 1) * Math.exp(-i / tauN) : 0;
-      const ring = Math.sin(w * i) * Math.exp(-i / tauR) * 0.6;
-      out[start + i] += c.amp * (grain + ring);
+  for (const c of ticks) {
+    const start = Math.max(0, Math.floor(c.at * sr));
+    const att = Math.max(1, c.attack * sr);
+    const tau = c.decay * sr;
+    const n = Math.min(out.length - start, Math.floor(att + tau * 6));
+    let lp = 0;
+    for (let i = 0; i < n; i++) {
+      const env = i < att ? i / att : Math.exp(-(i - att) / tau);
+      // A one-pole low-pass per tick takes the fizz off each grain.
+      lp += ((Math.random() * 2 - 1) - lp) * c.soft;
+      out[start + i] += c.amp * env * lp;
     }
   }
   return buf;
 }
 
-function playBuffer(buf, { gain = 1, hp = 1800, lp = 13000, at = 0 } = {}) {
+let room = null;
+function makeRoom() {
+  const sr = ctx.sampleRate;
+  const len = Math.floor(sr * 0.35);
+  const ir = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = ir;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.22;
+  conv.connect(wet).connect(sfx);
+  return conv;
+}
+
+function playBuffer(buf, { gain = 1, hp = 250, lp = 3200 } = {}) {
+  room = room || makeRoom();
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const h = ctx.createBiquadFilter();
   h.type = 'highpass';
   h.frequency.value = hp;
-  h.Q.value = 0.6;
+  h.Q.value = 0.5;
   const l = ctx.createBiquadFilter();
   l.type = 'lowpass';
   l.frequency.value = lp;
+  l.Q.value = 0.4;
   const g = ctx.createGain();
   g.gain.value = gain;
-  src.connect(h).connect(l).connect(g).connect(sfx);
-  src.start(ctx.currentTime + at);
+  src.connect(h).connect(l).connect(g);
+  g.connect(sfx);
+  g.connect(room);
+  src.start(ctx.currentTime);
 }
 
 function thump(t, f0, f1, dur, gain) {
@@ -79,7 +101,7 @@ function thump(t, f0, f1, dur, gain) {
   o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(gain, t + 0.004);
+  g.gain.linearRampToValueAtTime(gain, t + 0.006);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g).connect(sfx);
   o.start(t);
@@ -88,46 +110,34 @@ function thump(t, f0, f1, dur, gain) {
 
 export function soundSnap(strength = 1) {
   if (!ctx) return;
-  const clicks = [];
-  // The crack.
-  clicks.push({ at: 0, len: rnd(0.0006, 0.0012), ring: rnd(0.0006, 0.0011), freq: rnd(4200, 7500), amp: 0.55 });
-  // Sometimes a twin a millisecond before, as in the loudest one recorded.
-  if (Math.random() < 0.3) clicks.push({ at: -0.001, len: 0.0005, ring: 0.0005, freq: rnd(6000, 9000), amp: 0.38 });
-  // The crunch after it.
-  const tail = rnd(0.012, 0.034);
-  const count = 2 + Math.floor(Math.random() * 7);
+  // The seat: one soft, full tick…
+  const ticks = [{ at: 0.002, attack: rnd(0.0008, 0.0015), decay: rnd(0.003, 0.005), soft: rnd(0.35, 0.5), amp: 0.7 }];
+  // …and a short, quiet crunch after it, like the foam settling.
+  const count = 1 + Math.floor(Math.random() * 3);
   for (let i = 0; i < count; i++) {
-    clicks.push({
-      at: 0.0015 + Math.pow(Math.random(), 0.8) * tail,
-      len: rnd(0.0003, 0.0009),
-      ring: rnd(0.0003, 0.0008),
-      freq: rnd(3500, 10000),
-      amp: 0.55 * rnd(0.18, 0.6),
-    });
+    ticks.push({ at: rnd(0.008, 0.03), attack: 0.001, decay: rnd(0.002, 0.004), soft: rnd(0.3, 0.45), amp: rnd(0.15, 0.3) });
   }
-  clicks.forEach((c) => (c.at += 0.001));
-  playBuffer(renderClicks(clicks, 0.06), { gain: 0.9 * strength, hp: rnd(1600, 2400) });
-  // A whisper of body so it still feels like foam, not plastic.
-  thump(ctx.currentTime + 0.001, 210, 120, 0.05, 0.05 * strength);
+  playBuffer(renderTicks(ticks, 0.08), { gain: 0.85 * strength, lp: rnd(2600, 3400) });
+  // Body: the foam's weight.
+  thump(ctx.currentTime + 0.002, 180, 110, 0.07, 0.07 * strength);
 }
 
 export function soundLift() {
   if (!ctx) return;
-  const clicks = [];
-  const n = 8 + Math.floor(Math.random() * 10);
+  const ticks = [];
+  const n = 5 + Math.floor(Math.random() * 5);
   for (let i = 0; i < n; i++) {
-    clicks.push({ at: Math.random() * 0.1, len: rnd(0.0002, 0.0006), ring: 0.0003, freq: rnd(6000, 11000), amp: rnd(0.03, 0.09) });
+    ticks.push({ at: Math.random() * 0.09, attack: 0.002, decay: 0.004, soft: 0.25, amp: rnd(0.03, 0.07) });
   }
-  playBuffer(renderClicks(clicks, 0.12), { gain: 0.5, hp: 3500 });
+  playBuffer(renderTicks(ticks, 0.12), { gain: 0.6, lp: 2400 });
 }
 
 export function soundLand(strength) {
   if (!ctx || strength < 0.05) return;
   const s = Math.min(1, strength);
-  thump(ctx.currentTime, 130, 60, 0.08, 0.12 * s);
-  const clicks = [{ at: 0.001, len: 0.0009, ring: 0.0007, freq: rnd(2500, 4000), amp: 0.18 * s }];
-  for (let i = 0; i < 3; i++) clicks.push({ at: rnd(0.003, 0.02), len: 0.0004, ring: 0.0004, freq: rnd(4000, 8000), amp: 0.05 * s });
-  playBuffer(renderClicks(clicks, 0.04), { gain: 0.7, hp: 1200, lp: 9000 });
+  thump(ctx.currentTime, 120, 60, 0.09, 0.12 * s);
+  const ticks = [{ at: 0.001, attack: 0.002, decay: 0.006, soft: 0.2, amp: 0.25 * s }];
+  playBuffer(renderTicks(ticks, 0.05), { gain: 0.7, lp: 1600 });
 }
 
 // Last piece in: the board settles with a run of soft crunches.

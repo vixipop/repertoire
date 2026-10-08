@@ -107,19 +107,21 @@ export function foamMaterial({ top, cardT, backT, print, sheet, pad }) {
           foam *= 1.0 - 0.28 * cells;
           foam = mix(foam, uFoamDeep, smoothstep(0.05, 0.85, pore));
 
-          // The printed card on top and the white backing card underneath.
-          // Edges are a pixel wide whatever the zoom, so the lines don't stair-step.
-          float fy = max(fwidth(y), 1e-4) * 0.75;
-          float card = smoothstep(uTop - uCardT - fy, uTop - uCardT + fy, y);
-          float back = 1.0 - smoothstep(uBackT - fy, uBackT + fy, y);
+          // The print wraps over the rounded top edge and fades softly into
+          // the foam; the backing card does the same underneath. Blends are
+          // a few mm wide (never under a pixel), so nothing reads as a hard line.
+          float fy = max(fwidth(y), 1e-4);
+          float soft = max(fy, uCardT * 0.35);
+          float card = smoothstep(uTop - uCardT - soft, uTop - uCardT + soft, y);
+          float back = 1.0 - smoothstep(uBackT - soft, uBackT + soft, y);
           // Darker where the foam meets the table.
           foam *= mix(0.62, 1.0, smoothstep(0.0, 0.14, y));
-          // The card's cut edge: print colour wrapping over the bevel, with a
-          // hairline of white card core under it. Sheet coords come from slab.
+          // Sheet coords come from slab, so the edge shows the picture's colour.
           vec2 sheet = vec2(vFoamP.x, -vFoamP.z);
-          vec3 printed = texture2D(uPrint, (sheet + uPad) / uSheet).rgb * 0.82;
-          float core = smoothstep(uTop - uCardT * 0.4 - fy, uTop - uCardT * 0.4 + fy, y);
-          vec3 edge = mix(uCard, printed, core);
+          vec3 printed = texture2D(uPrint, (sheet + uPad) / uSheet).rgb;
+          // A faint pale card core just where print meets foam, blurred.
+          float core = smoothstep(uTop - uCardT - soft, uTop - uCardT * 0.4, y);
+          vec3 edge = mix(mix(printed, uCard, 0.35), printed * 0.95, core);
           vec3 col = mix(foam, edge, card);
           col = mix(col, uBacking, back);
           diffuseColor.rgb = col;
@@ -141,7 +143,7 @@ export function foamMaterial({ top, cardT, backT, print, sheet, pad }) {
       );
   };
   mat.userData.uniforms = uniforms;
-  mat.customProgramCacheKey = () => 'foam-v3';
+  mat.customProgramCacheKey = () => 'foam-v4';
   return mat;
 }
 

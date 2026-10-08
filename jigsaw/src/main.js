@@ -4,15 +4,17 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPuzzle } from './shape.js';
 import { foamMaterial, printMaterial } from './materials.js';
 import { printTexture, tableTexture, shadowTexture } from './textures.js';
+import { PRESETS, pictureFromFile } from './pictures.js';
+import { createSparkles } from './sparkles.js';
 import { wakeAudio, soundLift, soundLand, soundSnap, soundDone, startMusic, stopMusic } from './audio.js';
 
 // ─── Tunables ────────────────────────────────────────────────────────────
 const PIECES = 24; // roughly; the grid follows the picture's shape
 const THICK = 0.34; // foam body, in piece widths
-const BEVEL = 0.009; // soft cut edge
+const BEVEL = 0.034; // rounded cut edge, top and bottom
 const HEIGHT = THICK + 2 * BEVEL;
-const CARD_T = 0.011; // printed card on top
-const BACK_T = 0.008; // backing card underneath
+const CARD_T = 0.03; // the print wraps over the rounded top edge
+const BACK_T = 0.02; // backing card underneath
 const LIFT = 0.42; // how high a held piece floats
 const HOVER = 0.025;
 const SNAP_R = 0.24; // how close counts as "it fits"
@@ -25,9 +27,10 @@ const TABLE = { center: '#f3f2ee', edge: '#e2e0da' };
 // ─── Renderer, scene, camera ─────────────────────────────────────────────
 const canvas = document.getElementById('scene');
 const hint = document.getElementById('hint');
-const again = document.getElementById('again');
 const fileInput = document.getElementById('file');
 const musicButton = document.getElementById('music');
+const presetBar = document.getElementById('presets');
+const scatterButton = document.getElementById('scatter');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'default' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -91,6 +94,9 @@ function gridFor(aspect) {
 }
 
 let print = printTexture(renderer, 1.5);
+let picture = PRESETS[0];
+let solvedAt = null; // performance.now() when the last piece went in
+const sparkles = createSparkles(scene);
 const topMat = printMaterial(print);
 const sideMat = foamMaterial({ top: HEIGHT, cardT: CARD_T, backT: BACK_T, print, sheet: new THREE.Vector2(6, 4), pad: 0 });
 const shadowTint = new THREE.Color('#2b2418');
@@ -121,7 +127,7 @@ function buildPiece({ c, r, outline }) {
     bevelThickness: BEVEL,
     bevelSize: BEVEL,
     bevelOffset: -BEVEL,
-    bevelSegments: 2,
+    bevelSegments: 5,
     UVGenerator: uvGen,
   });
   geo.translate(-cx, -cy, BEVEL);
@@ -252,7 +258,7 @@ let simTime = 0;
 // in a ring around it.
 const ZONE_PAD = 0.45;
 const RING = 1.7; // loose pieces keep this far outside the dotted line
-const zone = { w: 0, d: 0, mesh: null };
+const zone = { w: 0, d: 0, z: 0, mesh: null };
 let reach = 0.7; // a piece's half-width including its knobs
 
 function buildZone() {
@@ -262,8 +268,13 @@ function buildZone() {
     zone.mesh.material.map.dispose();
     zone.mesh.material.dispose();
   }
+  // Seen from above at an angle, the board's top face sits further up the
+  // screen than its footprint. Give the far side that much extra room so
+  // the padding looks even all round.
+  const lean = HEIGHT / Math.tan(ELEV);
   zone.w = board.w + ZONE_PAD * 2;
-  zone.d = board.d + ZONE_PAD * 2;
+  zone.d = board.d + ZONE_PAD * 2 + lean;
+  zone.z = -lean / 2;
   const ppu = 160;
   const pad = 0.1;
   const cv = document.createElement('canvas');
@@ -315,15 +326,17 @@ function buildZone() {
     new THREE.PlaneGeometry(zone.w + pad * 2, zone.d + pad * 2).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false })
   );
-  zone.mesh.position.y = 0.001;
+  zone.mesh.position.set(0, 0.001, zone.z);
   scene.add(zone.mesh);
 }
 
 // ─── Building a puzzle ───────────────────────────────────────────────────
-// Cuts a new puzzle for a picture of the given shape. `paint` draws the
-// picture onto the fresh print; the default is the painted lake.
-function buildPuzzle(aspect, paint) {
-  Object.assign(board, gridFor(aspect));
+// Cuts a new puzzle in the picture's shape and prints the picture on it.
+function buildPuzzle(pic) {
+  picture = pic;
+  solvedAt = null;
+  sparkles.clear();
+  Object.assign(board, gridFor(pic.aspect));
   board.w = board.cols * board.cw;
   board.d = board.rows * board.ch;
   reach = 0.5 * Math.max(board.cw, board.ch) + 0.2;
@@ -337,7 +350,7 @@ function buildPuzzle(aspect, paint) {
 
   const old = print;
   print = printTexture(renderer, board.w / board.d);
-  if (paint) paint(print);
+  print.userData.paint(pic, 0);
   topMat.map = print;
   sideMat.userData.uniforms.uPrint.value = print;
   sideMat.userData.uniforms.uSheet.value.set(board.w, board.d);
@@ -375,7 +388,7 @@ function fitCamera() {
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         corner.set((sx * area.w) / 2, 0, (sz * area.d) / 2).project(camera);
-        if (Math.abs(corner.x) > 0.94 || corner.y > 0.86 || corner.y < -0.84) return false;
+        if (Math.abs(corner.x) > 0.94 || corner.y > 0.8 || corner.y < -0.84) return false;
       }
     }
     return true;
@@ -404,7 +417,7 @@ function planeAt(nx, ny, h) {
 }
 function trapezoid(h) {
   // A small margin, plus room for the words at top and bottom.
-  const far = planeAt(0.97, 0.86, h);
+  const far = planeAt(0.97, 0.8, h);
   const near = planeAt(0.97, -0.86, h);
   const b = (near.x - far.x) / (near.z - far.z);
   return { zFar: far.z, zNear: near.z, a: far.x - far.z * b, b };
@@ -464,7 +477,7 @@ function resize() {
 function slots(n) {
   const probe = { foot: { x0: -reach, x1: reach, z0: -reach, z1: reach } };
   const v = new THREE.Vector2();
-  const outsideZone = (x, z) => Math.abs(x) > zone.w / 2 + RING * 0.75 || Math.abs(z) > zone.d / 2 + RING * 0.75;
+  const outsideZone = (x, z) => Math.abs(x) > zone.w / 2 + RING * 0.75 || Math.abs(z - zone.z) > zone.d / 2 + RING * 0.75;
   let best = [];
   for (let gap = 1.6; gap >= 1.15; gap -= 0.05) {
     const out = [];
@@ -511,6 +524,9 @@ function scatter(pop = false) {
   held = null;
   hovered = null;
   document.body.classList.remove('grabbing', 'can-grab');
+  solvedAt = null;
+  sparkles.clear();
+  print.userData.paint(picture, 0);
   setDone(false);
   wake();
 }
@@ -595,6 +611,9 @@ function seat(cl, fit) {
     // Finished: one slow wave across the whole board.
     ripple(into, seam, 1.6, 6, 0.18);
     soundDone();
+    sparkles.burst(into.pos.x, into.pos.y, board.w, board.d);
+    // Animated pictures come alive; stills stay still.
+    if (picture.animated) solvedAt = performance.now();
     setDone(true);
   }
 }
@@ -852,6 +871,7 @@ function settled(cl) {
 // ─── Loop: only draws while something is moving ─────────────────────────
 let running = false;
 let last = 0;
+const bufSize = new THREE.Vector2();
 
 function wake() {
   if (running) return;
@@ -873,10 +893,12 @@ function frame(now) {
     for (const cl of clusters.slice()) if (!cl.dead) step(cl, dt / n);
   }
   clusters.forEach(apply);
+  if (solvedAt !== null) print.userData.paint(picture, (now - solvedAt) / 1000);
+  const sparkling = sparkles.update(dt, renderer.getDrawingBufferSize(bufSize).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)));
   renderer.render(scene, camera);
   adapt(elapsed);
 
-  if (held || !clusters.every(settled)) requestAnimationFrame(frame);
+  if (held || sparkling || solvedAt !== null || !clusters.every(settled)) requestAnimationFrame(frame);
   else running = false;
 }
 
@@ -913,27 +935,13 @@ function adapt(ms) {
 }
 
 // ─── Your own image (debug) ──────────────────────────────────────────────
-// A new picture cuts a new puzzle in its shape.
+// A new picture cuts a new puzzle in its shape. A GIF plays once solved.
 async function useImage(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  let img;
-  try {
-    img = await createImageBitmap(file);
-  } catch {
-    img = await new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      const el = new Image();
-      el.onload = () => {
-        URL.revokeObjectURL(url);
-        resolve(el);
-      };
-      el.onerror = reject;
-      el.src = url;
-    }).catch(() => null);
-  }
-  if (!img) return;
-  buildPuzzle(img.width / img.height, (tex) => tex.userData.setImage(img));
-  img.close?.();
+  const pic = await pictureFromFile(file).catch(() => null);
+  if (!pic) return;
+  buildPuzzle(pic);
+  markPreset(-1);
 }
 fileInput.addEventListener('change', () => {
   useImage(fileInput.files[0]);
@@ -964,8 +972,9 @@ try {
   musicOn = localStorage.getItem('foam-music') !== 'off';
 } catch {}
 function showMusic() {
-  musicButton.textContent = musicOn ? 'music on' : 'music off';
   musicButton.setAttribute('aria-pressed', String(musicOn));
+  musicButton.setAttribute('aria-label', musicOn ? 'Music on. Turn off (M)' : 'Music off. Turn on (M)');
+  musicButton.title = musicOn ? 'Music on (M)' : 'Music off (M)';
 }
 function toggleMusic() {
   musicOn = !musicOn;
@@ -982,9 +991,38 @@ showMusic();
 
 // ─── Words and keys ──────────────────────────────────────────────────────
 function setDone(done) {
-  again.classList.toggle('shown', done);
+  if (done) {
+    hint.textContent = 'solved · R scatters it again';
+    hint.classList.remove('gone');
+  } else {
+    hint.textContent = `${pieces.length} pieces · build it inside the dots`;
+  }
 }
-again.addEventListener('click', () => scatter(true));
+scatterButton.addEventListener('click', () => scatter(true));
+
+// Three pictures to choose from, each with a thumbnail painted from itself.
+PRESETS.forEach((pic, i) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'preset';
+  b.setAttribute('aria-pressed', 'false');
+  const thumb = document.createElement('canvas');
+  thumb.width = Math.round(44 * pic.aspect) * 2;
+  thumb.height = 88;
+  pic.draw(thumb.getContext('2d'), thumb.width, thumb.height, 0);
+  const label = document.createElement('span');
+  label.textContent = pic.name;
+  b.append(thumb, label);
+  b.addEventListener('click', () => {
+    if (picture === pic) return;
+    buildPuzzle(pic);
+    markPreset(i);
+  });
+  presetBar.append(b);
+});
+function markPreset(index) {
+  [...presetBar.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === index)));
+}
 window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'r' || e.key === 'R') scatter(true);
@@ -996,7 +1034,8 @@ window.addEventListener('resize', resize);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 camera.aspect = window.innerWidth / window.innerHeight;
 camera.updateProjectionMatrix();
-buildPuzzle(1.5);
+buildPuzzle(PRESETS[0]);
+markPreset(0);
 document.fonts?.ready.then(() => document.body.classList.add('ready'));
 setTimeout(() => document.body.classList.add('ready'), 400);
 
@@ -1011,5 +1050,11 @@ if (new URLSearchParams(location.search).has('debug')) {
     clusters: () => clusters,
     stats: () => renderer.info.render,
     dpr: () => dpr,
+    picture: () => picture,
+    solvedAt: () => solvedAt,
+    sparkle: () => {
+      sparkles.burst(0, 0, board.w, board.d);
+      wake();
+    },
   };
 }

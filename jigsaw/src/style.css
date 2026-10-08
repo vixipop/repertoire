@@ -1,7 +1,11 @@
 :root {
   --table: #e2e0da;
-  --ink: #6f6a60;
-  --ink-soft: #9a958a;
+  --ink: #5f5a51;
+  --ink-soft: #8f8a7f;
+  --chip: rgba(255, 255, 255, 0.55);
+  --chip-hover: rgba(255, 255, 255, 0.85);
+  --line: rgba(95, 90, 81, 0.16);
+  --gap: max(16px, env(safe-area-inset-left));
 }
 
 * { box-sizing: border-box; }
@@ -29,87 +33,153 @@ html, body {
   touch-action: none;
   outline: none;
 }
-
 body.can-grab #scene { cursor: grab; }
 body.grabbing, body.grabbing #scene { cursor: grabbing; }
 
-.hint, .again {
-  position: fixed;
-  left: 50%;
-  bottom: max(28px, env(safe-area-inset-bottom));
-  transform: translate(-50%, 6px);
-  opacity: 0;
-  transition: opacity 600ms ease, transform 600ms cubic-bezier(.2, .8, .2, 1);
-  pointer-events: none;
-  margin: 0;
-  white-space: nowrap;
+button, .upload {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus-visible, .upload:focus-visible, #file:focus-visible + .upload {
+  outline: 2px solid #b2ada3;
+  outline-offset: 2px;
 }
 
+/* Top bar: music (left), pictures (centre), upload (right). */
+.music, .presets, .upload {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-soft);
+  transition: color 200ms ease, background 200ms ease;
+}
+.icon-btn:hover { color: var(--ink); background: var(--chip); }
+.music { left: var(--gap); }
+.music svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.music .wave { fill: none; }
+.music .off { display: none; }
+.music[aria-pressed="false"] .on { display: none; }
+.music[aria-pressed="false"] .off { display: block; }
+
+.presets {
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-soft);
+  transition: background 200ms ease, color 200ms ease;
+}
+.preset canvas {
+  height: 26px;
+  width: auto;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.18);
+  display: block;
+}
+.preset:hover { color: var(--ink); background: var(--chip); }
+.preset[aria-pressed="true"] { color: var(--ink); background: var(--chip-hover); box-shadow: 0 1px 3px rgba(60, 50, 30, 0.1); }
+
+.upload {
+  right: var(--gap);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px rgba(60, 50, 30, 0.06);
+  color: var(--ink);
+  transition: background 200ms ease;
+}
+.upload:hover { background: var(--chip-hover); }
+.upload svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.upload circle { fill: currentColor; stroke: none; }
+
+/* Bottom: hint (centre), scatter (right, always there). */
+.hint {
+  position: fixed;
+  left: 50%;
+  bottom: max(26px, env(safe-area-inset-bottom));
+  margin: 0;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 600ms ease, transform 600ms cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
 body.ready .hint { opacity: 1; transform: translate(-50%, 0); transition-delay: 500ms; }
 .hint.gone { opacity: 0 !important; transform: translate(-50%, 4px) !important; transition-delay: 0ms !important; }
 
-.again {
-  appearance: none;
+.scatter {
+  position: fixed;
+  right: var(--gap);
+  bottom: max(18px, env(safe-area-inset-bottom));
+  height: 36px;
+  padding: 0 12px 0 14px;
   border: 0;
-  background: none;
-  font: inherit;
-  color: var(--ink);
-  padding: 8px 12px;
   border-radius: 999px;
-  cursor: pointer;
+  background: none;
+  color: var(--ink-soft);
+  transition: color 200ms ease, background 200ms ease;
 }
-.again kbd {
+.scatter:hover { color: var(--ink); background: var(--chip); }
+.scatter kbd {
   font: inherit;
   font-size: 11px;
   color: var(--ink-soft);
-  border: 1px solid #cfccc4;
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 4px;
   margin-left: 6px;
 }
-.again:hover { background: rgba(0, 0, 0, 0.04); }
-.again:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
-.again.shown {
-  opacity: 1;
-  transform: translate(-50%, 0);
-  pointer-events: auto;
-  transition-delay: 450ms;
-}
-
-@media (hover: none) { .again kbd { display: none; } }
-
-/* Debug: swap the print for your own image (also drag-and-drop or paste). */
-.upload, .music {
-  position: fixed;
-  top: max(16px, env(safe-area-inset-top));
-  right: 16px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: color 200ms ease, background 200ms ease;
-}
-.upload:hover, .music:hover { color: var(--ink); background: rgba(0, 0, 0, 0.04); }
-.music {
-  right: auto;
-  left: 16px;
-  appearance: none;
-  border: 0;
-  background: none;
-  font: inherit;
-}
-.music:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
-#file:focus-visible + .upload, .upload:focus-visible { outline: 2px solid #b9b5ab; outline-offset: 2px; }
 
 body.dropping::after {
-  content: "drop to print it on the puzzle";
+  content: "drop to print it on a new puzzle";
   position: fixed;
   inset: 12px;
   display: grid;
   place-items: center;
   border: 1.5px dashed #b9b5ab;
   border-radius: 14px;
-  background: rgba(226, 224, 218, 0.55);
+  background: rgba(226, 224, 218, 0.6);
   color: var(--ink);
   pointer-events: none;
 }
+
+/* Narrow screens: pictures drop to their own row, labels hide. */
+@media (max-width: 720px) {
+  .presets { top: max(58px, calc(env(safe-area-inset-top) + 44px)); }
+  .preset span { display: none; }
+  .preset { padding: 4px; }
+  .upload span { display: none; }
+  .upload { padding: 0 9px; }
+}
+@media (hover: none) { .scatter kbd { display: none; } }
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
