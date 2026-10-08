@@ -1926,7 +1926,7 @@ export function startPond(
     nextRing: number;
   };
   const tigerLook = makeTigerLook();
-  const tigerLen = () => 3.2 * L;
+  const tigerLen = () => 2.4 * L;
   let tiger: Tiger | null = null;
   // in from the top, wading slowly down the pond toward us
   const spawnTiger = (first: boolean) => {
@@ -1951,7 +1951,8 @@ export function startPond(
     return {
       phase: t.phase,
       curve: t.bend,
-      headTurn: Math.sin(clock * 0.29) * 0.07 + Math.sin(clock * 0.11 + 2) * 0.05,
+      headTurn: Math.sin(clock * 0.29) * 0.12 + Math.sin(clock * 0.11 + 2) * 0.08,
+      time: clock,
       lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
       ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
     };
@@ -2010,7 +2011,7 @@ export function startPond(
       if (pads.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + pr + 6 * scale)) continue;
       // keep the very middle of the tiger's way mostly open
       if (Math.abs(x - W * 0.55) < W * 0.08 && r() < 0.7) continue;
-      pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: r() < 0.38 ? 328 + r() * 18 : -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
+      pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
     }
   }
   // each pad is painted once into its own little canvas, then stamped
