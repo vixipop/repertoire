@@ -16,7 +16,7 @@ import ts from "typescript";
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const app = (f) => fs.readFileSync(path.join(root, "app", f), "utf8");
 const strip = (code) => code.replace(/^import [\s\S]*?;$/gm, "").replace(/^export (default )?/gm, "");
-const engine = ["swan-paint.ts", "swan-pond-engine.ts", "swan-pond-time.ts", "swan-pond-music.ts"]
+const engine = ["swan-paint.ts", "tiger-paint.ts", "swan-pond-engine.ts", "swan-pond-time.ts", "swan-pond-music.ts"]
   .map((f) => strip(ts.transpileModule(app(f), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText))
   .join("\n");
 

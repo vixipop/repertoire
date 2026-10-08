@@ -14,6 +14,7 @@
  */
 
 import { makeLook, paintSwan, type Look } from "./swan-paint";
+import { makeTigerLook, paintTiger, tigerFeet, STANCE, STRIDE, type TigerPose } from "./tiger-paint";
 
 const MAX_RIPPLES = 20;
 const DESIGN_WIDTH = 680;
@@ -353,6 +354,7 @@ uniform vec3 uReflSky;
 uniform vec3 uReflSky2;
 uniform vec3 uReflTree;
 uniform float uRefl;
+uniform float uLeafSun;
 
 // Surface slope from analytic ripples (unit-amplitude wave → slope ~1).
 vec2 slope(vec2 p) {
@@ -614,7 +616,7 @@ void main() {
   vec4 cv = texture2D(uCanopy, clamp(p / uRes, 0.0, 1.0));
   // leaves take the hour's light: sun-coloured by day, moon-dark silhouettes at night
   float dayK = clamp((uLight - 0.2) * 1.4, 0.0, 1.0);
-  vec3 lightOn = mix(vec3(0.16, 0.2, 0.32), mix(vec3(1.0), uSun * 1.25, 0.7), dayK);
+  vec3 lightOn = mix(vec3(0.16, 0.2, 0.32), mix(vec3(1.0), uSun * 1.25, uLeafSun), dayK);
   vec3 crgb = cv.rgb * lightOn * (0.5 + 0.45 * dayK);
   crgb += cv.a * vec3(0.05, 0.07, 0.12) * uMoon;
   crgb += cv.a * vec3(0.16, 0.2, 0.04) * beams * uLight;
@@ -1004,7 +1006,11 @@ export function startPond(
   waterCanvas: HTMLCanvasElement,
   swanCanvas: HTMLCanvasElement,
   initial: Partial<PondParams> = {},
+  opts: { scene?: "swans" | "tiger" } = {},
 ): PondController {
+  // "tiger": no swans and no interaction; a tiger wades slowly under sakura
+  const scene = opts.scene ?? "swans";
+  const sakura = scene === "tiger";
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const motion = reduceMotion ? 0.55 : 1;
   let target: PondParams = { ...DEFAULT_PARAMS, ...initial };
@@ -1052,7 +1058,7 @@ export function startPond(
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade", "uFog", "uFogCol"]) {
+      for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade", "uFog", "uFogCol", "uLeafSun"]) {
         wu[n] = gl.getUniformLocation(waterProg, n);
       }
       for (const n of ["uRes", "uTime", "uScale", "uScene", "uSwans", "uPaint", "uBrush", "uBloom"]) {
@@ -1162,7 +1168,7 @@ export function startPond(
   /* ---------- overhanging vines ---------- */
 
   type VLeaf = { t: number; off: number; side: number; r: number; rot: number; col: string; hi: string; flutter: number };
-  type Bloom = { t: number; off: number; r: number; rot: number; hue: number; light: number };
+  type Bloom = { t: number; off: number; r: number; rot: number; hue: number; light: number; sat: number };
   type Branch = {
     bx: number; // base, usually just outside the frame
     by: number;
@@ -1203,25 +1209,30 @@ export function startPond(
     const grow = (bx: number, by: number, ang: number, len: number, depth: number, at: number): Branch => {
       const n = Math.max(5, Math.round(len / (3.4 * scale)));
       const leaves: VLeaf[] = [];
+      // cherry boughs are mostly blossom, with only a few young leaves
+      const leafy = sakura ? 0.3 : 1;
       for (let i = 0; i < n; i++) {
+        if (r() > leafy) continue;
         const t = 0.12 + (i / n) * 0.88;
         leaves.push(leaf(t, (r() - 0.5) * 7 * scale, (4.8 + r() * 3) * (1.1 - t * 0.3)));
       }
       // the clump at the tip
-      const clump = 10 + Math.floor(r() * 8);
+      const clump = sakura ? 3 + Math.floor(r() * 4) : 10 + Math.floor(r() * 8);
       for (let i = 0; i < clump; i++) {
         leaves.push(leaf(0.82 + r() * 0.2, (r() - 0.5) * 26 * scale, 4.4 + r() * 3.2));
       }
       const blooms: Bloom[] = [];
-      const nb = Math.round(n * 0.18 + clump * 0.35);
+      const nb = sakura ? Math.round(n * 0.9 + 14) : Math.round(n * 0.18 + clump * 0.35);
       for (let i = 0; i < nb; i++) {
         blooms.push({
-          t: 0.35 + r() * 0.7,
-          off: (r() - 0.5) * 22 * scale,
-          r: (2.3 + r() * 1.6) * scale,
+          t: sakura ? 0.12 + r() * 0.98 : 0.35 + r() * 0.7,
+          off: (r() - 0.5) * (sakura ? 18 : 22) * scale,
+          r: (sakura ? 2.6 + r() * 1.9 : 2.3 + r() * 1.6) * scale,
           rot: r() * Math.PI,
-          hue: 342 + r() * 14,
-          light: 86 + r() * 8,
+          // a cool pink, so it stays pink under warm light
+          hue: sakura ? 322 + r() * 18 : 342 + r() * 14,
+          light: sakura ? 84 + r() * 10 : 86 + r() * 8,
+          sat: sakura ? 62 + r() * 28 : 85,
         });
       }
       const br: Branch = {
@@ -1299,7 +1310,7 @@ export function startPond(
     const sn = Math.sin(rot);
     cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
     // five soft petals, a darker heart, a speck of pollen
-    cctx.fillStyle = `hsl(${b.hue} 85% ${b.light}%)`;
+    cctx.fillStyle = `hsl(${b.hue} ${b.sat}% ${b.light}%)`;
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
       cctx.beginPath();
@@ -1355,7 +1366,7 @@ export function startPond(
       };
 
       cctx.setTransform(k, 0, 0, k, 0, 0);
-      cctx.strokeStyle = "rgba(58,52,34,0.9)";
+      cctx.strokeStyle = sakura ? "rgba(52,34,34,0.92)" : "rgba(58,52,34,0.9)";
       cctx.lineCap = "round";
       for (let i = 0; i < segs; i++) {
         cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
@@ -1453,13 +1464,19 @@ export function startPond(
   type Petal = { x: number; y: number; z: number; vx: number; vy: number; a: number; va: number; size: number; hue: number; age: number; landed: boolean };
   const petals: Petal[] = [];
   let nextPetal = 1.5;
+  // under the sakura the water is already scattered with fallen petals
+  if (sakura) {
+    for (let i = 0; i < 26; i++) {
+      petals.push({ x: rand(0, W), y: rand(0, H), z: 0, vx: 0, vy: 0, a: rand(0, Math.PI * 2), va: rand(-0.4, 0.4), size: rand(2.6, 3.8) * scale, hue: rand(322, 340), age: rand(0, 25), landed: true });
+    }
+  }
 
   const updatePetals = (dt: number) => {
     nextPetal -= dt;
-    if (nextPetal <= 0 && bloomSpots.length && petals.length < 34) {
+    if (nextPetal <= 0 && bloomSpots.length && petals.length < (sakura ? 70 : 34)) {
       const [x, y, hue] = bloomSpots[Math.floor(Math.random() * bloomSpots.length)];
       petals.push({ x, y, z: 1, vx: rand(-4, 8) * scale, vy: rand(-2, 6) * scale, a: rand(0, Math.PI * 2), va: rand(-2, 2), size: rand(2.6, 3.8) * scale, hue, age: 0, landed: false });
-      nextPetal = rand(0.9, 2.8);
+      nextPetal = sakura ? rand(0.25, 0.8) : rand(0.9, 2.8);
     }
     const ca = currentAngle();
     for (let i = petals.length - 1; i >= 0; i--) {
@@ -1489,6 +1506,22 @@ export function startPond(
           const R = L * s.size;
           if (d < R && d > 0) {
             const k = (1 - d / R) * (s.v + 20 * scale) * 1.6;
+            tx += (dx / d) * k;
+            ty += (dy / d) * k;
+          }
+        }
+        if (tiger) {
+          // the tiger wades through and the petals part around it
+          const len = tigerLen();
+          const c = Math.cos(tiger.h);
+          const sn = Math.sin(tiger.h);
+          const u = clamp((f.x - tiger.x) * c + (f.y - tiger.y) * sn, -0.5 * len, 0.6 * len);
+          const dx = f.x - (tiger.x + c * u);
+          const dy = f.y - (tiger.y + sn * u);
+          const d = Math.hypot(dx, dy);
+          const R = 0.3 * len;
+          if (d < R && d > 0) {
+            const k = (1 - d / R) * (tiger.v + 14 * scale) * 1.4;
             tx += (dx / d) * k;
             ty += (dy / d) * k;
           }
@@ -1647,6 +1680,11 @@ export function startPond(
       s.ty *= sy;
       s.trail.length = 0;
     }
+    if (tiger) {
+      tiger.x *= sx;
+      tiger.y *= sy;
+      tiger.trail.length = 0;
+    }
     for (const r of ripples) {
       r.x *= sx;
       r.y *= sy;
@@ -1773,7 +1811,105 @@ export function startPond(
     s.v = glideSpeed(s);
     return s;
   };
-  for (let i = 0; i < SWAN_COUNT; i++) swans.push(makeSwan(i));
+  for (let i = 0; i < (scene === "swans" ? SWAN_COUNT : 0); i++) swans.push(makeSwan(i));
+
+  /* ---------- tiger ---------- */
+
+  type Tiger = {
+    x: number;
+    y: number;
+    h: number;
+    v: number;
+    phase: number;
+    bend: number;
+    turn: number;
+    tail: number;
+    trail: Array<{ x: number; y: number; h: number; v: number; t: number }>;
+    lastTrail: number;
+    prevP: number[];
+    nextRing: number;
+  };
+  const tigerLook = makeTigerLook();
+  const tigerLen = () => 2.7 * L;
+  let tiger: Tiger | null = null;
+  // in from the top, wading slowly down the pond toward us
+  const spawnTiger = (first: boolean) => {
+    const len = tigerLen();
+    tiger = {
+      x: W * (first ? 0.6 : rand(0.45, 0.66)),
+      y: first ? H * 0.12 - 0.62 * len : -0.75 * len,
+      h: Math.PI / 2 + (first ? 0.1 : rand(-0.08, 0.16)),
+      v: 0.19 * len * motion,
+      phase: 0,
+      bend: 0,
+      turn: 0,
+      tail: rand(0, 6),
+      trail: [],
+      lastTrail: -1,
+      prevP: [0, 0, 0, 0],
+      nextRing: 0.6,
+    };
+  };
+  if (scene === "tiger") spawnTiger(true);
+  const tigerPose = (t: Tiger): TigerPose => {
+    const rot = t.h;
+    return {
+      phase: t.phase,
+      bend: t.bend,
+      headTurn: Math.sin(clock * 0.37) * 0.1 + Math.sin(clock * 0.13 + 2) * 0.06,
+      tail: t.tail,
+      lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
+      ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
+    };
+  };
+  const updateTiger = (dt: number) => {
+    const t = tiger;
+    if (!t) return;
+    const len = tigerLen();
+    // drift toward the lower middle, turning very gently
+    const want = Math.atan2(H + len - t.y, W * 0.48 - t.x);
+    const turn = clamp(wrapAngle(want - t.h), -0.6, 0.6) * 0.08;
+    t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.8));
+    t.h += t.turn * dt;
+    t.x += Math.cos(t.h) * t.v * dt;
+    t.y += Math.sin(t.h) * t.v * dt;
+    t.phase = (t.phase + (t.v * dt) / (STRIDE * len)) % 1;
+    // the spine flexes side to side with each step
+    t.bend = Math.sin(t.phase * Math.PI * 2) * 0.32 + t.turn * 2;
+    t.tail += dt * 0.7;
+    if (clock - t.lastTrail > 0.09) {
+      t.trail.push({ x: t.x, y: t.y, h: t.h, v: t.v, t: clock });
+      t.lastTrail = clock;
+    }
+    while (t.trail.length && clock - t.trail[0].t > 3) t.trail.shift();
+    // each paw that comes down sends out rings; lifting one off stirs a little
+    const c = Math.cos(t.h);
+    const sn = Math.sin(t.h);
+    tigerFeet(tigerPose(t)).forEach((f, i) => {
+      const prev = t.prevP[i];
+      const wx = t.x + (c * f.x - sn * f.y) * len;
+      const wy = t.y + (sn * f.x + c * f.y) * len;
+      if (prev > 0.85 && f.p < 0.15) addRipple(wx, wy, 1.2);
+      else if (prev < STANCE && f.p >= STANCE) addRipple(wx, wy, 0.35);
+      t.prevP[i] = f.p;
+    });
+    // and slow rings spread from where its chest meets the water
+    t.nextRing -= dt;
+    if (t.nextRing <= 0) {
+      addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, 1.8);
+      t.nextRing = rand(1.2, 1.8);
+    }
+    if (t.y - len > H + 0.2 * len) spawnTiger(false);
+  };
+  const drawTiger = (c: CanvasRenderingContext2D, t: Tiger) => {
+    const len = tigerLen();
+    c.save();
+    c.translate(t.x, t.y);
+    c.rotate(t.h);
+    c.scale(len, len);
+    paintTiger(c, tigerLook, tigerPose(t));
+    c.restore();
+  };
   for (const s of swans) pickWaypoint(s);
 
   const nearestOther = (s: Swan) => {
@@ -1880,7 +2016,7 @@ export function startPond(
     leaf.curl = rand(-0.3, 0.3);
     return leaf;
   };
-  for (let i = 0; i < LEAF_COUNT; i++) leaves.push(spawnLeaf(null, true));
+  for (let i = 0; i < (sakura ? 0 : LEAF_COUNT); i++) leaves.push(spawnLeaf(null, true));
 
   const updateLeaves = (dt: number) => {
     const ca = currentAngle();
@@ -2200,11 +2336,15 @@ export function startPond(
     }
   };
 
-  host.addEventListener("pointermove", onMove);
-  host.addEventListener("pointerleave", onLeave);
-  host.addEventListener("pointerdown", onDown);
-  host.addEventListener("contextmenu", onCtx);
-  host.addEventListener("pointerup", onUp);
+  if (scene === "swans") {
+    host.addEventListener("pointermove", onMove);
+    host.addEventListener("pointerleave", onLeave);
+    host.addEventListener("pointerdown", onDown);
+    host.addEventListener("contextmenu", onCtx);
+    host.addEventListener("pointerup", onUp);
+  } else {
+    host.style.cursor = "default";
+  }
 
   /* ---------- simulation ---------- */
 
@@ -2667,6 +2807,44 @@ export function startPond(
       sctx.fillStyle = g;
       sctx.fillRect(bx - sz, by - sz, sz * 2, sz * 2);
     }
+    if (tiger) {
+      // the tiger pushes a broad, slow wake, and the water rides up around it
+      const t = tiger;
+      const len = tigerLen();
+      const tr = t.trail;
+      for (const arm of [1, -1]) {
+        let px = 0;
+        let py = 0;
+        for (let i = tr.length - 1; i >= 0; i--) {
+          const p = tr[i];
+          const age = clock - p.t;
+          const lat = 0.16 * len + 0.45 * p.v * age;
+          const x = p.x - Math.sin(p.h) * lat * arm + Math.cos(p.h) * 0.2 * len;
+          const y = p.y + Math.cos(p.h) * lat * arm + Math.sin(p.h) * 0.2 * len;
+          if (i < tr.length - 1) {
+            sctx.strokeStyle = `rgba(255,255,255,${0.26 * (1 - age / 3)})`;
+            sctx.lineWidth = (4 + age * 3) * scale;
+            sctx.beginPath();
+            sctx.moveTo(px, py);
+            sctx.lineTo(x, y);
+            sctx.stroke();
+          }
+          px = x;
+          py = y;
+        }
+      }
+      sctx.save();
+      sctx.translate(t.x, t.y);
+      sctx.rotate(t.h);
+      const g = sctx.createRadialGradient(0.05 * len, 0, 0.1 * len, 0.05 * len, 0, 0.42 * len);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(0.55, "rgba(255,255,255,0.22)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      sctx.scale(1.25, 0.6);
+      sctx.fillStyle = g;
+      sctx.fillRect(-len, -len, 2 * len, 2 * len);
+      sctx.restore();
+    }
     sctx.globalCompositeOperation = "source-over";
   };
 
@@ -2701,6 +2879,8 @@ export function startPond(
     gl.uniform1f(wu.uRefl, 0.12 + 0.15 * p.paint + 0.38 * p.skySat * (1 - p.moon * 0.6));
     gl.uniform1f(wu.uGrade, p.lightSat * (1 - p.moon * 0.7));
     gl.uniform1f(wu.uFog, p.fog);
+    // sakura keeps its pink: the sun warms it less than green leaves
+    gl.uniform1f(wu.uLeafSun, sakura ? 0.25 : 0.7);
     // mist glows with the sky and the low sun
     const fogSky = hsl(p.skyHue, p.skySat * 0.45, 0.86);
     const fogSun = hsl(p.lightHue, p.lightSat * 0.5, 0.9);
@@ -2789,6 +2969,7 @@ export function startPond(
     }
 
     for (const s of swans) update(s, dt * motion);
+    updateTiger(dt);
     resolveOverlaps(dt * motion);
     updateLeaves(dt);
     updatePetals(dt);
@@ -2804,6 +2985,7 @@ export function startPond(
     for (const k of kernels) if (k.landed) drawKernel(pctx, k);
     const live = swans.filter((s) => s.state !== "away").sort((a, b) => a.y - b.y);
     for (const s of live) drawSwan(pctx, s);
+    if (tiger) drawTiger(pctx, tiger);
     for (const f of petals) if (!f.landed) drawPetal(pctx, f);
     for (const k of kernels) if (!k.landed) drawKernel(pctx, k);
 
@@ -2992,6 +3174,7 @@ export function startPond(
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf);
+      host.style.cursor = "";
       io.disconnect();
       ro.disconnect();
       document.removeEventListener("visibilitychange", onVis);
