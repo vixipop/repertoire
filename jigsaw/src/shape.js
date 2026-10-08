@@ -56,7 +56,7 @@ function edge(a, b, sign, jit) {
 
 // A cols × rows cut. With outerTabs, the border edges get knobs too, so even a
 // two-piece puzzle looks like pieces from the middle of a big one.
-export function cutPuzzle(cols, rows, { seed = 7, outerTabs = true } = {}) {
+export function cutPuzzle(cols, rows, { seed = 7, outerTabs = true, corner = 0 } = {}) {
   const rand = mulberry32(seed);
   const flip = () => (rand() < 0.5 ? -1 : 1);
   const jitter = () => ({ shift: (rand() - 0.5) * 0.1, size: 1.12 + (rand() - 0.5) * 0.14 });
@@ -90,14 +90,43 @@ export function cutPuzzle(cols, rows, { seed = 7, outerTabs = true } = {}) {
   const pieces = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const outline = [
-        ...fwd(hPts(r, c)),
-        ...fwd(vPts(r, c + 1)),
-        ...back(hPts(r + 1, c)),
-        ...back(vPts(r, c)),
-      ];
-      pieces.push({ c, r, outline });
+      const sides = [fwd(hPts(r, c)), fwd(vPts(r, c + 1)), back(hPts(r + 1, c)), back(vPts(r, c))];
+      pieces.push({ c, r, outline: roundCorners(sides, corner) });
     }
   }
   return pieces;
+}
+
+// Each side starts at a corner of the cell. Round those four corners with a
+// small radius, so where pieces meet, their walls curve in to a visible seam
+// instead of sitting flush like one block.
+function roundCorners(sides, radius) {
+  if (!radius) return sides.flat();
+  const out = [];
+  sides.forEach((side, i) => {
+    const prev = sides[(i + 3) % 4];
+    const corner = side[0];
+    const far = (p) => Math.hypot(p[0] - corner[0], p[1] - corner[1]) > radius * 1.5;
+    // The nearest points on either side that are clear of the curve.
+    const before = [...prev].reverse().find(far) || prev[0];
+    const after = side.find((p, j) => j > 0 && far(p)) || sides[(i + 1) % 4][0];
+    const toward = (p) => {
+      const d = Math.hypot(p[0] - corner[0], p[1] - corner[1]);
+      return [corner[0] + ((p[0] - corner[0]) / d) * radius, corner[1] + ((p[1] - corner[1]) / d) * radius];
+    };
+    const a = toward(before);
+    const b = toward(after);
+    // Drop the tail of the previous side that falls inside the curve.
+    while (out.length && Math.hypot(out[out.length - 1][0] - corner[0], out[out.length - 1][1] - corner[1]) <= radius * 1.5) out.pop();
+    for (let k = 0; k <= 6; k++) {
+      const t = k / 6;
+      const u = 1 - t;
+      out.push([u * u * a[0] + 2 * u * t * corner[0] + t * t * b[0], u * u * a[1] + 2 * u * t * corner[1] + t * t * b[1]]);
+    }
+    for (let j = 1; j < side.length; j++) if (far(side[j])) out.push(side[j]);
+  });
+  // The first corner's lead-in sits at the end of the list; trim it there too.
+  const c0 = sides[0][0];
+  while (Math.hypot(out[out.length - 1][0] - c0[0], out[out.length - 1][1] - c0[1]) <= radius * 1.5) out.pop();
+  return out;
 }

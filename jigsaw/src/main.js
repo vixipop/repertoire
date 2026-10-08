@@ -16,6 +16,10 @@ const THICK = 0.25; // straight foam wall, in piece widths
 // it reads as rounded from above without opening wide grooves at the seams.
 const ROUND_H = 0.075;
 const ROUND_W = 0.035;
+// Neighbours don't sit flush: each piece is pulled in by a hair and its
+// corners are rounded, so joined pieces still read as separate on the sides.
+const GAP = 0.007;
+const CORNER = 0.035;
 const HEIGHT = THICK + 2 * ROUND_H;
 const CARD_T = 0.035; // the print wraps the top half of the round-over; foam shows the rest
 const BACK_T = 0.05; // backing card around the rounded bottom edge
@@ -132,7 +136,7 @@ function buildPiece({ c, r, outline }) {
     bevelEnabled: true,
     bevelThickness: ROUND_H,
     bevelSize: ROUND_W,
-    bevelOffset: -ROUND_W,
+    bevelOffset: -ROUND_W - GAP,
     bevelSegments: 8,
     UVGenerator: uvGen,
   });
@@ -362,7 +366,7 @@ function buildPuzzle(pic) {
   sideMat.userData.uniforms.uSheet.value.set(board.w, board.d);
   old.dispose();
 
-  const cut = cutPuzzle(board.cols, board.rows, { seed: 11 + Math.floor(Math.random() * 1000), outerTabs: false });
+  const cut = cutPuzzle(board.cols, board.rows, { seed: 11 + Math.floor(Math.random() * 1000), outerTabs: false, corner: CORNER });
   pieces = cut.map(({ c, r, outline }) =>
     buildPiece({ c, r, outline: outline.map(([x, y]) => [x * board.cw, y * board.ch]) })
   );
