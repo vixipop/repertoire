@@ -697,7 +697,9 @@ void main() {
   float f2 = fract(xs2);
   float wav2 = mix(h1(i2 + 77.0), h1(i2 + 78.0), f2 * f2 * (3.0 - 2.0 * f2));
   float top = 0.145 + uGrassH * (0.2 + 0.35 * wav + 0.2 * wav2);
-  float blade = 0.3 * (1.0 - smoothstep(top - 0.035, top + 0.01, u0));
+  // the veil only where the body meets the grass: the tail lying out in
+  // front stays solid white fur, crossed by a blade or two
+  float blade = 0.14 * (1.0 - smoothstep(top - 0.035, top + 0.01, u0)) * smoothstep(-0.02, 0.0, up);
   for (int k = 0; k < 3; k++) {
     float fk = float(k);
     float cols = 29.0 + fk * 11.0;
@@ -714,7 +716,7 @@ void main() {
     float cx = 0.2 + 0.6 * h1(seed + 9.0);
     float bx = fract(x) - cx - lean * u * u * 0.7;
     float w = mix(0.12, 0.025, u) * (0.7 + 0.6 * h1(seed + 13.0));
-    blade = max(blade, (1.0 - smoothstep(w * 0.4, w, abs(bx))) * (0.8 - 0.3 * u));
+    blade = max(blade, (1.0 - smoothstep(w * 0.4, w, abs(bx))) * (0.95 - 0.2 * u));
   }
   // at the very foot of the picture the grass closes over, along a soft, uneven line
   float foot = 0.002 + 0.006 * h1(floor(vUv.x * 19.0));
