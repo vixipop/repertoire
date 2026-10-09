@@ -67,34 +67,36 @@ export type MeadowParams = {
 };
 
 export const MEADOW_DEFAULTS: MeadowParams = {
-  cover: 1,
-  wind: 0.27,
+  cover: 0.7,
+  wind: 0.23,
   sun: 0.34,
   warm: 1,
-  bloom: 0.15,
-  rays: 0.36,
+  bloom: 0.1,
+  rays: 0.5,
   paint: 0.45,
-  brush: 0.23,
-  blur: 0.15,
+  brush: 0.25,
+  blur: 0.28,
   sunlight: 0.81,
-  fuzz: 0.87,
+  fuzz: 1,
   blade: 1,
   sky: "#004f94",
   skyDepth: 0.69,
   pink: 0.58,
-  grassSun: "#c08d08",
+  grassSun: "#bfa008",
   grassShade: "#2f450d",
   grassRich: 1,
-  catSize: 0.6,
+  catSize: 0.3,
   catFur: 1,
-  catPaint: 0.62,
-  catGlow: 0.45,
-  catBlur: 0.15,
-  catGrain: 0.15,
+  catPaint: 0.66,
+  catGlow: 0.23,
+  catBlur: 0.19,
+  catGrain: 0.17,
   cloudGold: "#fac043",
 };
 
 export type MeadowController = {
+  /** settle the cat into sitting, lying or sleeping now (it eases there), staying a good while; for filming the piece */
+  setCatMode(mode: "sit" | "lie" | "sleep"): void;
   setParams(p: Partial<MeadowParams>): void;
   getParams(): MeadowParams;
   size(): { width: number; height: number };
@@ -1974,6 +1976,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
 
   let rebake = 0;
   return {
+    setCatMode(mode) {
+      cat.mode = mode;
+      cat.timer = 60;
+    },
     setParams(p) {
       const sunMoved = p.sun !== undefined && p.sun !== params.sun;
       Object.assign(params, p);
