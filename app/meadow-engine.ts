@@ -21,7 +21,7 @@
  * Everything is in metres except the cloud slab, which is in kilometres.
  */
 
-import { lerpPose, paintCat, paintCatBack, poseCrouch, poseLeap, poseRun, type CatPose } from "./cat-paint";
+import { lerpPose, paintCat, paintCatBack, poseCrouch, poseLeap, poseRun, poseSit, type CatPose } from "./cat-paint";
 
 export type MeadowParams = {
   /** how much of the sky is cloud */
@@ -1427,7 +1427,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   // grass at a butterfly hovering ahead, leaps (thrown forward under gravity,
   // landing further on), skids to a stop, watches the butterfly escape, and
   // being tired out, lies down and sleeps
-  type CatMode = "sit" | "lie" | "sleep" | "rise" | "crouch" | "run" | "leap" | "land";
+  type CatMode = "sit" | "lie" | "sleep" | "situp" | "turnSide" | "rise" | "crouch" | "run" | "leap" | "land" | "settle" | "turnBack";
+  const TURN = 0.9; // seconds to turn between its back to us and side on
   const GRAV = 6.5; // m/s², a little floaty, as in a dream
   const RUN = 1.6; // m/s
   const cat = {
@@ -1462,6 +1463,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     cat.blend = 0;
   };
   const sidePose = (t: number): CatPose => {
+    if (cat.mode === "turnSide" || cat.mode === "turnBack" || cat.mode === "settle" || cat.mode === "situp") return poseSit(t);
     if (cat.mode === "rise" || cat.mode === "crouch") return poseCrouch(cat.mode === "crouch" ? t : 0);
     if (cat.mode === "leap") return poseLeap(Math.min(1, cat.airT / cat.flight));
     if (cat.mode === "land") return poseRun(cat.phase, Math.max(0.15, cat.speed / RUN) * 0.8);
@@ -1469,7 +1471,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   };
   /** begin a chase: pick a line across the grass with room to run, and lure a butterfly to hover at its end */
   const startChase = () => {
-    if (cat.mode === "rise" || cat.mode === "crouch" || cat.mode === "run" || cat.mode === "leap" || cat.mode === "land") return;
+    if (cat.mode !== "sit" && cat.mode !== "lie" && cat.mode !== "sleep") return;
     const mid = (AREA.x0 + AREA.x1) / 2;
     const dirX = cat.x > mid ? -1 : 1;
     const len = 2.5;
@@ -1494,7 +1496,9 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     const f = fliesState[best];
     f.mode = "lure";
     f.lureAt = [ex + dirX * 0.15, groundHeight(ex, cat.end[1]) + 0.55, cat.end[1]];
-    setMode("rise", 1.0);
+    // lying or asleep, it sits up first; then it turns side on
+    if (cat.sit < 0.9 || cat.rest > 0.1) setMode("situp", 1.4);
+    else setMode("turnSide", TURN);
   };
   const stepCat = (t: number, dt: number) => {
     cat.timer -= dt;
@@ -1526,10 +1530,27 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         }
         break;
       }
-      case "rise":
-        // turning side on, getting up into a crouch
+      case "situp":
+        cat.sit += (1 - cat.sit) * Math.min(1, dt * 2.5);
         cat.rest += (0 - cat.rest) * Math.min(1, dt * 3);
+        cat.turn += (0 - cat.turn) * Math.min(1, dt * 2);
+        if (cat.timer < 0) setMode("turnSide", TURN);
+        break;
+      case "turnSide":
+        // turning round from its back to us to side on, still sitting
+        if (cat.timer < 0) setMode("rise", 0.7);
+        break;
+      case "rise":
+        // up from sitting into a crouch
         if (cat.timer < 0) setMode("crouch", 1.2);
+        break;
+      case "settle":
+        // it sits down where it stopped, still side on
+        if (cat.timer < 0) setMode("turnBack", TURN);
+        break;
+      case "turnBack":
+        // and turns round to sit with its back to us again
+        if (cat.timer < 0) setMode("sit", 7 + catRnd() * 4);
         break;
       case "crouch":
         if (cat.timer < 0) {
@@ -1585,9 +1606,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         if (cat.timer < 0 || cat.speed < 0.05) {
           cat.speed = 0;
           cat.tired = 1;
-          // it sits to watch the butterfly go, then, worn out, lies down to sleep
-          setMode("sit", 7 + catRnd() * 4);
+          // it sits down, turns to watch the butterfly go, then, worn out, lies down to sleep
+          setMode("settle", 0.8);
           cat.sit = 1;
+          cat.turn = 0;
         }
         break;
     }
@@ -1595,9 +1617,14 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     cat.x = Math.min(AREA.x1, Math.max(AREA.x0, cat.x));
     cat.z = Math.min(AREA.z1, Math.max(AREA.z0, cat.z));
     cat.phase += (cat.speed * dt) / 0.8;
-    // seen side on only while it hunts; the turn is unhurried
-    const hunting = cat.mode === "rise" || cat.mode === "crouch" || cat.mode === "run" || cat.mode === "leap" || cat.mode === "land";
-    cat.side += ((hunting ? 1 : 0) - cat.side) * Math.min(1, dt * 2.2);
+    // how far round it has turned: 0 its back to us, 1 side on
+    const ease = (x: number) => {
+      const c = Math.min(1, Math.max(0, x));
+      return c * c * (3 - 2 * c);
+    };
+    if (cat.mode === "turnSide") cat.side = ease(1 - cat.timer / TURN);
+    else if (cat.mode === "turnBack") cat.side = ease(cat.timer / TURN);
+    else cat.side = cat.mode === "sit" || cat.mode === "lie" || cat.mode === "sleep" || cat.mode === "situp" ? 0 : 1;
     cat.blend = Math.min(1, cat.blend + dt / (cat.mode === "leap" ? 0.15 : 0.45));
     const k = cat.blend * cat.blend * (3 - 2 * cat.blend);
     cat.pose = lerpPose(cat.from, sidePose(t), k);
@@ -1606,15 +1633,24 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     const look = { fur: params.catFur, facing: cat.face };
     catCtx.setTransform(1, 0, 0, 1, 0, 0);
     catCtx.clearRect(0, 0, CAT_W, CAT_H);
-    if (cat.side < 0.98) {
+    // mid-turn, each view narrows or widens about the cat's middle as though it
+    // were rotating, and one gives way to the other halfway round
+    const ang = cat.side * Math.PI * 0.5;
+    const swap = ease((cat.side - 0.32) / 0.36);
+    const drawView = (img: HTMLCanvasElement, sx: number, alpha: number) => {
+      if (alpha < 0.01) return;
+      catCtx.globalAlpha = alpha;
+      catCtx.setTransform(sx, 0, 0, 1, (CAT_W * (1 - sx)) / 2, 0);
+      catCtx.drawImage(img, 0, 0);
+      catCtx.setTransform(1, 0, 0, 1, 0, 0);
+    };
+    if (cat.side < 0.999) {
       paintCatBack(catBack.getContext("2d")!, { sit: cat.sit, turn: cat.turn, t, ears: 0.5 + Math.abs(cat.turn) * 0.4 - cat.rest * 0.6, rest: cat.rest }, look);
-      catCtx.globalAlpha = 1 - cat.side;
-      catCtx.drawImage(catBack, 0, 0);
+      drawView(catBack, Math.max(0.45, Math.cos(ang)), 1 - swap);
     }
-    if (cat.side > 0.02) {
+    if (cat.side > 0.001) {
       paintCat(catSide.getContext("2d")!, cat.pose, look, t);
-      catCtx.globalAlpha = cat.side;
-      catCtx.drawImage(catSide, 0, 0);
+      drawView(catSide, Math.max(0.45, Math.sin(ang)), swap);
     }
     catCtx.globalAlpha = 1;
     gl.bindTexture(gl.TEXTURE_2D, catTex);
