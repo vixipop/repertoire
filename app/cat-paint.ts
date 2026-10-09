@@ -701,3 +701,250 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
   // the inner pink of an ear turned toward the side
   void fold;
 }
+
+// ---- a cat in the round ------------------------------------------------------------
+
+/** The sitting or lying cat built from rounded volumes in 3D and seen from
+ * any angle, so it can turn on the spot like the solid animal it is.
+ * yaw: 0 its back to us, +π/2 side on facing right, −π/2 facing left.
+ * head: how far the head is turned on top of that (radians).
+ * sit: 0 lying (a loaf), 1 sitting up. rest: 0 awake, 1 asleep. */
+// breath: the breathing phase, integrated by the caller so a changing rate never jumps it
+export type RoundPose = { yaw: number; head: number; sit: number; rest: number; t: number; breath?: number };
+
+type V3 = [number, number, number];
+type Item = { depth: number; draw: () => void };
+
+export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look: { fur: number }) {
+  const W = g.canvas.width;
+  const H = g.canvas.height;
+  let off = layers.get(g.canvas);
+  if (!off || off.width !== W || off.height !== H) {
+    off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    layers.set(g.canvas, off);
+  }
+  const o = off.getContext("2d")!;
+  const S = H / 60;
+  const gx = W / 2;
+  const gy = H - 10 * S;
+  const fur = look.fur;
+  const fl = 0.8 + fur * 1.8;
+  const k = pose.sit;
+  const rest = pose.rest;
+  const t = pose.t;
+  const breathe = Math.sin(pose.breath ?? t * 1.4) * (0.35 + rest * 0.15);
+
+  // cat space: x the way it faces, y up, z its left side; the camera looks along +depth
+  const proj = (yaw: number) => {
+    const sF = Math.sin(yaw);
+    const cF = Math.cos(yaw);
+    return (p: V3) => {
+      const x = p[0] * sF - p[2] * cF;
+      const d = p[0] * cF + p[2] * sF;
+      return { x: gx + x * S, y: gy - p[1] * S, d };
+    };
+  };
+  const P = proj(pose.yaw);
+  // the head turns about the neck on top of the body's turn
+  const neck: V3 = [ln(9, 6, k), ln(14, 30, k), 0];
+  const headTurn = (p: V3): V3 => {
+    const a = pose.head;
+    const dx = p[0] - neck[0];
+    const dz = p[2] - neck[2];
+    return [neck[0] + dx * Math.cos(a) - dz * Math.sin(a), p[1], neck[2] + dx * Math.sin(a) + dz * Math.cos(a)];
+  };
+  const PH = (p: V3) => P(headTurn(p));
+  const items: Item[] = [];
+
+  // an ellipsoid with axes along the cat's own x, y, z, turned by the yaw
+  const ell = (c: V3, r: V3, onHead = false, tone = 1) => {
+    const yaw = pose.yaw + (onHead ? pose.head : 0);
+    const q = onHead ? PH(c) : P(c);
+    const rx = Math.hypot(r[0] * Math.sin(yaw), r[2] * Math.cos(yaw)) + fl * 0.45;
+    const ry = r[1] + fl * 0.45;
+    items.push({
+      depth: q.d,
+      draw: () => {
+        // each volume is rounded by its own light, from up and to the right
+        const gr = o.createRadialGradient(q.x + rx * S * 0.3, q.y - ry * S * 0.4, 0, q.x, q.y, Math.max(rx, ry) * S * 1.1);
+        // only a gentle rounding, so the volumes melt into one cat rather than read as balls
+        gr.addColorStop(0, `rgba(254,252,248,${tone})`);
+        gr.addColorStop(0.75, `rgba(246,245,248,${tone})`);
+        gr.addColorStop(1, "rgba(226,226,236,1)");
+        o.fillStyle = gr;
+        o.beginPath();
+        o.ellipse(q.x, q.y, rx * S, ry * S, 0, 0, Math.PI * 2);
+        o.fill();
+      },
+    });
+  };
+  const limb = (a: V3, b: V3, w: number) => {
+    const A = P(a);
+    const B = P(b);
+    items.push({
+      depth: (A.d + B.d) / 2,
+      draw: () => {
+        o.strokeStyle = "rgb(240,239,244)";
+        o.lineCap = "round";
+        o.lineWidth = (w + fl * 0.3) * S;
+        o.beginPath();
+        o.moveTo(A.x, A.y);
+        o.lineTo(B.x, B.y);
+        o.stroke();
+      },
+    });
+  };
+
+  // ---- the volumes, sitting (k = 1) or lying in a loaf (k = 0) ----
+  ell([ln(-3, -6, k), ln(10, 11, k), 0], [ln(15, 12, k), ln(10, 11, k), ln(12, 12.5, k)]); // haunches / body
+  ell([ln(7, 4, k), ln(10, 22, k) + breathe, 0], [ln(9.5, 8, k), ln(9, 11, k), ln(10, 8.5, k)]); // chest
+  ell([ln(11, 6, k), ln(15, 29.5, k) + breathe, 0], [6.5, 6, 7.5]); // the ruff
+  // front legs and paws, the hind paws peeking out by the haunches
+  for (const side of [-1, 1]) {
+    limb([ln(12, 5, k), ln(7, 19, k), side * 3], [ln(19, 8, k), 1.6, side * 3.2], 3.4);
+    ell([ln(20, 9, k), 1.5, side * 3.2], [2.6, 1.4, 1.9]);
+    ell([ln(-2, 5, k), 1.6, side * ln(9, 7.5, k)], [3.4, 1.5, 2.2]);
+  }
+  // head: round, full cheeks, a little muzzle, sinking down when asleep
+  const hy = ln(19, 35.5, k) + breathe - rest * 5;
+  const hx = ln(15, 8, k);
+  ell([hx, hy, 0], [7.8, 7.6, 8.2], true);
+  for (const side of [-1, 1]) ell([hx + 2.6, hy - 2.4, side * 3.8], [4.6, 4.4, 4.6], true);
+  ell([hx + 6, hy - 2.4, 0], [2.2, 2, 2.6], true);
+  // ears: triangles standing up from the crown
+  const earTilt = rest * 0.6;
+  for (const side of [-1, 1]) {
+    const base1: V3 = [hx - 1.5, hy + 5.6, side * 2.4];
+    const base2: V3 = [hx + 1.6, hy + 5.2, side * 6.4];
+    const tip: V3 = [hx + 0.6 + earTilt * 2, hy + 12.4 - earTilt * 3, side * 5.2];
+    const A = PH(base1);
+    const B = PH(base2);
+    const T = PH(tip);
+    // the inside of the ear faces the way the head does
+    const front = Math.cos(pose.yaw + pose.head) < 0.15;
+    items.push({
+      depth: (A.d + B.d + T.d) / 3 + 0.5,
+      draw: () => {
+        o.fillStyle = "rgb(246,245,248)";
+        o.beginPath();
+        o.moveTo(A.x, A.y);
+        o.quadraticCurveTo((A.x + T.x) / 2 - 2, (A.y + T.y) / 2, T.x, T.y);
+        o.quadraticCurveTo((B.x + T.x) / 2 + 2, (B.y + T.y) / 2, B.x, B.y);
+        o.closePath();
+        o.fill();
+        if (front) {
+          const m = (u: { x: number; y: number }, v: { x: number; y: number }, s: number) => ({ x: u.x + (v.x - u.x) * s, y: u.y + (v.y - u.y) * s });
+          const a2 = m(A, T, 0.2);
+          const b2 = m(B, T, 0.2);
+          const t2 = m(m(A, B, 0.5), T, 0.78);
+          o.fillStyle = "rgba(240,176,186,0.85)";
+          o.beginPath();
+          o.moveTo(a2.x, a2.y);
+          o.lineTo(t2.x, t2.y);
+          o.lineTo(b2.x, b2.y);
+          o.closePath();
+          o.fill();
+        }
+      },
+    });
+  }
+  // the tail curls round its right side on the grass, the tip lifting and
+  // swaying; one continuous stroke of fur, in three lengths so each can sit
+  // in front of or behind the body as the cat turns
+  {
+    const N = 24;
+    const pts: Array<{ x: number; y: number; d: number; r: number }> = [];
+    for (let i = 0; i <= N; i++) {
+      const s = i / N;
+      const a = Math.PI + s * Math.PI * 0.95 + 0.32 * Math.sin(t * 1.2 - s * 2.4) * s * 0.35 * (1 - rest * 0.8);
+      const R = ln(15, 14, k) - s * 2;
+      const cx = ln(-4, -2, k);
+      const lift = s > 0.75 ? (s - 0.75) * 10 * (1 - rest * 0.7) * (0.6 + 0.4 * Math.sin(t * 1.6)) : 0;
+      const r = 1.6 + 3 * Math.sin(Math.PI * (0.12 + 0.8 * s)) + fur * 1.4;
+      const q = P([cx + Math.cos(a) * R, 2.6 + lift, -Math.abs(Math.sin(a)) * R * 0.95]);
+      pts.push({ x: q.x, y: q.y, d: q.d, r });
+    }
+    for (let part = 0; part < 3; part++) {
+      const i0 = part * 8;
+      const i1 = Math.min(N, i0 + 9);
+      let dsum = 0;
+      for (let i = i0; i <= i1; i++) dsum += pts[i].d;
+      items.push({
+        depth: dsum / (i1 - i0 + 1),
+        draw: () => {
+          o.lineCap = "round";
+          o.lineJoin = "round";
+          o.strokeStyle = "rgb(244,243,248)";
+          for (let i = i0; i < i1; i++) {
+            o.lineWidth = (pts[i].r + fl * 0.45) * 2 * S;
+            o.beginPath();
+            o.moveTo(pts[i].x, pts[i].y);
+            o.lineTo(pts[i + 1].x, pts[i + 1].y);
+            o.stroke();
+          }
+        },
+      });
+    }
+  }
+
+  // ---- paint, far parts first ----
+  o.setTransform(1, 0, 0, 1, 0, 0);
+  o.clearRect(0, 0, W, H);
+  items.sort((a, b) => b.depth - a.depth);
+  for (const it of items) it.draw();
+  // pull it together as one soft volume: warm up and right, lavender under
+  o.globalCompositeOperation = "source-atop";
+  const lit = o.createLinearGradient(gx + 14 * S, gy - 46 * S, gx - 14 * S, gy);
+  lit.addColorStop(0, "rgba(255,248,232,0.55)");
+  lit.addColorStop(0.5, "rgba(250,249,247,0)");
+  lit.addColorStop(1, "rgba(170,170,204,0.45)");
+  o.fillStyle = lit;
+  o.fillRect(0, 0, W, H);
+  const under = o.createLinearGradient(0, gy - 5 * S, 0, gy);
+  under.addColorStop(0, "rgba(160,162,190,0)");
+  under.addColorStop(1, "rgba(160,162,190,0.35)");
+  o.fillStyle = under;
+  o.fillRect(0, 0, W, H);
+  o.globalCompositeOperation = "source-over";
+
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, W, H);
+  {
+    const rw = 22 * S;
+    const sx = gx - 4 * S;
+    g.save();
+    g.translate(sx, gy);
+    g.scale(1, 0.16);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, rw);
+    gr.addColorStop(0, "rgba(20,38,24,0.34)");
+    gr.addColorStop(1, "rgba(20,38,24,0)");
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(0, 0, rw, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  softFur(g, off, fur, S);
+
+  // the face, where it's turned toward us: dot eyes, a small pink nose
+  const headC = PH([hx, hy, 0]);
+  for (const side of [-1, 1]) {
+    const e = PH([hx + 6.4, hy + 0.8, side * 3.1]);
+    if (e.d < headC.d - 2.2) {
+      const open = 1 - rest * 0.92;
+      g.fillStyle = "rgba(40,42,44,0.95)";
+      g.beginPath();
+      g.ellipse(e.x, e.y, 0.75 * S, (0.75 * open + 0.1) * S, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const nose = PH([hx + 9.2, hy - 1.4, 0]);
+  if (nose.d < headC.d - 1.5) {
+    g.fillStyle = "rgba(236,150,162,1)";
+    g.beginPath();
+    g.arc(nose.x, nose.y, 0.6 * S, 0, Math.PI * 2);
+    g.fill();
+  }
+}
