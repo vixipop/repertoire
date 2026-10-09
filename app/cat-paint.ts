@@ -858,12 +858,17 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
     const pts: Array<{ x: number; y: number; d: number; r: number }> = [];
     for (let i = 0; i <= N; i++) {
       const s = i / N;
-      const a = Math.PI + s * Math.PI * 0.95 + 0.32 * Math.sin(t * 1.2 - s * 2.4) * s * 0.35 * (1 - rest * 0.8);
+      // a lazy wander: two slow, unrelated sways rolling down its length, so
+      // it never quite repeats, swinging the tip across our view and lifting
+      // it off the grass now and then; asleep, it all but stills
+      const calm = 1 - rest * 0.75;
+      const sway = (0.42 * Math.sin(t * 0.55 - s * 2.2) + 0.2 * Math.sin(t * 0.31 + 1.3 - s * 1.6)) * Math.pow(s, 1.5) * 9 * calm;
+      const a = Math.PI + s * Math.PI * 0.88;
       const R = ln(15, 14, k) - s * 2;
       const cx = ln(-4, -2, k);
-      const lift = s > 0.75 ? (s - 0.75) * 10 * (1 - rest * 0.7) * (0.6 + 0.4 * Math.sin(t * 1.6)) : 0;
+      const lift = s > 0.55 ? (s - 0.55) * 11 * calm * (0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * 0.42 + 0.8))) : 0;
       const r = 1.6 + 3 * Math.sin(Math.PI * (0.12 + 0.8 * s)) + fur * 1.4;
-      const q = P([cx + Math.cos(a) * R, 2.6 + lift, -Math.abs(Math.sin(a)) * R * 0.95]);
+      const q = P([cx + Math.cos(a) * R, 2.6 + lift, -Math.abs(Math.sin(a)) * R * 0.95 - sway]);
       pts.push({ x: q.x, y: q.y, d: q.d, r });
     }
     for (let part = 0; part < 3; part++) {
@@ -876,6 +881,22 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
         draw: () => {
           o.lineCap = "round";
           o.lineJoin = "round";
+          // a faint shadow where the tail lies against the body, so it reads
+          // as its own soft rope of fur: laid only on fur already painted
+          // (source-atop), each ring one unbroken stroke so it never builds up
+          o.globalCompositeOperation = "source-atop";
+          o.strokeStyle = "rgba(128,128,166,0.07)";
+          let rAvg = 0;
+          for (let i = i0; i <= i1; i++) rAvg += pts[i].r;
+          rAvg /= i1 - i0 + 1;
+          for (const grow of [2.6, 1.8, 1.0]) {
+            o.lineWidth = (rAvg + fl * 0.45 + grow) * 2 * S;
+            o.beginPath();
+            o.moveTo(pts[i0].x, pts[i0].y - 0.6 * S);
+            for (let i = i0 + 1; i <= i1; i++) o.lineTo(pts[i].x, pts[i].y - 0.6 * S);
+            o.stroke();
+          }
+          o.globalCompositeOperation = "source-over";
           o.strokeStyle = "rgb(244,243,248)";
           for (let i = i0; i < i1; i++) {
             o.lineWidth = (pts[i].r + fl * 0.45) * 2 * S;

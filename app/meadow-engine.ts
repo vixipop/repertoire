@@ -21,7 +21,7 @@
  * Everything is in metres except the cloud slab, which is in kilometres.
  */
 
-import { lerpPose, paintCat, paintCatRound, poseCrouch, poseLeap, poseRun, poseSit, type CatPose } from "./cat-paint";
+import { paintCatRound } from "./cat-paint";
 
 export type MeadowParams = {
   /** how much of the sky is cloud */
@@ -95,8 +95,6 @@ export const MEADOW_DEFAULTS: MeadowParams = {
 };
 
 export type MeadowController = {
-  /** set the cat off after a butterfly */
-  chase(): void;
   setParams(p: Partial<MeadowParams>): void;
   getParams(): MeadowParams;
   size(): { width: number; height: number };
@@ -1239,11 +1237,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   type Fly = {
     p: [number, number, number];
     yaw: number;
-    mode: "fly" | "land" | "rest" | "lure";
+    mode: "fly" | "land" | "rest";
     timer: number;
-    /** where a lured butterfly hovers, and how long a startled one keeps climbing */
-    lureAt: [number, number, number];
-    flee: number;
     target: number;
     phase: number;
     seed: number;
@@ -1253,7 +1248,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   const fliesState: Fly[] = [0, 1, 2].map((k) => {
     const x = (br() - 0.5) * 6;
     const z = 3.5 + br() * 5;
-    return { p: [x, groundHeight(x, z) + 0.6 + br() * 0.6, z], yaw: br() * 6.28, mode: "fly", timer: 2 + br() * 5, target: -1, phase: br() * 6, seed: br() * 100, kind: k, lureAt: [0, 0, 0], flee: 0 };
+    return { p: [x, groundHeight(x, z) + 0.6 + br() * 0.6, z], yaw: br() * 6.28, mode: "fly", timer: 2 + br() * 5, target: -1, phase: br() * 6, seed: br() * 100, kind: k };
   });
   const flyBuf = gl.createBuffer();
   const flyVerts = new Float32Array(fliesState.length * 3 * 6 * 6);
@@ -1262,24 +1257,6 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     for (const f of fliesState) {
       const [x, y, z] = f.p;
       const ground = groundHeight(x, z);
-      if (f.mode === "lure") {
-        // drifting over to hover, flickering about one spot
-        const [lx, ly, lz] = f.lureAt;
-        const dx = lx + Math.sin(t * 1.7 + f.seed) * 0.12 - x;
-        const dy = ly + Math.sin(t * 2.3 + f.seed) * 0.08 - y;
-        const dz = lz - z;
-        const d = Math.hypot(dx, dy, dz) || 1;
-        const sp = Math.min(0.9, d * 1.3 + 0.1);
-        f.p[0] += (dx / d) * sp * dt;
-        f.p[1] += (dy / d) * sp * dt;
-        f.p[2] += (dz / d) * sp * dt;
-        f.yaw += (Math.atan2(dx, dz) - f.yaw) * Math.min(1, dt * 2);
-        continue;
-      }
-      if (f.flee > 0) {
-        f.flee -= dt;
-        f.p[1] += 1.1 * dt;
-      }
       if (f.mode === "fly") {
         // a butterfly's flight: wandering, jinking, bobbing with each beat
         f.yaw += wobble(f, t, 1) * 2.4 * dt;
@@ -1295,7 +1272,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         f.p[2] += Math.cos(f.yaw) * speed * dt;
         const lift = 1.3 + wobble(f, t, 3) * 0.4 - (y - ground);
         f.p[1] += (lift * 0.9 + Math.sin(t * 9 + f.seed) * 0.55) * dt;
-        if (f.flee <= 0) f.p[1] = Math.max(ground + 0.7, Math.min(ground + 2.6, f.p[1]));
+        f.p[1] = Math.max(ground + 0.7, Math.min(ground + 2.6, f.p[1]));
         f.timer -= dt;
         if (f.timer < 0 && flowerSpots.length) {
           // pick a flower near it to visit
@@ -1402,107 +1379,27 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   };
 
   // ---- the cat ----
-  // it lives in a patch of meadow at the bottom right, close to us: lying and
-  // sitting with its back to us, watching the butterflies, and now and then
-  // crouching, wiggling and galloping after one, ending in a leap
-  // wide enough for a running cat and its whole tail, stretched out in a leap
+  // it lives in a patch of meadow at the bottom right, close to us, its back
+  // to us: sitting, lounging, dozing off, its head following the butterflies
+  // and its tail lazily wandering through the grass
   const CAT_W = 520;
   const CAT_H = 250;
   const catCanvas = document.createElement("canvas");
   catCanvas.width = CAT_W;
   catCanvas.height = CAT_H;
   const catCtx = catCanvas.getContext("2d")!;
-  const catSide = document.createElement("canvas");
-  catSide.width = CAT_W;
-  catSide.height = CAT_H;
-  const catBack = document.createElement("canvas");
-  catBack.width = CAT_W;
-  catBack.height = CAT_H;
-  const catHome: [number, number] = [1.7, 6.4];
-  // kept well inside the frame, so a chase never runs it off the edge
-  const AREA = { x0: -0.6, x1: 2.9, z0: 5.2, z1: 9.0 };
-  // left to itself the cat only idles: sits, lies down, dozes off. A chase
-  // happens when asked for, and plays as one deliberate run of events: it
-  // turns side on, crouches and wiggles, runs a straight line across the
-  // grass at a butterfly hovering ahead, leaps (thrown forward under gravity,
-  // landing further on), skids to a stop, watches the butterfly escape, and
-  // being tired out, lies down and sleeps
-  type CatMode = "sit" | "lie" | "sleep" | "situp" | "turnSide" | "rise" | "crouch" | "run" | "leap" | "land" | "settle" | "turnBack";
-  const TURN = 1.2; // seconds to turn between its back to us and side on
-  const HAND = 0.3; // seconds to pass between the round cat and the side-on runner
-  const GRAV = 6.5; // m/s², a little floaty, as in a dream
-  const RUN = 1.6; // m/s
+  type CatMode = "sit" | "lie" | "sleep";
   const cat = {
-    x: catHome[0],
-    z: catHome[1],
-    jump: 0,
-    vy: 0,
+    x: 1.7,
+    z: 6.4,
     mode: "sit" as CatMode,
     timer: 25,
-    face: 1,
     sit: 1,
     rest: 0,
     breath: 0,
     turn: 0,
-    phase: 0,
-    speed: 0,
-    dir: [1, 0] as [number, number],
-    end: [0, 0] as [number, number],
-    flight: 0,
-    airT: 0,
-    lure: -1,
-    side: 0, // how much of the side-on (running) painting shows over the round cat
-    yaw: 0, // the round cat's turn: 0 its back to us, ±π/2 side on
-    pose: poseCrouch(0) as CatPose,
-    from: poseCrouch(0) as CatPose,
-    blend: 1,
-    tired: 0,
   };
   const catRnd = mulberry32(99);
-  const setMode = (m: CatMode, timer: number) => {
-    cat.mode = m;
-    cat.timer = timer;
-    cat.from = cat.pose;
-    cat.blend = 0;
-  };
-  const sidePose = (t: number): CatPose => {
-    if (cat.mode === "turnSide" || cat.mode === "turnBack" || cat.mode === "settle" || cat.mode === "situp") return poseSit(t);
-    if (cat.mode === "rise" || cat.mode === "crouch") return poseCrouch(cat.mode === "crouch" ? t : 0);
-    if (cat.mode === "leap") return poseLeap(Math.min(1, cat.airT / cat.flight));
-    if (cat.mode === "land") return poseRun(cat.phase, Math.max(0.15, cat.speed / RUN) * 0.8);
-    return poseRun(cat.phase, Math.min(1, 0.35 + cat.speed / RUN));
-  };
-  /** begin a chase: pick a line across the grass with room to run, and lure a butterfly to hover at its end */
-  const startChase = () => {
-    if (cat.mode !== "sit" && cat.mode !== "lie" && cat.mode !== "sleep") return;
-    const mid = (AREA.x0 + AREA.x1) / 2;
-    const dirX = cat.x > mid ? -1 : 1;
-    const len = 2.5;
-    // mostly across the picture; any change in depth is a gentle slope along the line
-    const dz = Math.max(AREA.z0 + 0.3, Math.min(AREA.z1 - 0.3, cat.z + (catRnd() - 0.5) * 0.7)) - cat.z;
-    const ex = Math.max(AREA.x0, Math.min(AREA.x1, cat.x + dirX * len));
-    const l = Math.hypot(ex - cat.x, dz) || 1;
-    cat.dir = [(ex - cat.x) / l, dz / l];
-    cat.end = [ex, cat.z + dz];
-    cat.face = dirX;
-    // the nearest butterfly drifts over to hover where the run ends
-    let best = 0;
-    let bd = 1e9;
-    fliesState.forEach((f, i) => {
-      const d = Math.hypot(f.p[0] - ex, f.p[2] - cat.end[1]);
-      if (d < bd) {
-        bd = d;
-        best = i;
-      }
-    });
-    cat.lure = best;
-    const f = fliesState[best];
-    f.mode = "lure";
-    f.lureAt = [ex + dirX * 0.15, groundHeight(ex, cat.end[1]) + 0.55, cat.end[1]];
-    // lying or asleep, it sits up first; then it turns side on
-    if (cat.sit < 0.9 || cat.rest > 0.1) setMode("situp", 1.4);
-    else setMode("turnSide", TURN);
-  };
   const stepCat = (t: number, dt: number) => {
     cat.timer -= dt;
     // the head follows whatever flutters nearest, slowly
@@ -1518,156 +1415,26 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     const lookAt = near >= 0 && nd < 4.5 ? Math.max(-1, Math.min(1, (fliesState[near].p[0] - cat.x) / 1.8)) : Math.sin(t * 0.13) * 0.4;
     // asleep it breathes slower; the phase is integrated so easing the rate never jolts it
     cat.breath += dt * (1.4 - cat.rest * 0.7);
-    switch (cat.mode) {
-      case "sit":
-      case "lie":
-      case "sleep": {
-        const want = cat.mode === "sleep" ? 0 : lookAt;
-        cat.turn += (want - cat.turn) * Math.min(1, dt * 0.6);
-        cat.sit += ((cat.mode === "sit" ? 1 : 0) - cat.sit) * Math.min(1, dt * 0.5);
-        cat.rest += ((cat.mode === "sleep" ? 1 : 0) - cat.rest) * Math.min(1, dt * 0.35);
-        cat.tired = Math.max(0, cat.tired - dt / 120);
-        if (cat.timer < 0) {
-          // a slow round: sit a while, lie down, doze; tired, it lies down sooner
-          if (cat.mode === "sit") setMode("lie", 30 + catRnd() * 25);
-          else if (cat.mode === "lie") setMode("sleep", 60 + catRnd() * 60);
-          else setMode("sit", 25 + catRnd() * 20);
-        }
-        break;
+    const want = cat.mode === "sleep" ? 0 : lookAt;
+    cat.turn += (want - cat.turn) * Math.min(1, dt * 0.6);
+    cat.sit += ((cat.mode === "sit" ? 1 : 0) - cat.sit) * Math.min(1, dt * 0.5);
+    cat.rest += ((cat.mode === "sleep" ? 1 : 0) - cat.rest) * Math.min(1, dt * 0.35);
+    if (cat.timer < 0) {
+      // a slow round: sit a while, lie down, doze, sit up again
+      if (cat.mode === "sit") {
+        cat.mode = "lie";
+        cat.timer = 30 + catRnd() * 25;
+      } else if (cat.mode === "lie") {
+        cat.mode = "sleep";
+        cat.timer = 60 + catRnd() * 60;
+      } else {
+        cat.mode = "sit";
+        cat.timer = 25 + catRnd() * 20;
       }
-      case "situp":
-        cat.sit += (1 - cat.sit) * Math.min(1, dt * 2.5);
-        cat.rest += (0 - cat.rest) * Math.min(1, dt * 3);
-        cat.turn += (0 - cat.turn) * Math.min(1, dt * 2);
-        if (cat.timer < 0) setMode("turnSide", TURN);
-        break;
-      case "turnSide":
-        // turning round from its back to us to side on, still sitting
-        if (cat.timer < 0) setMode("rise", 0.8);
-        break;
-      case "rise":
-        // up from sitting into a crouch
-        if (cat.timer < 0) setMode("crouch", 1.2);
-        break;
-      case "settle":
-        // it sits down where it stopped, still side on
-        if (cat.timer < 0) setMode("turnBack", TURN);
-        break;
-      case "turnBack":
-        // and turns round to sit with its back to us again
-        if (cat.timer < 0) setMode("sit", 7 + catRnd() * 4);
-        break;
-      case "crouch":
-        if (cat.timer < 0) {
-          setMode("run", 9);
-          cat.speed = 0;
-        }
-        break;
-      case "run": {
-        // a straight line, picking up speed
-        cat.speed = Math.min(RUN, cat.speed + dt * 2.4);
-        cat.x += cat.dir[0] * cat.speed * dt;
-        cat.z += cat.dir[1] * cat.speed * dt;
-        const left = Math.hypot(cat.end[0] - cat.x, cat.end[1] - cat.z);
-        // spring when the butterfly is a leap away
-        const vy = 2.0;
-        const flight = (2 * vy) / GRAV;
-        const leapLen = cat.speed * 1.1 * flight;
-        if (left <= leapLen + 0.05 || cat.timer < 0) {
-          cat.vy = vy;
-          cat.flight = flight;
-          cat.airT = 0;
-          cat.speed *= 1.1;
-          setMode("leap", flight + 0.1);
-        }
-        break;
-      }
-      case "leap": {
-        // thrown forward and up, gravity bringing it down further along
-        cat.airT += dt;
-        cat.x += cat.dir[0] * cat.speed * dt;
-        cat.z += cat.dir[1] * cat.speed * dt;
-        cat.vy -= GRAV * dt;
-        cat.jump = Math.max(0, cat.jump + cat.vy * dt);
-        // at the top of the leap the butterfly startles away upward
-        if (cat.vy < 0.3 && cat.lure >= 0) {
-          const f = fliesState[cat.lure];
-          f.mode = "fly";
-          f.flee = 2.2;
-          f.timer = 6;
-          cat.lure = -1;
-        }
-        if (cat.jump <= 0 && cat.airT > 0.1) {
-          cat.jump = 0;
-          setMode("land", 1.2);
-        }
-        break;
-      }
-      case "land":
-        // the landing carries it on a few strides, slowing to a stop
-        cat.x += cat.dir[0] * cat.speed * dt;
-        cat.z += cat.dir[1] * cat.speed * dt;
-        cat.speed *= Math.exp(-dt * 3.2);
-        if (cat.timer < 0 || cat.speed < 0.05) {
-          cat.speed = 0;
-          cat.tired = 1;
-          // it sits down, turns to watch the butterfly go, then, worn out, lies down to sleep
-          setMode("settle", 0.8);
-          cat.sit = 1;
-          cat.turn = 0;
-        }
-        break;
     }
-    if (cat.tired > 0.5 && cat.mode === "lie" && cat.timer > 14) cat.timer = 10 + catRnd() * 4;
-    cat.x = Math.min(AREA.x1, Math.max(AREA.x0, cat.x));
-    cat.z = Math.min(AREA.z1, Math.max(AREA.z0, cat.z));
-    cat.phase += (cat.speed * dt) / 0.8;
-    // how far round it has turned: 0 its back to us, 1 side on
-    const ease = (x: number) => {
-      const c = Math.min(1, Math.max(0, x));
-      return c * c * (3 - 2 * c);
-    };
-    // turning, the round cat swings about; once side on it hands over to the
-    // runner (and back again), the two matching side views crossing briefly
-    const quarter = cat.face * Math.PI * 0.5;
-    if (cat.mode === "turnSide") {
-      cat.yaw = quarter * ease(1 - cat.timer / TURN);
-      cat.side = 0;
-    } else if (cat.mode === "rise") {
-      cat.yaw = quarter;
-      cat.side = ease((0.8 - cat.timer) / HAND);
-    } else if (cat.mode === "turnBack") {
-      cat.side = ease((cat.timer - (TURN - HAND)) / HAND);
-      cat.yaw = quarter * ease(cat.timer / (TURN - HAND));
-    } else if (cat.mode === "sit" || cat.mode === "lie" || cat.mode === "sleep" || cat.mode === "situp") {
-      cat.yaw = 0;
-      cat.side = 0;
-    } else {
-      cat.yaw = quarter;
-      cat.side = 1;
-    }
-    cat.blend = Math.min(1, cat.blend + dt / (cat.mode === "leap" ? 0.15 : 0.45));
-    const k = cat.blend * cat.blend * (3 - 2 * cat.blend);
-    cat.pose = lerpPose(cat.from, sidePose(t), k);
-
-    // paint it: from behind, side on, or the two crossing as it turns
-    const look = { fur: params.catFur, facing: cat.face };
     catCtx.setTransform(1, 0, 0, 1, 0, 0);
     catCtx.clearRect(0, 0, CAT_W, CAT_H);
-    if (cat.side < 0.999) {
-      paintCatRound(catBack.getContext("2d")!, { yaw: cat.yaw, head: cat.turn * 1.1, sit: cat.sit, rest: cat.rest, t, breath: cat.breath }, look);
-      catCtx.globalAlpha = 1 - cat.side;
-      catCtx.drawImage(catBack, 0, 0);
-    }
-    if (cat.side > 0.001) {
-      paintCat(catSide.getContext("2d")!, cat.pose, look, t);
-      // added, not laid over: a true crossfade, so where both views cover the body it stays solid
-      catCtx.globalAlpha = cat.side;
-      catCtx.globalCompositeOperation = "lighter";
-      catCtx.drawImage(catSide, 0, 0);
-    }
-    catCtx.globalAlpha = 1;
-    catCtx.globalCompositeOperation = "source-over";
+    paintCatRound(catCtx, { yaw: 0, head: cat.turn * 1.1, sit: cat.sit, rest: cat.rest, t, breath: cat.breath }, { fur: params.catFur });
     gl.bindTexture(gl.TEXTURE_2D, catTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, catCanvas);
   };
@@ -2047,12 +1814,12 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       setSurface(catProg, t, wind, vp);
       const sc = 1.0 + params.catSize * 1.4;
       gl.uniform3f(catProg.u.uCamRight, right[0], right[1], right[2]);
-      gl.uniform3f(catProg.u.uCatPos, cat.x, groundHeight(cat.x, cat.z) + cat.jump, cat.z);
+      gl.uniform3f(catProg.u.uCatPos, cat.x, groundHeight(cat.x, cat.z), cat.z);
       // the sprite is 60 cm of cat-space tall (and as wide as its canvas), its ground 10 cm up
       gl.uniform2f(catProg.u.uCatSize, (0.6 * CAT_W) / CAT_H * sc, 0.6 * sc);
       gl.uniform1f(catProg.u.uGroundV, 10 / 60);
       // more grass in front of a sitting cat than a leaping one
-      gl.uniform1f(catProg.u.uGrassH, cat.mode === "leap" ? 0.02 : cat.side > 0.5 ? 0.09 : 0.13);
+      gl.uniform1f(catProg.u.uGrassH, 0.13);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, catTex);
       gl.uniform1i(catProg.u.uSprite, 2);
@@ -2177,9 +1944,6 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
 
   let rebake = 0;
   return {
-    chase() {
-      startChase();
-    },
     setParams(p) {
       const sunMoved = p.sun !== undefined && p.sun !== params.sun;
       Object.assign(params, p);
