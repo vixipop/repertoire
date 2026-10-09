@@ -958,6 +958,37 @@ window.addEventListener('paste', (e) => {
   if (item) useImage(item.getAsFile());
 });
 
+// ─── Peek at the finished picture ────────────────────────────────────────
+// The eye shows what they're supposed to build. Tap anywhere (or Esc) to go back.
+const peek = document.getElementById('peek');
+const peekCanvas = document.getElementById('peek-canvas');
+const peekButton = document.getElementById('peek-open');
+
+function openPeek() {
+  if (!picture || !peek.hidden) return;
+  // The still, at the board's own shape, however far the puzzle has got.
+  const w = 1280;
+  peekCanvas.width = w;
+  peekCanvas.height = Math.round(w * (board.d / board.w));
+  picture.drawStill(peekCanvas.getContext('2d'), peekCanvas.width, peekCanvas.height);
+  peekCanvas.style.aspectRatio = `${board.w} / ${board.d}`;
+  peek.hidden = false;
+  requestAnimationFrame(() => peek.classList.add('is-open'));
+}
+
+function closePeek() {
+  if (peek.hidden) return;
+  peek.classList.remove('is-open');
+  setTimeout(() => {
+    if (!peek.classList.contains('is-open')) peek.hidden = true;
+  }, 230);
+  peekButton.focus({ preventScroll: true });
+}
+
+peekButton.addEventListener('click', openPeek);
+peek.addEventListener('click', closePeek);
+window.addEventListener('keydown', (e) => e.key === 'Escape' && closePeek());
+
 // ─── Music ───────────────────────────────────────────────────────────────
 // On by default, starting with the first touch (browsers won't play sound
 // before one). The choice is remembered on this device.

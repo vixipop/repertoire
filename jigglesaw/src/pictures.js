@@ -2,6 +2,8 @@
 //   name, aspect          what it's called, and width / height
 //   animated              whether it moves once the puzzle is solved
 //   draw(ctx, w, h, t)    paint it at time t (seconds since solving; 0 = the still)
+//   drawStill(ctx, w, h)  paint the still without touching playback, for showing
+//                         the finished picture while a video may be running
 //   frame(t)              a key that changes when the picture does, so the
 //                         print is only re-uploaded when there's something new
 //
@@ -35,6 +37,7 @@ export async function pictureFromImage(file, name = file.name) {
     animated: false,
     frame: () => 0,
     draw: (ctx, w, h) => cover(ctx, img, w, h),
+    drawStill: (ctx, w, h) => cover(ctx, img, w, h),
   };
 }
 
@@ -65,6 +68,7 @@ async function pictureFromVideo(url, name, { still: at = 0, crop = 0 } = {}) {
     aspect: sw / sh,
     animated: true,
     frame: (t) => (t === 0 ? -1 : Math.floor(v.currentTime * 60)),
+    drawStill: (ctx, w, h) => cover(ctx, still, w, h),
     draw(ctx, w, h, t) {
       if (t === 0) {
         if (!v.paused) v.pause();

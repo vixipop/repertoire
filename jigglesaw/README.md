@@ -29,12 +29,15 @@ video in `public/presets/` (VP9 WebM, with an MP4 fallback), listed in
 that picture's shape; uploads are PNG or JPEG only. The grid and the dotted
 area follow the picture's shape. Progress is kept per preset when you switch.
 
+The eye (top right, beside the upload button) shows the finished picture in a
+popup, so you know what you're building; tap anywhere or press Esc to go back.
+
 `M` toggles the music; the sun/moon button switches light (default) and a
 charcoal dark mode. `?debug` exposes internals for scripted tests.
 
 ## The paid feature
 
-"Use your own image" shows a lock. Hovering it opens a popup (bottom right)
+"Use your own image" shows a lock in place of its picture icon (which comes back once unlocked). Hovering it opens a popup (bottom right)
 saying it's a paid feature "but for the dodo team", with the code blurred until
 you hover it; hovering reveals `DODO` and types it in, then sparkles, "yay,
 feature unlocked", and the lock goes away (`src/unlock.js`). Uploads by button,

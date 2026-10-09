@@ -76,11 +76,12 @@ button:focus-visible, .upload:focus-visible, #file:focus-visible + .upload {
   outline-offset: 2px;
 }
 
-/* Top bar: music and theme (left), pictures (centre), upload (right). */
-.music, .theme, .presets, .upload {
+/* Top bar: music and theme (left), pictures (centre), eye and upload (right). */
+.music, .theme, .presets, .actions {
   position: fixed;
   top: max(14px, env(safe-area-inset-top));
 }
+.actions { right: var(--gap); display: flex; align-items: center; gap: 8px; }
 
 .icon-btn {
   width: 36px;
@@ -137,7 +138,6 @@ button:focus-visible, .upload:focus-visible, #file:focus-visible + .upload {
 .preset[aria-pressed="true"] { color: var(--ink); background: var(--chip-hover); box-shadow: 0 1px 3px var(--lift-soft); }
 
 .upload {
-  right: var(--gap);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -150,8 +150,8 @@ button:focus-visible, .upload:focus-visible, #file:focus-visible + .upload {
   transition: background 200ms ease;
 }
 .upload:hover { background: var(--chip-hover); }
-.upload svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.upload circle { fill: currentColor; stroke: none; }
+.upload svg, .peek-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.upload .pic circle { fill: currentColor; stroke: none; }
 
 /* Bottom: hint (centre), scatter (right, always there). */
 .hint {
@@ -210,29 +210,62 @@ body.dropping::after {
   .presets { top: max(58px, calc(env(safe-area-inset-top) + 44px)); }
   .preset span { display: none; }
   .preset { padding: 4px; }
-  .upload span { display: none; }
+  .upload .label { display: none; }
   .upload { padding: 0 9px; }
 }
 @media (hover: none) { .scatter kbd { display: none; } }
 @media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
 
-/* ─── The lock on "Use your own image" ───────────────────────────────── */
-.upload .pic { width: 18px; height: 18px; }
-.upload .lock {
-  width: 15px;
-  height: 15px;
-  margin-left: -2px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  color: var(--ink-soft);
-  transition: opacity 220ms ease, width 260ms ease, margin 260ms ease, transform 260ms ease;
-}
+/* ─── The icon on "Use your own image": a lock until unlocked, then the picture ─── */
+.upload .slot { position: relative; width: 18px; height: 18px; flex: none; }
+.upload .slot svg { position: absolute; inset: 0; transition: opacity 200ms ease, transform 260ms cubic-bezier(.2, .8, .2, 1); }
+.upload .lock { stroke-width: 1.7; color: var(--ink-soft); }
 .upload .lock rect { fill: color-mix(in srgb, currentColor 14%, transparent); }
-body:not(.is-locked) .upload .lock { opacity: 0; width: 0; margin-left: -8px; transform: scale(0.4) rotate(-20deg); pointer-events: none; }
+/* unlocked: the lock shrinks away, then the picture pops in */
+.upload .lock { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+.upload .pic { opacity: 1; transition-delay: 140ms; }
+body.is-locked .upload .lock { opacity: 1; transform: none; }
+body.is-locked .upload .pic { opacity: 0; transform: scale(0.4); transition-delay: 0s; }
 body.is-locked .upload { cursor: pointer; }
+
+/* ─── The eye: peek at the finished picture ─── */
+.peek-btn {
+  background: var(--chip);
+  box-shadow: inset 0 0 0 1px var(--line), 0 1px 2px var(--lift-soft);
+  color: var(--ink);
+}
+.peek-btn:hover { background: var(--chip-hover); }
+
+.peek {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px var(--gap);
+  background: color-mix(in srgb, var(--table) 72%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.peek[hidden] { display: none; }
+.peek.is-open { opacity: 1; }
+.peek canvas {
+  display: block;
+  width: min(92vw, 980px);
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px var(--lift), 0 0 0 1px var(--line);
+  transform: scale(0.97);
+  transition: transform 260ms cubic-bezier(.2, .8, .2, 1);
+}
+.peek.is-open canvas { transform: none; }
+.peek-note { margin: 0; color: var(--ink-soft); font-size: 12.5px; }
 
 /* ─── The paid-feature popup, bottom right above "scatter" ───────────── */
 .unlock {
@@ -347,9 +380,6 @@ body.is-locked .upload { cursor: pointer; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .unlock, .reveal, .upload .lock { transition: none; }
+  .unlock, .reveal, .peek, .peek canvas, .upload .slot svg { transition: none; }
   .unlock-form.shake { animation: none; }
-}
-@media (max-width: 720px) {
-  .upload .lock { margin-left: 0; }
 }
