@@ -2,9 +2,13 @@
 // right there, blurred until you hover it. Hovering reveals it and types it in
 // for you; the lock then pops off in a burst of sparkles.
 //
-// This is a showpiece, not security: the code is in the page and the unlocked
-// flag lives in sessionStorage. A real gate would check a paid checkout on a
-// server (see the Dodo notes in the README).
+// Two modes, chosen by CHECKOUT_API in config.js:
+//  - empty: a standalone demo. The right code unlocks at once, no payment. The
+//    code is in the page, so this is a showpiece, not security.
+//  - set: the right code starts a Dodo Payments checkout (100% off, test mode),
+//    and the lock only comes off after the server confirms the payment when
+//    Dodo sends the visitor back (see dodo-api/).
+import { CHECKOUT_API } from './config.js';
 
 const CODE = 'DODO';
 const KEY = 'jigglesaw-unlocked';
@@ -97,8 +101,56 @@ export function createUnlock(button, onUnlock) {
 
   function submit() {
     if (!locked) return;
-    if (input.value.trim().toUpperCase() === CODE) celebrate();
-    else wrong();
+    if (input.value.trim().toUpperCase() !== CODE) return wrong();
+    if (CHECKOUT_API) startCheckout();
+    else celebrate();
+  }
+
+  // Ask the server for a checkout and go there. The server applies the discount.
+  async function startCheckout() {
+    note.textContent = 'taking you to checkout…';
+    input.disabled = true;
+    try {
+      const r = await fetch(`${CHECKOUT_API}/api/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: input.value }),
+      });
+      const { checkout_url: url } = await r.json();
+      if (!r.ok || !url) throw new Error(`checkout answered ${r.status}`);
+      location.assign(url);
+    } catch (err) {
+      console.error(err);
+      note.textContent = "checkout isn't answering right now. try again?";
+      input.disabled = false;
+    }
+  }
+
+  // Back from Dodo: the address carries ?payment_id=…&status=…, but that is
+  // only a claim, so the server is asked before anything unlocks.
+  async function handleReturn() {
+    const q = new URLSearchParams(location.search);
+    const id = q.get('payment_id');
+    if (!id || !locked) return;
+    const status = q.get('status');
+    for (const k of ['payment_id', 'status', 'email', 'license_key']) q.delete(k);
+    history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+
+    open();
+    if (status !== 'succeeded') {
+      note.textContent = status === 'processing' ? 'your payment is still processing. check back shortly.' : "that payment didn't go through.";
+      return;
+    }
+    note.textContent = 'checking your payment…';
+    try {
+      const r = await fetch(`${CHECKOUT_API}/api/verify?payment_id=${encodeURIComponent(id)}`);
+      const { ok, reason } = await r.json();
+      if (ok) celebrate();
+      else note.textContent = `couldn't confirm the payment${reason ? `: ${reason}` : ''}.`;
+    } catch (err) {
+      console.error(err);
+      note.textContent = "couldn't check the payment right now.";
+    }
   }
 
   function celebrate() {
@@ -175,6 +227,8 @@ export function createUnlock(button, onUnlock) {
   window.addEventListener('pointerdown', (e) => {
     if (!popup.hidden && locked && !popup.contains(e.target) && !button.contains(e.target)) shut();
   });
+
+  if (CHECKOUT_API) handleReturn();
 
   return { isLocked: () => locked, open };
 }

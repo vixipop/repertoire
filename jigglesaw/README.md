@@ -41,21 +41,12 @@ feature unlocked", and the lock goes away (`src/unlock.js`). Uploads by button,
 drop and paste all wait for it. The unlocked flag lives in `sessionStorage`, so
 a new tab starts locked again.
 
-That is a showpiece, not a gate: the code is in the page. To make it real with
-Dodo Payments, put the check behind a checkout:
-
-1. A small server function (Vercel, Cloudflare Workers, anything with a secret
-   store) holds the Dodo API key and creates a checkout session for the
-   product, with the 100%-off discount applied server-side, and returns the
-   `checkout_url`. The key must never ship in this static site.
-2. The button sends the visitor to that `checkout_url`; Dodo sends them back to
-   the session's `return_url` when they're done.
-3. On return, the page asks your function whether that payment succeeded
-   (Dodo can also call a webhook on your function), and only then unlocks.
-   Trusting the query string on the return URL alone would be spoofable.
-
-Check field names and the test-mode base URL against Dodo's API reference
-(Checkout Sessions) before wiring it up.
+By default that's a showpiece, not a gate: the code is in the page. To make it
+real, `dodo-api/` (a separate folder, deployed on its own) holds the server half:
+set `CHECKOUT_API` in `src/config.js` to its address and a correct code instead
+starts a Dodo Payments checkout (test mode, 100% off). The lock only comes off
+after the server confirms the payment when Dodo sends the visitor back. See
+`dodo-api/README.md` for setup.
 
 ## Files
 
