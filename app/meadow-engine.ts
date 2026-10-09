@@ -672,29 +672,37 @@ uniform sampler2D uSprite;
 uniform vec3 uCatPos;
 uniform float uGroundV;
 uniform float uGrassH;
+uniform float uBelow;
 ${CLOUD_LIB}
 ${SURFACE_LIB}
 float h1(float n) { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
 void main() {
   vec4 c = texture2D(uSprite, vUv);
-  // blades of grass in front of the paws and the bottom of the body
+  // blades of grass in front of the paws and the bottom of the body: one
+  // layer rooted where the cat sits; nearer, a sparser layer rooted further
+  // down the picture, over the tail lying out on the grass toward us
   float up = 1.0 - vUv.y - uGroundV;
+  // drawn in two passes: above its ground line against the scene's depth;
+  // below it (the tail out in front, which would sink into the terrain) without
+  if ((uBelow > 0.5) != (up < 0.0)) discard;
   float blade = 0.0;
   for (int layer = 0; layer < 2; layer++) {
     float cols = 46.0 + float(layer) * 17.0;
     float x = vUv.x * cols + float(layer) * 0.37;
     float col = floor(x);
-    float bh = uGrassH * (0.35 + 0.65 * h1(col + float(layer) * 41.0));
-    if (up < bh) {
-      float u = clamp(up / bh, 0.0, 1.0);
+    float root = layer == 0 ? 0.0 : -0.13;
+    float bh = (layer == 0 ? uGrassH : uGrassH * 0.55) * (0.35 + 0.65 * h1(col + float(layer) * 41.0));
+    float u0 = up - root;
+    if (u0 > -0.02 && u0 < bh) {
+      float u = clamp(u0 / bh, 0.0, 1.0);
       float lean = (h1(col + 3.0 + float(layer) * 7.0) - 0.5) * 1.2 + sin(uTime * 1.4 + col * 0.7) * 0.12;
       float bx = fract(x) - 0.5 - lean * u * u * 0.9;
-      float w = mix(0.42, 0.06, u);
+      float w = layer == 0 ? mix(0.3, 0.05, u) : mix(0.24, 0.04, u);
       blade = max(blade, 1.0 - smoothstep(w * 0.6, w, abs(bx)));
     }
   }
-  // right at the ground, the grass closes over completely
-  blade = max(blade, 1.0 - smoothstep(-0.004, 0.012, up));
+  // at the very foot of the picture, the grass closes over completely
+  blade = max(blade, 1.0 - smoothstep(-0.16, -0.135, up));
   float a = c.a * (1.0 - blade * 0.95);
   // in the shade of a passing cloud, white fur goes cool and blue
   float sh = ridgeShadow(uCatPos) * cloudShadow(uCatPos);
@@ -1055,7 +1063,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   const terrain = link(gl, TERRAIN_VERT, TERRAIN_FRAG, ["aPos", "aNrm"], [...surf, "uWindAmt", "uWindDir", "uPix", "uGrassSun", "uGrassShade", "uFuzz", "uSunlight"]);
   const flowers = link(gl, FLOWER_VERT, FLOWER_FRAG, ["aCorner", "aRoot", "aBlade"], [...surf, "uWindAmt", "uWindDir", "uCamRight", "uCamUp"]);
   const flies = link(gl, FLY_VERT, FLY_FRAG, ["aPos", "aInfo"], surf);
-  const catProg = link(gl, QUAD_VERT_CAT, CAT_FRAG, ["aPos"], [...surf, "uCamRight", "uCatPos", "uCatSize", "uGroundV", "uSprite", "uGrassH"]);
+  const catProg = link(gl, QUAD_VERT_CAT, CAT_FRAG, ["aPos"], [...surf, "uCamRight", "uCatPos", "uCatSize", "uGroundV", "uSprite", "uGrassH", "uBelow"]);
   const blur = link(gl, QUAD_VERT, BLUR_FRAG, ["aPos"], ["uSrc", "uStep"]);
   const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime", "uFuzz", "uBlade", "uCat", "uCatSoft", "uCatBlur", "uCatPaint", "uCatGlow", "uCatGrain"]);
 
@@ -1818,13 +1826,17 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       // the sprite is 60 cm of cat-space tall (and as wide as its canvas), its ground 10 cm up
       gl.uniform2f(catProg.u.uCatSize, (0.6 * CAT_W) / CAT_H * sc, 0.6 * sc);
       gl.uniform1f(catProg.u.uGroundV, 10 / 60);
-      // more grass in front of a sitting cat than a leaping one
       gl.uniform1f(catProg.u.uGrassH, 0.13);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, catTex);
       gl.uniform1i(catProg.u.uSprite, 2);
       attr(quadBuf, 0, 2, 0, 0, 0);
+      gl.uniform1f(catProg.u.uBelow, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.disable(gl.DEPTH_TEST);
+      gl.uniform1f(catProg.u.uBelow, 1);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.enable(gl.DEPTH_TEST);
       clearAttrs();
       gl.depthMask(true);
       gl.activeTexture(gl.TEXTURE0);

@@ -757,6 +757,9 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
   };
   const PH = (p: V3) => P(headTurn(p));
   const items: Item[] = [];
+  // the tail lies out in front of the body, so it's painted after the body's shading, keeping its own white
+  const tailDraws: Item[] = [];
+  const tailShadows: Array<() => void> = [];
 
   // an ellipsoid with axes along the cat's own x, y, z, turned by the yaw
   const ell = (c: V3, r: V3, onHead = false, tone = 1) => {
@@ -816,9 +819,9 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
   // ears: triangles standing up from the crown
   const earTilt = rest * 0.6;
   for (const side of [-1, 1]) {
-    const base1: V3 = [hx - 1.5, hy + 5.6, side * 2.4];
-    const base2: V3 = [hx + 1.6, hy + 5.2, side * 6.4];
-    const tip: V3 = [hx + 0.6 + earTilt * 2, hy + 12.4 - earTilt * 3, side * 5.2];
+    const base1: V3 = [hx - 1.6, hy + 5.4, side * 1.9];
+    const base2: V3 = [hx + 1.7, hy + 4.9, side * 7.1];
+    const tip: V3 = [hx + 0.6 + earTilt * 2, hy + 14.6 - earTilt * 3.5, side * 5.7];
     const A = PH(base1);
     const B = PH(base2);
     const T = PH(tip);
@@ -850,52 +853,69 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
       },
     });
   }
-  // the tail curls round its right side on the grass, the tip lifting and
-  // swaying; one continuous stroke of fur, in three lengths so each can sit
-  // in front of or behind the body as the cat turns
+  // the tail: out from under the haunches and along the grass toward us,
+  // swept slowly side to side like a wiper, the wave rolling down its length
+  // so the tip curls the other way; asleep, it wraps round to its side. The
+  // ground falls away down the picture as it comes toward us (TILT), the way
+  // we look down on the meadow. One continuous stroke of fur, in three
+  // lengths so each sits in the right place among the body's volumes
   {
     const N = 24;
+    const L = 24;
+    const TILT = 0.28;
+    const calm = 1 - rest * 0.8;
+    const smooth = (e0: number, e1: number, x: number) => {
+      const c = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+      return c * c * (3 - 2 * c);
+    };
     const pts: Array<{ x: number; y: number; d: number; r: number }> = [];
+    const x0 = ln(-15, -14, k);
+    let X = x0;
+    let Z = 0;
     for (let i = 0; i <= N; i++) {
       const s = i / N;
-      // a lazy wander: two slow, unrelated sways rolling down its length, so
-      // it never quite repeats, swinging the tip across our view and lifting
-      // it off the grass now and then; asleep, it all but stills
-      const calm = 1 - rest * 0.75;
-      const sway = (0.42 * Math.sin(t * 0.55 - s * 2.2) + 0.2 * Math.sin(t * 0.31 + 1.3 - s * 1.6)) * Math.pow(s, 1.5) * 9 * calm;
-      const a = Math.PI + s * Math.PI * 0.88;
-      const R = ln(15, 14, k) - s * 2;
-      const cx = ln(-4, -2, k);
-      const lift = s > 0.55 ? (s - 0.55) * 11 * calm * (0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * 0.42 + 0.8))) : 0;
-      const r = 1.6 + 3 * Math.sin(Math.PI * (0.12 + 0.8 * s)) + fur * 1.4;
-      const q = P([cx + Math.cos(a) * R, 2.6 + lift, -Math.abs(Math.sin(a)) * R * 0.95 - sway]);
-      pts.push({ x: q.x, y: q.y, d: q.d, r });
+      const sweep = 0.7 * Math.sin(t * 0.9 - s * 2.4) + 0.28 * Math.sin(t * 0.41 + 2 - s * 1.8);
+      const curl = 1.2 * Math.sin(t * 0.9 - 2.6) * smooth(0.6, 1, s);
+      const th = (sweep * (0.35 + 0.65 * s) + curl) * calm + rest * 1.7 * s;
+      if (i > 0) {
+        X -= Math.cos(th) * (L / N);
+        Z += Math.sin(th) * (L / N);
+      }
+      const lift = smooth(0.72, 1, s) * calm * 3.5 * (0.5 + 0.5 * Math.sin(t * 0.6 + 1));
+      const r = 1.8 + 1.4 * Math.sin(Math.PI * (0.15 + 0.7 * s)) + fur * 1.2;
+      const q = P([X, ln(2.8, 2.6, k) * (1 - s) + 1.4 * s + lift, Z]);
+      pts.push({ x: q.x, y: q.y + (x0 - X) * TILT * S, d: q.d, r });
     }
     for (let part = 0; part < 3; part++) {
       const i0 = part * 8;
       const i1 = Math.min(N, i0 + 9);
       let dsum = 0;
       for (let i = i0; i <= i1; i++) dsum += pts[i].d;
-      items.push({
+      // a faint shadow where the tail lies against the body, so it reads
+      // as its own soft rope of fur: laid only on fur already painted
+      // (source-atop), each ring one unbroken stroke so it never builds up,
+      // and all of it before any of the tail, so the tail never shades itself
+      tailShadows.push(() => {
+        o.lineCap = "round";
+        o.lineJoin = "round";
+        o.globalCompositeOperation = "source-atop";
+        o.strokeStyle = "rgba(128,128,166,0.045)";
+        let rAvg = 0;
+        for (let i = i0; i <= i1; i++) rAvg += pts[i].r;
+        rAvg /= i1 - i0 + 1;
+        for (const grow of [2.0, 1.1]) {
+          o.lineWidth = (rAvg + fl * 0.45 + grow) * 2 * S;
+          o.beginPath();
+          o.moveTo(pts[i0].x, pts[i0].y - 0.6 * S);
+          for (let i = i0 + 1; i <= i1; i++) o.lineTo(pts[i].x, pts[i].y - 0.6 * S);
+          o.stroke();
+        }
+      });
+      tailDraws.push({
         depth: dsum / (i1 - i0 + 1),
         draw: () => {
           o.lineCap = "round";
           o.lineJoin = "round";
-          // a faint shadow where the tail lies against the body, so it reads
-          // as its own soft rope of fur: laid only on fur already painted
-          // (source-atop), each ring one unbroken stroke so it never builds up
-          o.globalCompositeOperation = "source-atop";
-          o.strokeStyle = "rgba(128,128,166,0.07)";
-          let rAvg = 0;
-          for (let i = i0; i <= i1; i++) rAvg += pts[i].r;
-          rAvg /= i1 - i0 + 1;
-          for (const grow of [2.6, 1.8, 1.0]) {
-            o.lineWidth = (rAvg + fl * 0.45 + grow) * 2 * S;
-            o.beginPath();
-            o.moveTo(pts[i0].x, pts[i0].y - 0.6 * S);
-            for (let i = i0 + 1; i <= i1; i++) o.lineTo(pts[i].x, pts[i].y - 0.6 * S);
-            o.stroke();
-          }
           o.globalCompositeOperation = "source-over";
           o.strokeStyle = "rgb(244,243,248)";
           for (let i = i0; i < i1; i++) {
@@ -929,6 +949,10 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
   o.fillStyle = under;
   o.fillRect(0, 0, W, H);
   o.globalCompositeOperation = "source-over";
+  for (const sh of tailShadows) sh();
+  o.globalCompositeOperation = "source-over";
+  tailDraws.sort((a, b) => b.depth - a.depth);
+  for (const it of tailDraws) it.draw();
 
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, H);
