@@ -132,10 +132,10 @@ export function poseCrouch(t: number): CatPose {
     tilt: -0.1,
     ears: 1,
     legs: [
-      leg([-12, 11], [-6, 6], [-3, 1.5], 4.2),
-      leg([10, 7], [15, 4], [19, 1.5], 3.3),
-      leg([-13, 10], [-7, 5], [-4, 1.5], 4.4),
-      leg([11, 6], [16, 3.5], [20, 1.5], 3.5),
+      leg([-12, 11], [-17, 3], [-7, 1.5], 4.2),
+      leg([10, 7], [12, 3], [19, 1.5], 3.3),
+      leg([-13, 10], [-18, 2.5], [-8, 1.5], 4.4),
+      leg([11, 6], [13, 2.5], [20, 1.5], 3.5),
     ],
     tail: { base: [-20, 11], dir: Math.PI - 0.1, curl: 0.3, sway: 0.5, speed: 5, ground: 0 },
     pitch: 0,
@@ -172,8 +172,8 @@ export function poseRun(phase: number, amp = 1): CatPose {
   const a = phase * Math.PI * 2;
   const ext = Math.sin(a) * amp;
   const bob = Math.cos(a) * 1.6 * amp;
-  const hip: P = [-14 - 3.5 * ext, 17 + bob];
-  const chest: P = [13 + 2.5 * ext, 18.5 + bob * 0.6];
+  const hip: P = [-11 - 3 * ext, 17 + bob];
+  const chest: P = [10 + 2.5 * ext, 18.5 + bob * 0.6];
   const reachF = 9 + 5 * amp;
   const reachB = 8 + 5 * amp;
   const liftF = 5 + 6 * amp;
@@ -194,10 +194,10 @@ export function poseRun(phase: number, amp = 1): CatPose {
     tilt: 0.08 * Math.sin(a + 0.5) * amp,
     ears: 0.8,
     legs: [
-      bentLeg([hip[0], hip[1] - 3], paw(bBase, phase + 0.58, reachB, liftB), 21, true, 4.2),
-      bentLeg([chest[0], chest[1] - 4], paw(fBase, phase + 0.08, reachF, liftF), 19, false, 3.3),
-      bentLeg([hip[0] - 1, hip[1] - 4], paw(bBase, phase + 0.5, reachB, liftB), 21, true, 4.5),
-      bentLeg([chest[0] + 1, chest[1] - 5], paw(fBase, phase, reachF, liftF), 19, false, 3.5),
+      bentLeg([hip[0], hip[1] - 3], paw(bBase, phase + 0.58, reachB, liftB), 21, false, 4.2),
+      bentLeg([chest[0], chest[1] - 4], paw(fBase, phase + 0.08, reachF, liftF), 19, true, 3.3),
+      bentLeg([hip[0] - 1, hip[1] - 4], paw(bBase, phase + 0.5, reachB, liftB), 21, false, 4.5),
+      bentLeg([chest[0] + 1, chest[1] - 5], paw(fBase, phase, reachF, liftF), 19, true, 3.5),
     ],
     tail: { base: [hip[0] - 9, hip[1] + 2], dir: Math.PI - 0.35, curl: 0.45, sway: 0.35, speed: 7, ground: 0 },
     pitch: 0,
@@ -240,6 +240,9 @@ function hullOf(cs: Circle[]): P[] {
     const a = (i / 48) * Math.PI * 2;
     pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r]);
   }
+  return hullPts(pts);
+}
+function hullPts(pts: P[]): P[] {
   pts.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
   const cross = (o: P, a: P, b: P) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
   const lower: P[] = [];
@@ -460,113 +463,216 @@ export function paintCat(g: CanvasRenderingContext2D, pose: CatPose, look: CatLo
     g.fill();
     g.restore();
   }
-  // fluff: the cat blurred a little, under itself, so every edge is soft
-  const halo = (0.6 + fur * 2.4) * S;
+  softFur(g, off, fur, S);
+
+  // the face in profile: one dot of an eye, a small pink nose
+  const innerEar = (e: { baseA: P; baseB: P; tip: P }) => {
+    const inA = lp(e.baseA, e.tip, 0.22);
+    const inB = lp(e.baseB, e.tip, 0.22);
+    const inT = lp(lp(e.baseA, e.baseB, 0.5), e.tip, 0.78);
+    g.fillStyle = "rgba(240,176,186,0.8)";
+    g.beginPath();
+    g.moveTo(X(inA), Y(inA));
+    g.lineTo(X(inT), Y(inT));
+    g.lineTo(X(inB), Y(inB));
+    g.closePath();
+    g.fill();
+  };
+  void farEar;
+  innerEar(nearEar);
+  const eye = H2(hr * 0.5, 1.2);
+  g.fillStyle = "rgba(40,42,44,0.95)";
+  g.beginPath();
+  g.ellipse(X(eye), Y(eye), 0.75 * S, (0.75 * (1 - pose.blink) + 0.12) * S, 0, 0, Math.PI * 2);
+  g.fill();
+  const nose = H2(hr * 0.95, -1.0);
+  g.fillStyle = "rgba(236,150,162,1)";
+  g.beginPath();
+  g.arc(X(nose), Y(nose), 0.6 * S, 0, Math.PI * 2);
+  g.fill();
+}
+
+/** The fur: the flat white shape laid over two soft, blurred copies of itself,
+ * so its edge is a dense, even fluff with no gaps in it. */
+function softFur(g: CanvasRenderingContext2D, off: HTMLCanvasElement, fur: number, S: number) {
   if ("filter" in g) {
-    g.filter = `blur(${halo.toFixed(1)}px)`;
+    g.globalAlpha = 0.55 + fur * 0.3;
+    g.filter = `blur(${((1.2 + fur * 3.2) * S).toFixed(1)}px)`;
+    g.drawImage(off, 0, 0);
     g.globalAlpha = 0.9;
+    g.filter = `blur(${((0.5 + fur * 1.2) * S).toFixed(1)}px)`;
     g.drawImage(off, 0, 0);
     g.filter = "none";
     g.globalAlpha = 1;
   }
   g.drawImage(off, 0, 0);
+}
 
-  // wisps of fur along the outline, lying the way fur lies: back along the
-  // body, down over the chest, out along the tail
-  g.lineCap = "round";
-  const wisps = (poly: P[], dirOf: (p: P) => number, seed: number, count: number) => {
-    const n = poly.length;
-    for (let i = 0; i < count; i++) {
-      const p = poly[Math.floor(h1(seed + i) * n)];
-      const ang = dirOf(p) + (h1(seed + i * 3.3) - 0.5) * 0.7;
-      const len = (0.8 + fur * 2.2) * (0.5 + h1(seed + i * 5.1)) * S;
-      const x = X(p);
-      const y = Y(p);
-      const ex = x + Math.cos(ang) * len * f;
-      const ey = y - Math.sin(ang) * len;
-      const lightness = (ex - x) * f * 0 + (y < gy - 14 * S ? 1 : 0);
-      g.strokeStyle = lightness ? `rgba(255,252,246,${0.35 + 0.3 * h1(seed + i)})` : `rgba(206,206,224,${0.3 + 0.3 * h1(seed + i)})`;
-      g.lineWidth = (0.25 + 0.25 * h1(seed + i * 7.7)) * S;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.quadraticCurveTo(x + Math.cos(ang + 0.3) * len * 0.6 * f, y - Math.sin(ang + 0.3) * len * 0.6, ex, ey);
-      g.stroke();
-    }
-  };
-  const nW = Math.round(30 + fur * 90);
-  wisps(hullOf(bodyCircles), (p) => Math.atan2(p[1] - bodyMid[1], p[0] - bodyMid[0]) * 0.4 + Math.PI * 0.85, 11, nW);
-  wisps(hullOf(neck), () => -Math.PI / 2 - 0.3, 23, Math.round(nW * 0.4));
-  wisps(hullOf(head), (p) => Math.atan2(p[1] - hp[1], p[0] - hp[0]), 37, Math.round(nW * 0.35));
-  for (let i = 2; i < N; i += 2) {
+// ---- seen from behind -------------------------------------------------------------
+
+/** The cat with its back to us, as it is when it's just sitting about:
+ * sit 0 is lying down (a loaf from behind), 1 sitting up. turn swings the head
+ * to look left or right, enough to show a cheek, an eye and its nose. */
+export type BackPose = { sit: number; turn: number; t: number; ears: number };
+
+export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: CatLook) {
+  const W = g.canvas.width;
+  const H = g.canvas.height;
+  let off = layers.get(g.canvas);
+  if (!off || off.width !== W || off.height !== H) {
+    off = document.createElement("canvas");
+    off.width = W;
+    off.height = H;
+    layers.set(g.canvas, off);
+  }
+  const o = off.getContext("2d")!;
+  const S = W / 96;
+  const gx = W / 2;
+  const gy = H - 10 * S;
+  const X = (x: number) => gx + x * S;
+  const Y = (y: number) => gy - y * S;
+  const fur = look.fur;
+  const fl = 0.8 + fur * 1.8;
+  const k = pose.sit;
+  const t = pose.t;
+  const breathe = Math.sin(t * 1.4) * 0.35;
+  const turn = pose.turn;
+
+  // bottom: wide and round on the grass; back: narrower above; head on top
+  const seat = { x: 0, y: ln(10, 11, k), rx: ln(16, 13.5, k) + fl * 0.5, ry: ln(10, 11.5, k) + fl * 0.5 };
+  const back = { x: 0, y: ln(12, 23, k) + breathe, rx: ln(12, 10, k) + fl * 0.5, ry: ln(7, 11, k) + fl * 0.5 };
+  const ruff = { x: turn * 0.8, y: ln(17, 30.5, k) + breathe, rx: ln(8.5, 8.6, k) + fl * 0.5, ry: 6 + fl * 0.4 };
+  const head = { x: turn * 3, y: ln(21.5, 36.5, k) + breathe, r: 8.3 + fl * 0.35 };
+
+  o.setTransform(1, 0, 0, 1, 0, 0);
+  o.clearRect(0, 0, W, H);
+  const WHITE = "#fbfaf7";
+
+  // the tail, lying on the grass round to the right, its tip lifting and swaying
+  const N = 18;
+  const tail: P[] = [[ln(3, 4, k), 2.5]];
+  let a = -0.1;
+  for (let i = 1; i <= N; i++) {
     const s = i / N;
-    const along = Math.atan2(tail[i + 1][1] - tail[i - 1][1], tail[i + 1][0] - tail[i - 1][0]);
-    const r = tailR(s);
-    for (let k = 0; k < 3 + fur * 5; k++) {
-      const side = h1(i * 13 + k) < 0.5 ? 1 : -1;
-      const p: P = [tail[i][0] - Math.sin(along) * r * side, tail[i][1] + Math.cos(along) * r * side];
-      wisps([p], () => along + side * 0.5, 50 + i * 7 + k, 1);
-    }
+    a += 0.11 + 0.32 * Math.sin(t * 1.2 - s * 2.4) * s * 0.35;
+    const prev = tail[i - 1];
+    // it curls round toward us, so it rises a little on the page as it goes
+    const lift = s > 0.7 ? (s - 0.7) * 10 * (0.6 + 0.4 * Math.sin(t * 1.6)) : 0;
+    tail.push([prev[0] + Math.cos(a) * 1.55, 2.4 + Math.sin(a) * 0.4 * s + lift]);
+  }
+  o.fillStyle = WHITE;
+  for (let i = 0; i <= N; i++) {
+    const s = i / N;
+    const r = 1.8 + 3.2 * Math.sin(Math.PI * (0.12 + 0.8 * s)) + fur * 1.5;
+    o.beginPath();
+    o.arc(X(tail[i][0]), Y(tail[i][1]), r * S, 0, Math.PI * 2);
+    o.fill();
   }
 
-  // ---- the face: pink inner ears, almond eyes, a small pink nose ----
-  const innerEar = (e: { baseA: P; baseB: P; tip: P }, alpha: number) => {
-    const inA = lp(e.baseA, e.tip, 0.2);
-    const inB = lp(e.baseB, e.tip, 0.2);
-    const inT = lp(lp(e.baseA, e.baseB, 0.5), e.tip, 0.8);
-    g.fillStyle = `rgba(238,172,182,${alpha})`;
-    g.beginPath();
-    g.moveTo(X(inA), Y(inA));
-    g.quadraticCurveTo(X(lp(inA, inT, 0.5)), Y(lp(inA, inT, 0.5)), X(inT), Y(inT));
-    g.lineTo(X(inB), Y(inB));
-    g.closePath();
-    g.fill();
+  const oval = (c: { x: number; y: number; rx: number; ry: number }) => {
+    o.beginPath();
+    o.ellipse(X(c.x), Y(c.y), c.rx * S, c.ry * S, 0, 0, Math.PI * 2);
+    o.fill();
   };
-  innerEar(farEar, 0.45);
-  innerEar(nearEar, 0.85);
-  const eye = (dx: number, dy: number, r: number) => {
-    const e = H2(dx, dy);
-    const open = 1 - pose.blink;
-    const ex = X(e);
-    const ey = Y(e);
-    g.save();
-    g.translate(ex, ey);
-    g.rotate(-f * 0.25);
-    // almond: pointed at both corners
-    g.fillStyle = "rgba(150,186,170,1)";
-    g.beginPath();
-    g.moveTo(-r * S, 0);
-    g.quadraticCurveTo(0, -r * 0.75 * open * S, r * S, 0);
-    g.quadraticCurveTo(0, r * 0.75 * open * S, -r * S, 0);
-    g.fill();
-    if (open > 0.3) {
-      g.fillStyle = "rgba(30,36,34,0.9)";
-      g.beginPath();
-      g.ellipse(f * 0.1 * r * S, 0, r * 0.18 * S, r * 0.5 * open * S, 0, 0, Math.PI * 2);
-      g.fill();
+  // seat, back and ruff as one smooth pear, no waists between them
+  {
+    const pts: P[] = [];
+    for (const c of [seat, back, ruff])
+      for (let i = 0; i < 48; i++) {
+        const an = (i / 48) * Math.PI * 2;
+        pts.push([c.x + Math.cos(an) * c.rx, c.y + Math.sin(an) * c.ry]);
+      }
+    const poly = hullPts(pts);
+    const n = poly.length;
+    o.beginPath();
+    const m = (i: number): P => [(X(poly[i % n][0]) + X(poly[(i + 1) % n][0])) / 2, (Y(poly[i % n][1]) + Y(poly[(i + 1) % n][1])) / 2];
+    const s0 = m(n - 1);
+    o.moveTo(s0[0], s0[1]);
+    for (let i = 0; i < n; i++) {
+      const e = m(i);
+      o.quadraticCurveTo(X(poly[i][0]), Y(poly[i][1]), e[0], e[1]);
     }
-    g.strokeStyle = "rgba(120,110,120,0.7)";
-    g.lineWidth = 0.22 * S;
-    g.beginPath();
-    g.moveTo(-r * S, 0);
-    g.quadraticCurveTo(0, -r * 0.75 * open * S, r * S, 0);
-    g.stroke();
-    g.restore();
-  };
-  eye(hr * 0.5, 0.9, 1.05);
-  eye(hr * -0.05, 1.1, 0.85);
-  const nose = H2(hr * 0.92, -1.1);
-  g.fillStyle = "rgba(232,150,160,1)";
-  g.beginPath();
-  g.ellipse(X(nose), Y(nose), 0.75 * S, 0.5 * S, 0, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = "rgba(255,255,255,0.5)";
-  g.lineWidth = 0.15 * S;
-  for (let i = -1; i <= 1; i++) {
-    const w0 = H2(hr * 0.85, -1.9 + i * 0.35);
-    const w1 = H2(hr * 0.85 + 5.5, -1.9 + i * 1.2 - 0.6);
-    g.beginPath();
-    g.moveTo(X(w0), Y(w0));
-    g.lineTo(X(w1), Y(w1));
-    g.stroke();
+    o.closePath();
+    o.fill();
   }
+  void oval;
+  // ears: from behind, their white backs, tilted the way the head is turned
+  const ear = (side: number) => {
+    const bx = head.x + side * 4.6 - turn * 1.2;
+    const by = head.y + 4.5;
+    const tip: P = [bx + side * 1.6 + turn * 0.8, by + 6 + pose.ears * 0.8];
+    o.beginPath();
+    o.moveTo(X(bx - 2.8), Y(by - 0.5));
+    o.quadraticCurveTo(X(bx - 1.2 + side * 0.5), Y(by + 4), X(tip[0]), Y(tip[1]));
+    o.quadraticCurveTo(X(bx + 1.8 + side * 0.5), Y(by + 3.5), X(bx + 3), Y(by - 0.5));
+    o.closePath();
+    o.fill();
+  };
+  ear(-1);
+  ear(1);
+  o.beginPath();
+  o.arc(X(head.x), Y(head.y), head.r * S, 0, Math.PI * 2);
+  o.fill();
+  // a cheek showing on the side it's looking to
+  if (Math.abs(turn) > 0.05) {
+    o.beginPath();
+    o.ellipse(X(head.x + turn * 4.5), Y(head.y - 2.2), 5.4 * S, 4.6 * S, 0, 0, Math.PI * 2);
+    o.fill();
+  }
+
+  // light it as one soft volume: warm up and to the right, lavender below and left
+  o.globalCompositeOperation = "source-atop";
+  const lit = o.createLinearGradient(X(14), Y(head.y + 8), X(-12), Y(0));
+  lit.addColorStop(0, "rgba(255,248,232,0.9)");
+  lit.addColorStop(0.45, "rgba(250,249,247,0)");
+  lit.addColorStop(1, "rgba(184,184,210,0.55)");
+  o.fillStyle = lit;
+  o.fillRect(0, 0, W, H);
+  // the soft shade where the back meets the seat, and under the head
+  const fold = o.createRadialGradient(X(0), Y(back.y - back.ry * 0.7), 0, X(0), Y(back.y - back.ry * 0.7), back.rx * S * 1.2);
+  fold.addColorStop(0, "rgba(190,190,214,0)");
+  fold.addColorStop(1, "rgba(190,190,214,0)");
+  const under = o.createLinearGradient(0, Y(5), 0, Y(0));
+  under.addColorStop(0, "rgba(160,162,190,0)");
+  under.addColorStop(1, "rgba(160,162,190,0.35)");
+  o.fillStyle = under;
+  o.fillRect(0, 0, W, H);
+  o.globalCompositeOperation = "source-over";
+
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, W, H);
+  // its shade on the grass, thrown left by the sun on the right
+  {
+    const sx = X(-4);
+    const rw = 22 * S;
+    g.save();
+    g.translate(sx, gy);
+    g.scale(1, 0.16);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, rw);
+    gr.addColorStop(0, "rgba(20,38,24,0.34)");
+    gr.addColorStop(1, "rgba(20,38,24,0)");
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(0, 0, rw, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+  softFur(g, off, fur, S);
+  // turned far enough, the face shows at the edge of the head: an eye, a nose
+  if (Math.abs(turn) > 0.45) {
+    const sd = Math.sign(turn);
+    const show = Math.min(1, (Math.abs(turn) - 0.45) / 0.4);
+    g.globalAlpha = show;
+    g.fillStyle = "rgba(40,42,44,0.95)";
+    g.beginPath();
+    g.arc(X(head.x + sd * 6.2), Y(head.y + 0.6), 0.7 * S, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "rgba(236,150,162,1)";
+    g.beginPath();
+    g.arc(X(head.x + sd * 8.6), Y(head.y - 2.4), 0.55 * S, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 1;
+  }
+  // the inner pink of an ear turned toward the side
+  void fold;
 }
