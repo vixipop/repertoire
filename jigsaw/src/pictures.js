@@ -226,7 +226,7 @@ const procedural = (name, aspect, draw) => ({
 // chosen by eye, since a first frame can be a bad one; once solved it plays
 // on from there. `crop` trims a baked-in border, in source pixels per side.
 export const PRESETS = [
-  { name: 'Swans', src: 'presets/swans.webp' },
+  { name: 'Swans', video: ['presets/swans.webm', 'presets/swans.mp4'], still: 3, crop: 28 },
   // WebM first (a quarter of the MP4's size, same look), MP4 for browsers without VP9.
   { name: 'Tiger', video: ['presets/tiger.webm', 'presets/tiger.mp4'], still: 9, crop: 48 },
   procedural('Night', 1.6, drawNight),
