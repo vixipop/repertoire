@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#e2e0da" />
     <title>Foam</title>
-    <script type="module" crossorigin src="./assets/index-CdOC1odw.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BJ7oOgxD.css">
+    <script type="module" crossorigin src="./assets/index-Bh0EmXYU.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dq-43FoU.css">
   </head>
   <body>
     <canvas id="scene" aria-label="Foam jigsaw pieces scattered around a dotted area on a table. Drag pieces into their neighbours."></canvas>
@@ -23,11 +23,18 @@
 
     <nav id="presets" class="presets" aria-label="Pictures"></nav>
 
-    <label class="upload" for="file" id="upload" tabindex="0" role="button">
-      <svg class="pic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="M4.5 17l5-4.5 3.5 3 2.5-2 4 3.5" /></svg>
-      <span>Use your own image</span>
-      <svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.4" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /></svg>
-    </label>
+    <div class="actions">
+      <button id="peek-open" class="icon-btn peek-btn" type="button" aria-label="View puzzle image" title="View puzzle image">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 12S6.2 5.8 12 5.8 21.2 12 21.2 12 17.8 18.2 12 18.2 2.8 12 2.8 12z" /><circle cx="12" cy="12" r="3.1" /></svg>
+      </button>
+      <label class="upload" for="file" id="upload" tabindex="0" role="button">
+        <span class="slot" aria-hidden="true">
+          <svg class="pic" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="M4.5 17l5-4.5 3.5 3 2.5-2 4 3.5" /></svg>
+          <svg class="lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.4" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /></svg>
+        </span>
+        <span class="label">Use your own image</span>
+      </label>
+    </div>
     <input id="file" type="file" accept="image/png,image/jpeg" hidden />
 
     <div id="unlock" class="unlock" role="dialog" aria-labelledby="unlock-title" hidden>
@@ -43,6 +50,11 @@
       </form>
       <p id="unlock-note" class="unlock-note" aria-live="polite"></p>
       <p id="unlock-win" class="unlock-win" aria-live="polite" hidden>yay, feature unlocked</p>
+    </div>
+
+    <div id="peek" class="peek" role="dialog" aria-modal="true" aria-label="The finished puzzle" hidden>
+      <canvas id="peek-canvas"></canvas>
+      <p class="peek-note">this is what you're building · tap anywhere to go back</p>
     </div>
 
     <p id="hint" class="hint">24 pieces · build it inside the dots</p>
