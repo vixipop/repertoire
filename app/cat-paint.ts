@@ -726,7 +726,8 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
     layers.set(g.canvas, off);
   }
   const o = off.getContext("2d")!;
-  const S = H / 60;
+  // 66 cm of cat-space tall: headroom for the ears and their fur
+  const S = H / 66;
   const gx = W / 2;
   const gy = H - 10 * S;
   const fur = look.fur;
@@ -816,25 +817,44 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
   ell([hx, hy, 0], [7.8, 7.6, 8.2], true);
   for (const side of [-1, 1]) ell([hx + 2.6, hy - 2.4, side * 3.8], [4.6, 4.4, 4.6], true);
   ell([hx + 6, hy - 2.4, 0], [2.2, 2, 2.6], true);
-  // ears: triangles standing up from the crown
+  // ears: triangles standing up from the crown. The tip's rounding is sized
+  // by how much it trims (cut, from the corner), not by a fixed radius, so a
+  // narrow ear only loses a sliver: the radius that trims cut is cut·tan(half the angle)
+  const tipR = (a: { x: number; y: number }, tp: { x: number; y: number }, b: { x: number; y: number }, cut: number) => {
+    const ang = Math.abs(Math.atan2(a.y - tp.y, a.x - tp.x) - Math.atan2(b.y - tp.y, b.x - tp.x));
+    const th = ang > Math.PI ? Math.PI * 2 - ang : ang;
+    return cut * Math.tan(th / 2);
+  };
   const earTilt = rest * 0.6;
   for (const side of [-1, 1]) {
-    const base1: V3 = [hx - 1.6, hy + 5.4, side * 1.9];
-    const base2: V3 = [hx + 1.7, hy + 4.9, side * 7.1];
+    // the base runs front to back as well as across, so turned away the ear
+    // still shows as an ear rather than thinning to a needle
+    const base1: V3 = [hx - 3.2, hy + 5.4, side * 2.2];
+    const base2: V3 = [hx + 2.4, hy + 4.9, side * 6.9];
     const tip: V3 = [hx + 0.6 + earTilt * 2, hy + 14.6 - earTilt * 3.5, side * 5.7];
     const A = PH(base1);
     const B = PH(base2);
     const T = PH(tip);
+    // an ear has some body to it: seen edge on, it never thins below this
+    const minW = 4.2 * S;
+    const span = B.x - A.x;
+    if (Math.abs(span) < minW) {
+      const mid = (A.x + B.x) / 2;
+      const sgn = span < 0 ? -1 : 1;
+      A.x = mid - (sgn * minW) / 2;
+      B.x = mid + (sgn * minW) / 2;
+    }
     // the inside of the ear faces the way the head does
     const front = Math.cos(pose.yaw + pose.head) < 0.15;
     items.push({
       depth: (A.d + B.d + T.d) / 3 + 0.5,
       draw: () => {
+        // a big triangle, its tip softly rounded
         o.fillStyle = "rgb(246,245,248)";
         o.beginPath();
         o.moveTo(A.x, A.y);
-        o.quadraticCurveTo((A.x + T.x) / 2 - 2, (A.y + T.y) / 2, T.x, T.y);
-        o.quadraticCurveTo((B.x + T.x) / 2 + 2, (B.y + T.y) / 2, B.x, B.y);
+        o.arcTo(T.x, T.y, B.x, B.y, tipR(A, T, B, 1.9 * S));
+        o.lineTo(B.x, B.y);
         o.closePath();
         o.fill();
         if (front) {
@@ -845,7 +865,7 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
           o.fillStyle = "rgba(240,176,186,0.85)";
           o.beginPath();
           o.moveTo(a2.x, a2.y);
-          o.lineTo(t2.x, t2.y);
+          o.arcTo(t2.x, t2.y, b2.x, b2.y, tipR(a2, t2, b2, 1.3 * S));
           o.lineTo(b2.x, b2.y);
           o.closePath();
           o.fill();

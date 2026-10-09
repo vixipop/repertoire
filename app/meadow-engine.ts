@@ -69,28 +69,28 @@ export type MeadowParams = {
 export const MEADOW_DEFAULTS: MeadowParams = {
   cover: 1,
   wind: 0.27,
-  sun: 0.2,
+  sun: 0.34,
   warm: 1,
   bloom: 0.15,
-  rays: 0.3,
+  rays: 0.36,
   paint: 0.45,
   brush: 0.23,
   blur: 0.15,
-  sunlight: 0.7,
+  sunlight: 0.81,
   fuzz: 0.87,
   blade: 1,
   sky: "#004f94",
   skyDepth: 0.69,
-  pink: 0.5,
+  pink: 0.58,
   grassSun: "#c08d08",
   grassShade: "#2f450d",
   grassRich: 1,
-  catSize: 0.3,
-  catFur: 0.85,
-  catPaint: 0.47,
-  catGlow: 0.33,
-  catBlur: 0.3,
-  catGrain: 0.4,
+  catSize: 0.6,
+  catFur: 1,
+  catPaint: 0.62,
+  catGlow: 0.45,
+  catBlur: 0.15,
+  catGrain: 0.15,
   cloudGold: "#fac043",
 };
 
@@ -690,7 +690,7 @@ void main() {
     float cols = 46.0 + float(layer) * 17.0;
     float x = vUv.x * cols + float(layer) * 0.37;
     float col = floor(x);
-    float root = layer == 0 ? 0.0 : -0.13;
+    float root = layer == 0 ? 0.0 : -0.118;
     float bh = (layer == 0 ? uGrassH : uGrassH * 0.55) * (0.35 + 0.65 * h1(col + float(layer) * 41.0));
     float u0 = up - root;
     if (u0 > -0.02 && u0 < bh) {
@@ -702,7 +702,7 @@ void main() {
     }
   }
   // at the very foot of the picture, the grass closes over completely
-  blade = max(blade, 1.0 - smoothstep(-0.16, -0.135, up));
+  blade = max(blade, 1.0 - smoothstep(-0.145, -0.123, up));
   float a = c.a * (1.0 - blade * 0.95);
   // in the shade of a passing cloud, white fur goes cool and blue
   float sh = ridgeShadow(uCatPos) * cloudShadow(uCatPos);
@@ -1391,7 +1391,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   // to us: sitting, lounging, dozing off, its head following the butterflies
   // and its tail lazily wandering through the grass
   const CAT_W = 520;
-  const CAT_H = 250;
+  const CAT_H = 275;
   const catCanvas = document.createElement("canvas");
   catCanvas.width = CAT_W;
   catCanvas.height = CAT_H;
@@ -1442,7 +1442,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     }
     catCtx.setTransform(1, 0, 0, 1, 0, 0);
     catCtx.clearRect(0, 0, CAT_W, CAT_H);
-    paintCatRound(catCtx, { yaw: 0, head: cat.turn * 1.1, sit: cat.sit, rest: cat.rest, t, breath: cat.breath }, { fur: params.catFur });
+    paintCatRound(catCtx, { yaw: 0, head: cat.turn * 0.8, sit: cat.sit, rest: cat.rest, t, breath: cat.breath }, { fur: params.catFur });
     gl.bindTexture(gl.TEXTURE_2D, catTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, catCanvas);
   };
@@ -1823,10 +1823,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       const sc = 1.0 + params.catSize * 1.4;
       gl.uniform3f(catProg.u.uCamRight, right[0], right[1], right[2]);
       gl.uniform3f(catProg.u.uCatPos, cat.x, groundHeight(cat.x, cat.z), cat.z);
-      // the sprite is 60 cm of cat-space tall (and as wide as its canvas), its ground 10 cm up
-      gl.uniform2f(catProg.u.uCatSize, (0.6 * CAT_W) / CAT_H * sc, 0.6 * sc);
-      gl.uniform1f(catProg.u.uGroundV, 10 / 60);
-      gl.uniform1f(catProg.u.uGrassH, 0.13);
+      // the sprite is 66 cm of cat-space tall (and as wide as its canvas), its ground 10 cm up
+      gl.uniform2f(catProg.u.uCatSize, (0.66 * CAT_W) / CAT_H * sc, 0.66 * sc);
+      gl.uniform1f(catProg.u.uGroundV, 10 / 66);
+      gl.uniform1f(catProg.u.uGrassH, 0.118);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, catTex);
       gl.uniform1i(catProg.u.uSprite, 2);
