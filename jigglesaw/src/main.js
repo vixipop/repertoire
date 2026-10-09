@@ -4,6 +4,8 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cutPuzzle, gridFor } from './shape.js';
 import { Cluster } from './cluster.js';
 import { createQualityGuard } from './quality.js';
+import { THEMES, savedTheme, saveTheme } from './theme.js';
+import { createUnlock } from './unlock.js';
 import { foamMaterial, printMaterial } from './materials.js';
 import { printTexture, tableTexture, shadowTexture, dottedFrameTexture } from './textures.js';
 import { PRESETS, loadPreset, pictureFromImage } from './pictures.js';
@@ -32,13 +34,14 @@ const MAGNET_R = 0.42; // where the pull starts while you're still holding it
 const GRAVITY = 26;
 const SPREAD = 3.3; // table area per loose piece, in piece widths²
 const LIGHT = new THREE.Vector3(-2.4, 6, 2.2); // key light; shadows fall away from it
-const TABLE = { center: '#f3f2ee', edge: '#e2e0da' };
 
 // ─── Renderer, scene, camera ─────────────────────────────────────────────
 const canvas = document.getElementById('scene');
 const hint = document.getElementById('hint');
 const fileInput = document.getElementById('file');
 const musicButton = document.getElementById('music');
+const themeButton = document.getElementById('theme');
+const uploadButton = document.getElementById('upload');
 const presetBar = document.getElementById('presets');
 const scatterButton = document.getElementById('scatter');
 
@@ -60,7 +63,8 @@ const quality = createQualityGuard(maxDpr, (ratio) => {
 });
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(TABLE.edge);
+let theme = savedTheme();
+scene.background = new THREE.Color(THEMES[theme].table.edge);
 
 // Soft, even light: a dim environment for gentle shading, a broad sky fill,
 // and one warm key for direction. Nothing strong enough to glint.
@@ -81,7 +85,7 @@ const ELEV = THREE.MathUtils.degToRad(52);
 
 const table = new THREE.Mesh(
   new THREE.PlaneGeometry(80, 80),
-  new THREE.MeshBasicMaterial({ map: tableTexture(TABLE.center, TABLE.edge), toneMapped: false })
+  new THREE.MeshBasicMaterial({ map: tableTexture(THEMES[theme].table.center, THEMES[theme].table.edge), toneMapped: false })
 );
 table.rotation.x = -Math.PI / 2;
 scene.add(table);
@@ -96,7 +100,7 @@ let solvedAt = null; // performance.now() when the last piece went in
 const sparkles = createSparkles(scene);
 const topMat = printMaterial(print);
 const sideMat = foamMaterial({ top: HEIGHT, cardT: CARD_T, backT: BACK_T, print, sheet: new THREE.Vector2(6, 4), pad: 0 });
-const shadowTint = new THREE.Color('#2b2418');
+const shadowTint = new THREE.Color(THEMES[theme].shadow);
 let shadowPlane = null;
 let shadowSize = 2.2;
 
@@ -215,7 +219,7 @@ function buildZone() {
   zone.d = board.d + ZONE_PAD * 2 + lean;
   zone.z = -lean / 2;
   const pad = 0.1;
-  const tex = dottedFrameTexture(zone.w, zone.d, pad);
+  const tex = dottedFrameTexture(zone.w, zone.d, pad, THEMES[theme].dots);
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   zone.mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(zone.w + pad * 2, zone.d + pad * 2).rotateX(-Math.PI / 2),
@@ -263,6 +267,36 @@ function buildPuzzle(pic) {
   fitCamera();
   scatter();
 }
+
+// ─── Light and dark ──────────────────────────────────────────────────────
+// Light is the default. Switching repaints the table, the shadows and the
+// dotted area, including the puzzles parked behind other pictures.
+function applyTheme(name) {
+  theme = name;
+  const t = THEMES[name];
+  document.documentElement.dataset.theme = name;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t.browser);
+  themeButton.setAttribute('aria-label', name === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+
+  scene.background.set(t.table.edge);
+  table.material.map.dispose();
+  table.material.map = tableTexture(t.table.center, t.table.edge);
+  table.material.needsUpdate = true;
+
+  shadowTint.set(t.shadow);
+  const everyPiece = [pieces, ...[...parked.values()].map((k) => k.pieces)].flat();
+  for (const p of everyPiece) {
+    p.soft.material.color.copy(shadowTint);
+    p.contact.material.color.copy(shadowTint);
+  }
+  if (zone.mesh) buildZone();
+  wake();
+}
+themeButton.addEventListener('click', () => {
+  const next = theme === 'dark' ? 'light' : 'dark';
+  saveTheme(next);
+  applyTheme(next);
+});
 
 // ─── Keeping each picture's puzzle ───────────────────────────────────────
 // Switching pictures parks the current puzzle as it is (pieces where they
@@ -876,12 +910,23 @@ function frame(now) {
   else running = false;
 }
 
+// "Use your own image" starts locked (see unlock.js); uploads of every kind
+// (button, drop, paste) wait until the code is in.
+const paywall = createUnlock(uploadButton, () => {
+  hint.textContent = 'unlocked · any PNG or JPEG';
+  hint.classList.remove('gone');
+});
+
 // ─── Your own image ──────────────────────────────────────────────────────
 // A new picture cuts a new puzzle in its shape. Uploads are stills only:
 // PNG or JPEG. (Animated pictures are presets.)
 const UPLOADABLE = ['image/png', 'image/jpeg'];
 async function useImage(file) {
   if (!file) return;
+  if (paywall.isLocked()) {
+    paywall.open();
+    return;
+  }
   if (!UPLOADABLE.includes(file.type)) {
     hint.textContent = 'use a PNG or JPEG';
     hint.classList.remove('gone');
@@ -987,6 +1032,7 @@ window.addEventListener('keydown', (e) => {
 
 // ─── Start ───────────────────────────────────────────────────────────────
 window.addEventListener('resize', resize);
+applyTheme(theme);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 soften.resize();
 camera.aspect = window.innerWidth / window.innerHeight;

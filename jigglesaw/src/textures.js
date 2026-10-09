@@ -84,8 +84,9 @@ export function shadowTexture(outline, size, blur) {
 }
 
 // The dotted outline of the assembly area: dots walked evenly round a rounded
-// rectangle w × d (in table units), corners included, with `pad` of margin.
-export function dottedFrameTexture(w, d, pad) {
+// rectangle w × d (in table units), corners included, with `pad` of margin,
+// in the given colour.
+export function dottedFrameTexture(w, d, pad, colour) {
   const ppu = 160;
   const cv = document.createElement('canvas');
   cv.width = Math.round((w + pad * 2) * ppu);
@@ -108,7 +109,7 @@ export function dottedFrameTexture(w, d, pad) {
   let total = 0;
   for (let i = 1; i < path.length; i++) total += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
   const gap = total / Math.round(total / 0.13);
-  ctx.fillStyle = 'rgba(120, 112, 98, 0.32)';
+  ctx.fillStyle = colour;
   let next = 0;
   let walked = 0;
   for (let i = 1; i < path.length; i++) {

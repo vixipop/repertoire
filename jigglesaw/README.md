@@ -29,7 +29,33 @@ video in `public/presets/` (VP9 WebM, with an MP4 fallback), listed in
 that picture's shape; uploads are PNG or JPEG only. The grid and the dotted
 area follow the picture's shape. Progress is kept per preset when you switch.
 
-`M` toggles the music. `?debug` exposes internals for scripted tests.
+`M` toggles the music; the sun/moon button switches light (default) and a
+charcoal dark mode. `?debug` exposes internals for scripted tests.
+
+## The paid feature
+
+"Use your own image" shows a lock. Hovering it opens a popup (bottom right)
+saying it's a paid feature "but for the dodo team", with the code blurred until
+you hover it; hovering reveals `DODO` and types it in, then sparkles, "yay,
+feature unlocked", and the lock goes away (`src/unlock.js`). Uploads by button,
+drop and paste all wait for it. The unlocked flag lives in `sessionStorage`, so
+a new tab starts locked again.
+
+That is a showpiece, not a gate: the code is in the page. To make it real with
+Dodo Payments, put the check behind a checkout:
+
+1. A small server function (Vercel, Cloudflare Workers, anything with a secret
+   store) holds the Dodo API key and creates a checkout session for the
+   product, with the 100%-off discount applied server-side, and returns the
+   `checkout_url`. The key must never ship in this static site.
+2. The button sends the visitor to that `checkout_url`; Dodo sends them back to
+   the session's `return_url` when they're done.
+3. On return, the page asks your function whether that payment succeeded
+   (Dodo can also call a webhook on your function), and only then unlocks.
+   Trusting the query string on the return URL alone would be spoofable.
+
+Check field names and the test-mode base URL against Dodo's API reference
+(Checkout Sessions) before wiring it up.
 
 ## Files
 
