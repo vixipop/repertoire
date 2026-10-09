@@ -1405,7 +1405,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   // it lives in a patch of meadow at the bottom right, close to us: lying and
   // sitting with its back to us, watching the butterflies, and now and then
   // crouching, wiggling and galloping after one, ending in a leap
-  const CAT_W = 400;
+  // wide enough for a running cat and its whole tail, stretched out in a leap
+  const CAT_W = 520;
   const CAT_H = 250;
   const catCanvas = document.createElement("canvas");
   catCanvas.width = CAT_W;
@@ -1996,8 +1997,8 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       const sc = 1.0 + params.catSize * 1.4;
       gl.uniform3f(catProg.u.uCamRight, right[0], right[1], right[2]);
       gl.uniform3f(catProg.u.uCatPos, cat.x, groundHeight(cat.x, cat.z) + cat.jump, cat.z);
-      // the sprite is 96 x 60 cm of cat-space, its ground 10 cm up from the bottom
-      gl.uniform2f(catProg.u.uCatSize, 0.96 * sc, 0.6 * sc);
+      // the sprite is 60 cm of cat-space tall (and as wide as its canvas), its ground 10 cm up
+      gl.uniform2f(catProg.u.uCatSize, (0.6 * CAT_W) / CAT_H * sc, 0.6 * sc);
       gl.uniform1f(catProg.u.uGroundV, 10 / 60);
       // more grass in front of a sitting cat than a leaping one
       gl.uniform1f(catProg.u.uGrassH, cat.mode === "leap" ? 0.02 : cat.side > 0.5 ? 0.09 : 0.13);

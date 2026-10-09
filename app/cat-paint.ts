@@ -273,7 +273,7 @@ export function paintCat(g: CanvasRenderingContext2D, pose: CatPose, look: CatLo
     layers.set(g.canvas, off);
   }
   const o = off.getContext("2d")!;
-  const S = W / 96; // pixels per centimetre
+  const S = H / 60; // pixels per centimetre: the canvas is 60 cm tall, as wide as it needs
   const gx = W / 2;
   const gy = H - 10 * S;
   const f = look.facing < 0 ? -1 : 1;
@@ -526,7 +526,7 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
     layers.set(g.canvas, off);
   }
   const o = off.getContext("2d")!;
-  const S = W / 96;
+  const S = H / 60;
   const gx = W / 2;
   const gy = H - 10 * S;
   const X = (x: number) => gx + x * S;
