@@ -21,6 +21,8 @@
  * Everything is in metres except the cloud slab, which is in kilometres.
  */
 
+import { lerpPose, paintCat, paintCatBack, poseCrouch, poseLeap, poseRun, type CatPose } from "./cat-paint";
+
 export type MeadowParams = {
   /** how much of the sky is cloud */
   cover: number;
@@ -47,14 +49,19 @@ export type MeadowParams = {
   skyDepth: number;
   /** how much rose the clouds catch */
   pink: number;
-  /** the cows' own size, softening and brushwork */
-  cowSize: number;
-  cowBlur: number;
-  cowPaint: number;
-  /** sunlit grass: golden (0) to green (1) */
-  grassSun: number;
-  /** shaded grass: olive (0) to emerald (1) */
-  grassShade: number;
+  /** the cat: its size, its fur, and its own brushwork, glow, edge softening and grain */
+  catSize: number;
+  catFur: number;
+  catPaint: number;
+  catGlow: number;
+  catBlur: number;
+  catGrain: number;
+  /** the gold the clouds catch (#rrggbb) */
+  cloudGold: string;
+  /** sunlit grass (#rrggbb) */
+  grassSun: string;
+  /** shaded grass (#rrggbb) */
+  grassShade: string;
   /** how rich the greens are */
   grassRich: number;
 };
@@ -69,18 +76,22 @@ export const MEADOW_DEFAULTS: MeadowParams = {
   paint: 0.6,
   brush: 0.23,
   blur: 0.3,
-  sunlight: 0.2,
+  sunlight: 0.7,
   fuzz: 0.87,
   blade: 1,
-  sky: "#0a379f",
+  sky: "#5b89b0",
   skyDepth: 0.4,
   pink: 0.5,
-  grassSun: 0.15,
-  grassShade: 0.36,
+  grassSun: "#c08d08",
+  grassShade: "#2a3e0a",
   grassRich: 1,
-  cowSize: 0.5,
-  cowBlur: 0.35,
-  cowPaint: 0.45,
+  catSize: 0.5,
+  catFur: 0.6,
+  catPaint: 0.35,
+  catGlow: 0.2,
+  catBlur: 0.3,
+  catGrain: 0.35,
+  cloudGold: "#fac043",
 };
 
 export type MeadowController = {
@@ -265,6 +276,7 @@ uniform float uAspect;
 uniform vec3 uSkyTop;
 uniform vec3 uSkyHor;
 uniform float uPink;
+uniform vec3 uGold;
 ${CLOUD_LIB}
 ${TONE}
 
@@ -343,7 +355,7 @@ void main() {
       float warmth = clamp((0.95 - uSunCol.b) / 0.6, 0.0, 1.0);
       vec3 peach = vec3(1.06, 0.72, 0.5);
       vec3 rose = vec3(1.07, 0.76, 0.8);
-      vec3 gold = vec3(1.1, 0.88, 0.42);
+      vec3 gold = uGold * 1.12;
       // gold where the sun strikes square, peach and rose where it glances
       vec3 tint = mix(mix(peach, rose, uPink), peach, smoothstep(0.35, 0.6, gilt));
       tint = mix(tint, gold, smoothstep(0.5, 0.88, gilt));
@@ -469,7 +481,7 @@ void main() {
   float patch = vn(xz * 0.022 + 3.0) * 0.6 + vn(xz * 0.1 + 7.0) * 0.4;
   vec3 sunG = uGrassSun * (0.88 + 0.28 * patch);
   // the low sun gilds the grass it reaches
-  sunG = mix(sunG, sunG * vec3(1.08, 0.98, 0.7), clamp((0.95 - uSunCol.b) / 0.7, 0.0, 1.0) * 0.35);
+
   vec3 shadeG = uGrassShade * (0.82 + 0.36 * patch);
   // the wind's waves pass as a sheen over the sunlit grass
   float along = dot(xz, uWindDir);
@@ -633,95 +645,62 @@ void main() {
 }
 `;
 
-// cows, far off on the hills: little figures painted in a billboard, standing
-// upright on the ground, drawn into their own layer
-const COW_VERT = `
-attribute vec2 aCorner;
-attribute vec3 aRoot;
-attribute vec4 aCow;
+// the cat: painted each frame on a 2D canvas (see cat-paint) and stood in the
+// meadow as a picture facing us, drawn into its own layer; grass blades stand
+// in front of its paws and the bottom of its body
+const QUAD_VERT_CAT = `
+attribute vec2 aPos;
 uniform mat4 uVP;
 uniform vec3 uCamRight;
-uniform float uCowScale;
-varying vec2 vQ;
-varying vec4 vCow;
-varying vec3 vW;
+uniform vec3 uCatPos;
+uniform vec2 uCatSize;
+uniform float uGroundV;
+varying vec2 vUv;
 void main() {
-  // the quad in a cow's metres: three wide, from just under the hooves to
-  // above the back; drawn as large as asked
-  vec2 q = vec2(aCorner.x * 1.5, mix(-0.25, 1.9, aCorner.y * 0.5 + 0.5));
-  // facing in the sign, the cow's own scale (it grows with distance) in the size
-  float sc = abs(aCow.x) * uCowScale;
-  vec3 p = aRoot + (uCamRight * q.x + vec3(0.0, q.y, 0.0)) * sc;
-  vQ = vec2(q.x * sign(aCow.x), q.y);
-  vCow = aCow;
-  vW = aRoot + vec3(0.0, 0.8 * sc, 0.0);
+  vec2 q = aPos * 0.5 + 0.5;
+  vec3 p = uCatPos + uCamRight * (q.x - 0.5) * uCatSize.x + vec3(0.0, (q.y - uGroundV) * uCatSize.y, 0.0);
+  // the canvas's rows run top to bottom
+  vUv = vec2(q.x, 1.0 - q.y);
   gl_Position = uVP * vec4(p, 1.0);
 }
 `;
 
-const COW_FRAG = `
+const CAT_FRAG = `
 precision highp float;
-varying vec2 vQ;
-varying vec4 vCow;
-varying vec3 vW;
+varying vec2 vUv;
+uniform sampler2D uSprite;
+uniform vec3 uCatPos;
+uniform float uGroundV;
+uniform float uGrassH;
 ${CLOUD_LIB}
 ${SURFACE_LIB}
-${TONE}
-float cap(vec2 q, vec2 a, vec2 b, float r) {
-  vec2 pa = q - a;
-  vec2 ba = b - a;
-  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-  return length(pa - ba * h) - r;
-}
-float h2(vec2 p) {
-  p = fract(p * vec2(123.34, 456.21));
-  p += dot(p, p + 45.32);
-  return fract(p.x * p.y);
-}
-float vn(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
-}
+float h1(float n) { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
 void main() {
-  vec2 q = vQ;
-  float pose = vCow.y;
-  float variant = vCow.z;
-  float seed = vCow.w;
-  // body, legs, neck and head (front of the cow is +x), a swishing tail
-  float body = (length((q - vec2(0.0, 1.0)) / vec2(0.82, 0.36)) - 1.0) * 0.36;
-  float legs = min(min(cap(q, vec2(0.52, 0.75), vec2(0.55, 0.0), 0.07), cap(q, vec2(0.36, 0.75), vec2(0.34, 0.0), 0.065)),
-                   min(cap(q, vec2(-0.5, 0.75), vec2(-0.53, 0.0), 0.075), cap(q, vec2(-0.64, 0.8), vec2(-0.62, 0.0), 0.065)));
-  vec2 head = mix(vec2(1.02, 0.3), vec2(1.1, 1.22), pose);
-  float neck = cap(q, vec2(0.66, 1.05), head + vec2(-0.14, 0.04), mix(0.15, 0.17, pose));
-  float hd = (length((q - head) / vec2(0.23, 0.15)) - 1.0) * 0.15;
-  float ears = (length((q - head - vec2(-0.12, 0.14)) / vec2(0.09, 0.04)) - 1.0) * 0.04;
-  float sway = sin(uTime * 2.3 + seed * 17.0) * 0.06;
-  float tail = cap(q, vec2(-0.8, 1.18), vec2(-0.9 + sway, 0.5), 0.025);
-  float d = min(min(min(body, legs), min(neck, hd)), min(ears, tail));
-  float a = 1.0 - smoothstep(-0.035, 0.035, d);
-  // hooves lost in the grass
-  a *= smoothstep(0.0, 0.24, q.y + 0.06 * sin(q.x * 31.0 + seed * 11.0));
-
-  // coat
-  vec3 alb;
-  if (variant < 1.0) alb = vn(q * 3.2 + seed * 13.0) > 0.52 ? vec3(0.07, 0.065, 0.07) : vec3(0.92, 0.9, 0.86);
-  else if (variant < 2.0) alb = vec3(0.45, 0.26, 0.15);
-  else if (variant < 3.0) alb = vec3(0.86, 0.79, 0.66);
-  else alb = vec3(0.12, 0.1, 0.1);
-  if (legs < 0.0 && body > 0.0) alb *= 0.8;
-  // rounded: lit on the sunward top, shaded beneath
-  vec2 n = (q - vec2(0.0, 1.0)) / vec2(0.82, 0.36);
-  float round = clamp(0.55 + 0.45 * n.y + 0.2 * n.x * sign(uSun.x + 1e-4), 0.0, 1.0);
-  float sh = ridgeShadow(vW) * cloudShadow(vW);
-  vec3 col = alb * (sunLight() * mix(0.35, 1.0, round) * sh + skyLight(0.8) * 1.1);
-  col = aerial(tone(col), vW);
-
-  // the patch of shade the cow stands in
-  float ground = (1.0 - smoothstep(0.3, 1.0, length(q / vec2(1.05, 0.13)))) * 0.32;
-  float alpha = a + ground * (1.0 - a);
-  gl_FragColor = vec4(col * a, alpha);
+  vec4 c = texture2D(uSprite, vUv);
+  // blades of grass in front of the paws and the bottom of the body
+  float up = 1.0 - vUv.y - uGroundV;
+  float blade = 0.0;
+  for (int layer = 0; layer < 2; layer++) {
+    float cols = 46.0 + float(layer) * 17.0;
+    float x = vUv.x * cols + float(layer) * 0.37;
+    float col = floor(x);
+    float bh = uGrassH * (0.35 + 0.65 * h1(col + float(layer) * 41.0));
+    if (up < bh) {
+      float u = clamp(up / bh, 0.0, 1.0);
+      float lean = (h1(col + 3.0 + float(layer) * 7.0) - 0.5) * 1.2 + sin(uTime * 1.4 + col * 0.7) * 0.12;
+      float bx = fract(x) - 0.5 - lean * u * u * 0.9;
+      float w = mix(0.42, 0.06, u);
+      blade = max(blade, 1.0 - smoothstep(w * 0.6, w, abs(bx)));
+    }
+  }
+  // right at the ground, the grass closes over completely
+  blade = max(blade, 1.0 - smoothstep(-0.004, 0.012, up));
+  float a = c.a * (1.0 - blade * 0.95);
+  // in the shade of a passing cloud, white fur goes cool and blue
+  float sh = ridgeShadow(uCatPos) * cloudShadow(uCatPos);
+  // white fur kept just off white, so its shading reads under the bloom
+  vec3 col = c.rgb * 0.88 * mix(vec3(0.8, 0.83, 0.94), vec3(1.0), sh);
+  gl_FragColor = vec4(col * a, a);
 }
 `;
 
@@ -758,10 +737,12 @@ uniform float uScale;
 uniform float uTime;
 uniform float uFuzz;
 uniform float uBlade;
-uniform sampler2D uCow;
-uniform sampler2D uCowSoft;
-uniform float uCowBlur;
-uniform float uCowPaint;
+uniform sampler2D uCat;
+uniform sampler2D uCatSoft;
+uniform float uCatBlur;
+uniform float uCatPaint;
+uniform float uCatGlow;
+uniform float uCatGrain;
 
 float hash(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -811,11 +792,18 @@ vec4 dabs(vec2 p, float size, float seed) {
   return vec4(col, cover);
 }
 
-// the cows' layer (colour premultiplied by alpha), softened as far as asked
-vec4 cowAt(vec2 p) { vec2 uv = uvOf(p); return mix(texture2D(uCow, uv), texture2D(uCowSoft, uv), uCowBlur); }
+// the cat's layer (colour premultiplied by alpha); its edges softened as far as asked
+vec4 catAt(vec2 p) {
+  vec2 uv = uvOf(p);
+  vec4 sharp = texture2D(uCat, uv);
+  vec4 soft = texture2D(uCatSoft, uv);
+  // only the edges blur: where the layer is neither empty nor solid
+  float edge = 1.0 - abs(soft.a * 2.0 - 1.0);
+  return mix(sharp, soft, clamp(uCatBlur * (0.35 + edge * 1.3), 0.0, 1.0));
+}
 
-// the cows get their own, smaller brush
-vec4 cowDabs(vec2 p, float size) {
+// the cat gets its own, smaller brush
+vec4 catDabs(vec2 p, float size) {
   vec2 id = floor(p / size);
   float best = -1.0;
   vec4 col = vec4(0.0);
@@ -832,7 +820,7 @@ vec4 cowDabs(vec2 p, float size) {
         float pri = hash(c + 19.7) + m * 0.5;
         if (pri > best) {
           best = pri;
-          col = cowAt(centre + vec2(cos(ang), sin(ang)) * r.x * 0.35) * smoothstep(0.0, 0.3, m);
+          col = catAt(centre + vec2(cos(ang), sin(ang)) * r.x * 0.35) * smoothstep(0.0, 0.3, m);
         }
       }
     }
@@ -908,13 +896,32 @@ void main() {
     col = mix(col, dark, deep * k * 0.5);
   }
 
-  // the cows, laid over the painted grass
-  vec4 cow = cowAt(p);
-  if (uCowPaint > 0.001) {
-    vec4 cd = cowDabs(p, (2.2 + uBrush * 3.0) * uScale);
-    cow = mix(cow, max(cow, cd), uCowPaint);
+  // the cat, laid over the painted grass
+  vec4 cat = catAt(p);
+  if (uCatPaint > 0.001) {
+    vec4 cd = catDabs(p, (2.0 + uBrush * 3.0) * uScale);
+    cat = mix(cat, max(cat, cd), uCatPaint);
   }
-  col = col * (1.0 - cow.a) + cow.rgb;
+  // grain in the fur, strongest at its edges, so they break up like pastel
+  if (uCatGrain > 0.001) {
+    float g1 = hash(floor(p * 0.9) + 0.5) - 0.5;
+    float edge = cat.a * (1.0 - cat.a) * 4.0;
+    // thins or thickens the paint at the edge, never brightens what's barely there
+    cat *= clamp(1.0 + g1 * uCatGrain * edge * 1.8, 0.0, 1.5);
+    cat = min(cat, vec4(cat.a));
+    cat.rgb += (hash(floor(p * 1.3) + 7.0) - 0.5) * 0.07 * uCatGrain * cat.a;
+  }
+  col = col * (1.0 - cat.a) + cat.rgb;
+  // and a soft glow of light round the white fur
+  if (uCatGlow > 0.001) {
+    vec4 gw = vec4(0.0);
+    for (int i = 0; i < 8; i++) {
+      float an = float(i) * 0.785398 + 0.39;
+      gw += texture2D(uCatSoft, uvOf(p + vec2(cos(an), sin(an)) * 7.0 * uScale));
+    }
+    gw /= 8.0;
+    col += gw.rgb * uCatGlow * 0.55 * (1.0 - cat.a * 0.6);
+  }
 
   // bloom and haze
   vec3 bl = vec3(0.0);
@@ -1042,15 +1049,15 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-  const sky = link(gl, QUAD_VERT, SKY_FRAG, ["aPos"], [...CLOUD_UNIFORMS, "uRight", "uUp", "uFwd", "uTanV", "uAspect", "uSkyTop", "uSkyHor", "uPink"]);
+  const sky = link(gl, QUAD_VERT, SKY_FRAG, ["aPos"], [...CLOUD_UNIFORMS, "uRight", "uUp", "uFwd", "uTanV", "uAspect", "uSkyTop", "uSkyHor", "uPink", "uGold"]);
   const back = link(gl, QUAD_VERT, BACK_FRAG, ["aPos"], ["uSky", "uSkyPx"]);
   const surf = [...CLOUD_UNIFORMS, ...SURFACE_UNIFORMS, "uVP"];
   const terrain = link(gl, TERRAIN_VERT, TERRAIN_FRAG, ["aPos", "aNrm"], [...surf, "uWindAmt", "uWindDir", "uPix", "uGrassSun", "uGrassShade", "uFuzz", "uSunlight"]);
   const flowers = link(gl, FLOWER_VERT, FLOWER_FRAG, ["aCorner", "aRoot", "aBlade"], [...surf, "uWindAmt", "uWindDir", "uCamRight", "uCamUp"]);
   const flies = link(gl, FLY_VERT, FLY_FRAG, ["aPos", "aInfo"], surf);
-  const cows = link(gl, COW_VERT, COW_FRAG, ["aCorner", "aRoot", "aCow"], [...surf, "uCamRight", "uCowScale"]);
+  const catProg = link(gl, QUAD_VERT_CAT, CAT_FRAG, ["aPos"], [...surf, "uCamRight", "uCatPos", "uCatSize", "uGroundV", "uSprite", "uGrassH"]);
   const blur = link(gl, QUAD_VERT, BLUR_FRAG, ["aPos"], ["uSrc", "uStep"]);
-  const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime", "uFuzz", "uBlade", "uCow", "uCowSoft", "uCowBlur", "uCowPaint"]);
+  const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime", "uFuzz", "uBlade", "uCat", "uCatSoft", "uCatBlur", "uCatPaint", "uCatGlow", "uCatGrain"]);
 
   // noise table for the clouds: red random, green the red one z-layer on
   const rnd = mulberry32(7);
@@ -1226,118 +1233,6 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     return [f.x + ox, f.y + y, f.z + oz];
   };
 
-  // ---- a few cows grazing on the far slopes ----
-  // only where we can actually see them: nothing between them and the eye
-  const seen = (x: number, z: number) => {
-    const gy = groundHeight(x, z) + 0.9;
-    for (let i = 1; i < 48; i++) {
-      const f = i / 48;
-      const px = eye[0] + (x - eye[0]) * f;
-      const pz = eye[2] + (z - eye[2]) * f;
-      const py = eye[1] + (gy - eye[1]) * f;
-      if (groundHeight(px, pz) > py - 0.15) return false;
-    }
-    return true;
-  };
-  type Cow = { x: number; y: number; z: number; face: number; pose: number; want: number; timer: number; variant: number; seed: number; step: number };
-  const herd: Cow[] = [];
-  {
-    // the spots, picked on the painting (across, down, from its top-left),
-    // where a cow or two should stand
-    const SPOTS: Array<[number, number, number]> = [
-      [0.18, 0.6, 2],
-      [0.26, 0.645, 2],
-      [0.77, 0.627, 2],
-      [0.93, 0.512, 1],
-    ];
-    // follow the ray through that point of the picture down onto the land
-    const landAt = (u: number, v: number): [number, number] | null => {
-      const nx = (u * 2 - 1) * TAN_V * 1.6;
-      const ny = (1 - v * 2) * TAN_V;
-      const cp0 = Math.cos(PITCH);
-      const sp0 = Math.sin(PITCH);
-      let dx = nx;
-      let dy = ny * cp0 + sp0;
-      let dz = -ny * sp0 + cp0;
-      const l = Math.hypot(dx, dy, dz);
-      dx /= l;
-      dy /= l;
-      dz /= l;
-      let prev = 0;
-      for (let t = 2; t < 4000; t *= 1.03) {
-        if (eye[1] + dy * t < groundHeight(eye[0] + dx * t, eye[2] + dz * t)) {
-          let lo = prev;
-          let hi = t;
-          for (let i = 0; i < 24; i++) {
-            const m = (lo + hi) / 2;
-            if (eye[1] + dy * m < groundHeight(eye[0] + dx * m, eye[2] + dz * m)) hi = m;
-            else lo = m;
-          }
-          return [eye[0] + dx * hi, eye[2] + dz * hi];
-        }
-        prev = t;
-      }
-      return null;
-    };
-    const cr = mulberry32(31);
-    const variants = [0, 2, 0, 1, 0, 3, 0];
-    for (const [u, v, n] of SPOTS) {
-      const hit = landAt(u, v);
-      if (!hit) continue;
-      for (let k = 0; k < n; k++) {
-        const r = Math.hypot(hit[0], hit[1]);
-        // the second of a pair stands a few metres off, still in view
-        let x = hit[0];
-        let z = hit[1];
-        for (let tries = 0; k > 0 && tries < 20; tries++) {
-          const ox = hit[0] + (cr() - 0.5) * r * 0.12;
-          const oz = hit[1] + (cr() - 0.5) * r * 0.06;
-          if (seen(ox, oz)) {
-            x = ox;
-            z = oz;
-            break;
-          }
-        }
-        herd.push({ x, y: groundHeight(x, z), z, face: cr() < 0.5 ? -1 : 1, pose: cr() < 0.7 ? 0 : 1, want: 0, timer: 2 + cr() * 8, variant: variants[herd.length % variants.length] + 0.5, seed: cr(), step: 0 });
-      }
-    }
-  }
-  const cowData = new Float32Array(Math.max(1, herd.length) * 7);
-  const cowBuf = gl.createBuffer();
-  const cr2 = mulberry32(77);
-  const stepCows = (dt: number) => {
-    herd.forEach((c, i) => {
-      c.timer -= dt;
-      if (c.timer < 0) {
-        const roll = cr2();
-        if (c.want === 0 && roll < 0.55) {
-          // lift the head and look about a while
-          c.want = 1;
-          c.timer = 2 + cr2() * 4;
-        } else {
-          c.want = 0;
-          c.timer = 5 + cr2() * 10;
-          // now and then, a step or two, or a turn
-          if (roll > 0.8) c.step = 1.6;
-          else if (roll > 0.7) c.face = -c.face;
-        }
-      }
-      if (c.step > 0) {
-        const mv = Math.min(c.step, dt) * 0.35;
-        c.step -= dt;
-        c.x += c.face * mv;
-        c.y = groundHeight(c.x, c.z);
-      }
-      c.pose += (c.want - c.pose) * Math.min(1, dt * 1.8);
-      // far cows are drawn larger, so they read as cows and not as specks
-      const dist = Math.hypot(c.x - eye[0], c.z - eye[2]);
-      const grow = Math.min(3, Math.max(0.8, dist * 0.013));
-      cowData.set([c.x, c.y, c.z, c.face * grow, c.pose, c.variant, c.seed], i * 7);
-    });
-    gl.bindBuffer(gl.ARRAY_BUFFER, cowBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, cowData, gl.DYNAMIC_DRAW);
-  };
-
   // ---- butterflies ----
   type Fly = {
     p: [number, number, number];
@@ -1483,6 +1378,169 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     return o / 6;
   };
 
+  // ---- the cat ----
+  // it lives in a patch of meadow at the bottom right, close to us: lying and
+  // sitting with its back to us, watching the butterflies, and now and then
+  // crouching, wiggling and galloping after one, ending in a leap
+  const CAT_W = 400;
+  const CAT_H = 250;
+  const catCanvas = document.createElement("canvas");
+  catCanvas.width = CAT_W;
+  catCanvas.height = CAT_H;
+  const catCtx = catCanvas.getContext("2d")!;
+  const catSide = document.createElement("canvas");
+  catSide.width = CAT_W;
+  catSide.height = CAT_H;
+  const catBack = document.createElement("canvas");
+  catBack.width = CAT_W;
+  catBack.height = CAT_H;
+  const catHome: [number, number] = [1.7, 6.4];
+  const AREA = { x0: 0.2, x1: 3.5, z0: 5.0, z1: 9.5 };
+  type CatMode = "lie" | "sit" | "crouch" | "chase" | "leap" | "trot";
+  const cat = {
+    x: catHome[0],
+    z: catHome[1],
+    jump: 0,
+    mode: "sit" as CatMode,
+    timer: 5,
+    face: 1,
+    sit: 1,
+    turn: 0,
+    phase: 0,
+    speed: 0,
+    target: -1,
+    leap: 0,
+    vx: 0,
+    vz: 0,
+    side: 0, // 0 = seen from behind, 1 = side on
+    pose: poseCrouch(0) as CatPose,
+    from: poseCrouch(0) as CatPose,
+    blend: 1,
+  };
+  const catRnd = mulberry32(99);
+  const setMode = (m: CatMode, timer: number) => {
+    cat.mode = m;
+    cat.timer = timer;
+    cat.from = cat.pose;
+    cat.blend = 0;
+  };
+  const sidePose = (t: number): CatPose => {
+    if (cat.mode === "crouch") return poseCrouch(t);
+    if (cat.mode === "leap") return poseLeap(Math.min(1, cat.leap));
+    if (cat.mode === "trot") return poseRun(cat.phase, 0.45);
+    return poseRun(cat.phase, 1);
+  };
+  const nearestFly = () => {
+    let best = -1;
+    let bd = 1e9;
+    fliesState.forEach((f, i) => {
+      const d = Math.hypot(f.p[0] - cat.x, f.p[2] - cat.z);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    return { i: best, d: bd };
+  };
+  const stepCat = (t: number, dt: number) => {
+    cat.timer -= dt;
+    const near = nearestFly();
+    const fly = near.i >= 0 ? fliesState[near.i] : null;
+    const toward = (tx: number, tz: number, sp: number) => {
+      const dx = tx - cat.x;
+      const dz = tz - cat.z;
+      const d = Math.hypot(dx, dz) || 1;
+      cat.vx += ((dx / d) * sp - cat.vx) * Math.min(1, dt * 4);
+      cat.vz += ((dz / d) * sp - cat.vz) * Math.min(1, dt * 4);
+      return d;
+    };
+    switch (cat.mode) {
+      case "lie":
+      case "sit": {
+        cat.vx *= 0.8;
+        cat.vz *= 0.8;
+        // watches whatever flutters nearest, otherwise looks idly about
+        const want = fly && near.d < 4 ? Math.max(-1, Math.min(1, (fly.p[0] - cat.x) / 1.6)) : Math.sin(t * 0.21) * 0.5;
+        cat.turn += (want - cat.turn) * Math.min(1, dt * 1.6);
+        cat.sit += ((cat.mode === "sit" ? 1 : 0) - cat.sit) * Math.min(1, dt * 1.5);
+        // a butterfly comes close enough to be irresistible
+        if (fly && near.d < 2.6 && catRnd() < dt * 0.3) {
+          cat.target = near.i;
+          cat.face = fly.p[0] >= cat.x ? 1 : -1;
+          setMode("crouch", 0.7 + catRnd() * 0.7);
+        } else if (cat.timer < 0) {
+          setMode(cat.mode === "sit" ? "lie" : "sit", 6 + catRnd() * 9);
+        }
+        break;
+      }
+      case "crouch":
+        cat.vx *= 0.7;
+        cat.vz *= 0.7;
+        if (cat.timer < 0) setMode("chase", 3.5);
+        break;
+      case "chase": {
+        const f = fliesState[cat.target];
+        const tx = Math.min(AREA.x1, Math.max(AREA.x0, f.p[0]));
+        const tz = Math.min(AREA.z1, Math.max(AREA.z0, f.p[2]));
+        const d = toward(tx, tz, 2.4);
+        if (Math.abs(cat.vx) > 0.15) cat.face = cat.vx > 0 ? 1 : -1;
+        if (d < 0.5) {
+          setMode("leap", 0.6);
+          cat.leap = 0;
+          // the butterfly takes fright and lifts away
+          f.mode = "fly";
+          f.timer = 3 + catRnd() * 3;
+          f.p[1] += 0.12;
+        } else if (cat.timer < 0) setMode("trot", 6);
+        break;
+      }
+      case "leap":
+        cat.leap += dt / 0.6;
+        cat.jump = 4 * 0.38 * cat.leap * (1 - cat.leap);
+        if (cat.leap >= 1) {
+          cat.jump = 0;
+          const far = Math.hypot(cat.x - catHome[0], cat.z - catHome[1]) > 2.2;
+          setMode(far && catRnd() < 0.6 ? "trot" : "sit", far ? 8 : 6 + catRnd() * 6);
+        }
+        break;
+      case "trot": {
+        const d = toward(catHome[0], catHome[1], 0.9);
+        if (Math.abs(cat.vx) > 0.1) cat.face = cat.vx > 0 ? 1 : -1;
+        if (d < 0.2 || cat.timer < 0) setMode("sit", 6 + catRnd() * 8);
+        break;
+      }
+    }
+    cat.x = Math.min(AREA.x1, Math.max(AREA.x0, cat.x + cat.vx * dt));
+    cat.z = Math.min(AREA.z1, Math.max(AREA.z0, cat.z + cat.vz * dt));
+    cat.speed = Math.hypot(cat.vx, cat.vz);
+    cat.phase += (cat.speed * dt) / (cat.mode === "trot" ? 0.55 : 0.85);
+    // seen side on only while it's on the hunt
+    const wantSide = cat.mode === "crouch" || cat.mode === "chase" || cat.mode === "leap" || cat.mode === "trot" ? 1 : 0;
+    cat.side += (wantSide - cat.side) * Math.min(1, dt * 6);
+    cat.blend = Math.min(1, cat.blend + dt / 0.3);
+    const k = cat.blend * cat.blend * (3 - 2 * cat.blend);
+    cat.pose = lerpPose(cat.from, sidePose(t), k);
+
+    // paint it: from behind, side on, or the two crossing as it turns
+    const look = { fur: params.catFur, facing: cat.face };
+    catCtx.setTransform(1, 0, 0, 1, 0, 0);
+    catCtx.clearRect(0, 0, CAT_W, CAT_H);
+    if (cat.side < 0.98) {
+      paintCatBack(catBack.getContext("2d")!, { sit: cat.sit, turn: cat.turn, t, ears: 0.5 + Math.abs(cat.turn) * 0.4 }, look);
+      catCtx.globalAlpha = 1 - cat.side;
+      catCtx.drawImage(catBack, 0, 0);
+    }
+    if (cat.side > 0.02) {
+      paintCat(catSide.getContext("2d")!, cat.pose, look, t);
+      catCtx.globalAlpha = cat.side;
+      catCtx.drawImage(catSide, 0, 0);
+    }
+    catCtx.globalAlpha = 1;
+    gl.bindTexture(gl.TEXTURE_2D, catTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, catCanvas);
+  };
+  const catTex = tex(gl.LINEAR, gl.CLAMP_TO_EDGE);
+
   // ---- render targets ----
   const skyTex = tex(gl.LINEAR, gl.CLAMP_TO_EDGE);
   const skyFbo = gl.createFramebuffer();
@@ -1490,10 +1548,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   const sceneFbo = gl.createFramebuffer();
   const depth = gl.createRenderbuffer();
   const blurTex = [tex(gl.LINEAR, gl.CLAMP_TO_EDGE), tex(gl.LINEAR, gl.CLAMP_TO_EDGE)];
-  const cowTex = tex(gl.LINEAR, gl.CLAMP_TO_EDGE);
-  const cowFbo = gl.createFramebuffer()!;
-  const cowBlurTex = [tex(gl.LINEAR, gl.CLAMP_TO_EDGE), tex(gl.LINEAR, gl.CLAMP_TO_EDGE)];
-  const cowBlurFbo = [gl.createFramebuffer()!, gl.createFramebuffer()!];
+  const layerTex = tex(gl.LINEAR, gl.CLAMP_TO_EDGE);
+  const layerFbo = gl.createFramebuffer()!;
+  const layerBlurTex = [tex(gl.LINEAR, gl.CLAMP_TO_EDGE), tex(gl.LINEAR, gl.CLAMP_TO_EDGE)];
+  const layerBlurFbo = [gl.createFramebuffer()!, gl.createFramebuffer()!];
   const blurFbo = [gl.createFramebuffer()!, gl.createFramebuffer()!];
   let blurW = 2;
   let blurH = 2;
@@ -1623,16 +1681,16 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, blurW, blurH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
         gl.bindFramebuffer(gl.FRAMEBUFFER, blurFbo[i]);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, blurTex[i], 0);
-        gl.bindTexture(gl.TEXTURE_2D, cowBlurTex[i]);
+        gl.bindTexture(gl.TEXTURE_2D, layerBlurTex[i]);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, blurW, blurH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, cowBlurFbo[i]);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, cowBlurTex[i], 0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layerBlurFbo[i]);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layerBlurTex[i], 0);
       }
-      // the cows share the land's depth, so a rise can hide them
-      gl.bindTexture(gl.TEXTURE_2D, cowTex);
+      // the cat's layer shares the land's depth
+      gl.bindTexture(gl.TEXTURE_2D, layerTex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, pw, ph, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, cowFbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, cowTex, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, layerFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layerTex, 0);
       gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1691,6 +1749,17 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     h *= 60;
     return [h < 0 ? h + 360 : h, sat, l];
   };
+  const rgbOf = (hex: string): [number, number, number] => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    const v = m ? parseInt(m[1], 16) : 0x808080;
+    return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+  };
+  const richen = (hex: string, rich: number): [number, number, number] => {
+    const c = rgbOf(hex);
+    const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+    const k = 0.4 + 0.6 * rich;
+    return [l + (c[0] - l) * k, l + (c[1] - l) * k, l + (c[2] - l) * k];
+  };
   const colours = () => {
     // the picked blue is the sky overhead; Sky depth darkens or lightens it,
     // and the horizon is a paler, softer version of the same hue
@@ -1702,8 +1771,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       skyTop: hsl(sh, ss, clampL(sl + (0.4 - params.skyDepth) * 0.27)),
       skyHor: hsl(sh - 8, Math.min(0.7, ss * 0.7), clampL(0.74 - params.skyDepth * 0.08)),
       haze: lerp3(hsl(sh - 12, Math.min(0.55, ss * 0.55), 0.8), [0.95, 0.88, 0.76], params.warm * 0.35),
-      grassSun: hsl(62 + params.grassSun * 55, 0.45 + 0.42 * rich, 0.5),
-      grassShade: hsl(95 + params.grassShade * 60, 0.35 + 0.5 * rich, 0.17 + 0.05 * (1 - rich)),
+      // the picked greens, richer or plainer as asked
+      grassSun: richen(params.grassSun, rich),
+      grassShade: richen(params.grassShade, rich),
+      gold: rgbOf(params.cloudGold),
     };
   };
   let C = colours();
@@ -1772,6 +1843,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.uniform3f(sky.u.uSkyTop, C.skyTop[0], C.skyTop[1], C.skyTop[2]);
     gl.uniform3f(sky.u.uSkyHor, C.skyHor[0], C.skyHor[1], C.skyHor[2]);
     gl.uniform1f(sky.u.uPink, params.pink);
+    gl.uniform3f(sky.u.uGold, C.gold[0], C.gold[1], C.gold[2]);
     attr(quadBuf, 0, 2, 0, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -1833,22 +1905,30 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.drawArrays(gl.TRIANGLES, 0, nv);
     clearAttrs();
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, cowFbo);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layerFbo);
     gl.viewport(0, 0, sceneW, sceneH);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (inst && herd.length) {
-      stepCows(dt);
+    {
+      stepCat(t, dt);
       gl.depthMask(false);
-      setSurface(cows, t, wind, vp);
-      gl.uniform3f(cows.u.uCamRight, right[0], right[1], right[2]);
-      gl.uniform1f(cows.u.uCowScale, 0.5 + params.cowSize);
-      attr(cornerBuf, 0, 2, 0, 0, 0);
-      attr(cowBuf, 1, 3, 28, 0, 1);
-      attr(cowBuf, 2, 4, 28, 12, 1);
-      inst.drawArraysInstancedANGLE(gl.TRIANGLE_STRIP, 0, 4, herd.length);
+      setSurface(catProg, t, wind, vp);
+      const sc = 1.0 + params.catSize * 1.4;
+      gl.uniform3f(catProg.u.uCamRight, right[0], right[1], right[2]);
+      gl.uniform3f(catProg.u.uCatPos, cat.x, groundHeight(cat.x, cat.z) + cat.jump, cat.z);
+      // the sprite is 96 x 60 cm of cat-space, its ground 10 cm up from the bottom
+      gl.uniform2f(catProg.u.uCatSize, 0.96 * sc, 0.6 * sc);
+      gl.uniform1f(catProg.u.uGroundV, 10 / 60);
+      // more grass in front of a sitting cat than a leaping one
+      gl.uniform1f(catProg.u.uGrassH, cat.mode === "leap" ? 0.02 : cat.side > 0.5 ? 0.09 : 0.13);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, catTex);
+      gl.uniform1i(catProg.u.uSprite, 2);
+      attr(quadBuf, 0, 2, 0, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       clearAttrs();
       gl.depthMask(true);
+      gl.activeTexture(gl.TEXTURE0);
     }
     gl.disable(gl.DEPTH_TEST);
 
@@ -1879,16 +1959,16 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
-    // the cows' own softening
-    const cowReach = 0.4 + params.cowBlur * 1.2;
+    // the cat's own softening
+    const layerReach = 0.4 + params.catBlur * 1.6;
     for (const [src, dst, sx, sy] of [
-      [cowTex, cowBlurFbo[0], 1 / sceneW, 0],
-      [cowBlurTex[0], cowBlurFbo[1], 0, 1 / blurH],
+      [layerTex, layerBlurFbo[0], 1 / sceneW, 0],
+      [layerBlurTex[0], layerBlurFbo[1], 0, 1 / blurH],
     ] as Array<[WebGLTexture, WebGLFramebuffer, number, number]>) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, dst);
       gl.viewport(0, 0, blurW, blurH);
       gl.bindTexture(gl.TEXTURE_2D, src);
-      gl.uniform2f(blur.u.uStep, sx * cowReach, sy * cowReach);
+      gl.uniform2f(blur.u.uStep, sx * layerReach, sy * layerReach);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
@@ -1902,13 +1982,15 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.bindTexture(gl.TEXTURE_2D, blurTex[1]);
     gl.uniform1i(finish.u.uSoftTex, 1);
     gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, cowTex);
-    gl.uniform1i(finish.u.uCow, 2);
+    gl.bindTexture(gl.TEXTURE_2D, layerTex);
+    gl.uniform1i(finish.u.uCat, 2);
     gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, cowBlurTex[1]);
-    gl.uniform1i(finish.u.uCowSoft, 3);
-    gl.uniform1f(finish.u.uCowBlur, params.cowBlur);
-    gl.uniform1f(finish.u.uCowPaint, params.cowPaint);
+    gl.bindTexture(gl.TEXTURE_2D, layerBlurTex[1]);
+    gl.uniform1i(finish.u.uCatSoft, 3);
+    gl.uniform1f(finish.u.uCatBlur, params.catBlur);
+    gl.uniform1f(finish.u.uCatPaint, params.catPaint);
+    gl.uniform1f(finish.u.uCatGlow, params.catGlow);
+    gl.uniform1f(finish.u.uCatGrain, params.catGrain);
     gl.uniform2f(finish.u.uRes, w, h);
     gl.uniform2f(finish.u.uSunUv, sunU, sunV);
     gl.uniform1f(finish.u.uBloom, params.bloom);

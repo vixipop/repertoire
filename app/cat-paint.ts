@@ -429,7 +429,7 @@ export function paintCat(g: CanvasRenderingContext2D, pose: CatPose, look: CatLo
   const lit = o.createLinearGradient(W * 0.75, top, W * 0.3, gy);
   lit.addColorStop(0, "rgba(255,248,232,0.9)");
   lit.addColorStop(0.45, "rgba(250,249,247,0)");
-  lit.addColorStop(1, "rgba(184,184,210,0.55)");
+  lit.addColorStop(1, "rgba(170,170,204,0.8)");
   o.fillStyle = lit;
   o.fillRect(0, 0, W, H);
   // the underside, nearest the grass, deepest
@@ -496,11 +496,11 @@ export function paintCat(g: CanvasRenderingContext2D, pose: CatPose, look: CatLo
  * so its edge is a dense, even fluff with no gaps in it. */
 function softFur(g: CanvasRenderingContext2D, off: HTMLCanvasElement, fur: number, S: number) {
   if ("filter" in g) {
-    g.globalAlpha = 0.55 + fur * 0.3;
-    g.filter = `blur(${((1.2 + fur * 3.2) * S).toFixed(1)}px)`;
+    g.globalAlpha = 0.4 + fur * 0.3;
+    g.filter = `blur(${((0.6 + fur * 1.8) * S).toFixed(1)}px)`;
     g.drawImage(off, 0, 0);
-    g.globalAlpha = 0.9;
-    g.filter = `blur(${((0.5 + fur * 1.2) * S).toFixed(1)}px)`;
+    g.globalAlpha = 0.85;
+    g.filter = `blur(${((0.3 + fur * 0.7) * S).toFixed(1)}px)`;
     g.drawImage(off, 0, 0);
     g.filter = "none";
     g.globalAlpha = 1;
@@ -625,7 +625,7 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
   const lit = o.createLinearGradient(X(14), Y(head.y + 8), X(-12), Y(0));
   lit.addColorStop(0, "rgba(255,248,232,0.9)");
   lit.addColorStop(0.45, "rgba(250,249,247,0)");
-  lit.addColorStop(1, "rgba(184,184,210,0.55)");
+  lit.addColorStop(1, "rgba(170,170,204,0.8)");
   o.fillStyle = lit;
   o.fillRect(0, 0, W, H);
   // the soft shade where the back meets the seat, and under the head
@@ -637,6 +637,27 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
   under.addColorStop(1, "rgba(160,162,190,0.35)");
   o.fillStyle = under;
   o.fillRect(0, 0, W, H);
+  // modelling: the shade the head casts on the ruff, the fold where the
+  // haunches swell out from the back, and the light on the crown
+  const soft = (x: number, y: number, rx: number, ry: number, col: string, alpha: number) => {
+    o.save();
+    o.translate(X(x), Y(y));
+    o.scale(1, ry / rx);
+    const gr2 = o.createRadialGradient(0, 0, 0, 0, 0, rx * S);
+    gr2.addColorStop(0, col + alpha + ")");
+    gr2.addColorStop(1, col + "0)");
+    o.fillStyle = gr2;
+    o.beginPath();
+    o.arc(0, 0, rx * S, 0, Math.PI * 2);
+    o.fill();
+    o.restore();
+  };
+  soft(head.x - 0.5, head.y - head.r * 0.95, head.r * 1.05, head.r * 0.45, "rgba(150,150,190,", 0.55);
+  soft(-seat.rx * 0.62, seat.y + seat.ry * 0.25, seat.rx * 0.42, seat.ry * 0.75, "rgba(160,160,198,", 0.45);
+  soft(seat.rx * 0.62, seat.y + seat.ry * 0.25, seat.rx * 0.38, seat.ry * 0.7, "rgba(170,170,204,", 0.25);
+  soft(0, back.y - back.ry * 0.2, back.rx * 0.18, back.ry * 0.9, "rgba(176,176,208,", 0.3);
+  soft(head.x + head.r * 0.35, head.y + head.r * 0.4, head.r * 0.7, head.r * 0.55, "rgba(255,250,236,", 0.85);
+  soft(back.rx * 0.45, back.y + back.ry * 0.3, back.rx * 0.5, back.ry * 0.6, "rgba(255,250,236,", 0.6);
   o.globalCompositeOperation = "source-over";
 
   g.setTransform(1, 0, 0, 1, 0, 0);
