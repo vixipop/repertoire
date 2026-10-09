@@ -44,7 +44,7 @@ body {
   min-height: 100svh;
   display: grid;
   grid-template-rows: auto 1fr;
-  font: 14px/22px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font: 14px/22px "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
 }
 .boot, .boot * { transition: none !important; }
@@ -275,7 +275,7 @@ const PAGE_SCRIPT = `
 })();
 `;
 
-const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap">`;
+const FONTS = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=Inter:wght@400;500;600&display=swap">`;
 // the page rules come after the pond's own, so they win on size
 const STYLE = `<style>${pondCss}\n${PAGE_CSS}</style>`;
 const SCRIPT = `<script>\n${engine}\n${PAGE_SCRIPT}</script>`;

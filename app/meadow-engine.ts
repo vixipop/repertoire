@@ -448,7 +448,7 @@ void main() {
   float patch = vn(xz * 0.022 + 3.0) * 0.6 + vn(xz * 0.1 + 7.0) * 0.4;
   vec3 sunG = uGrassSun * (0.88 + 0.28 * patch);
   // the low sun gilds the grass it reaches
-  sunG = mix(sunG, sunG * vec3(1.12, 0.98, 0.55), clamp((0.95 - uSunCol.b) / 0.7, 0.0, 1.0) * 0.45);
+  sunG = mix(sunG, sunG * vec3(1.08, 0.98, 0.7), clamp((0.95 - uSunCol.b) / 0.7, 0.0, 1.0) * 0.35);
   vec3 shadeG = uGrassShade * (0.82 + 0.36 * patch);
   // the wind's waves pass as a sheen over the sunlit grass
   float along = dot(xz, uWindDir);
@@ -478,6 +478,11 @@ void main() {
   float flowers = mix(speck, drift * 0.08, smoothstep(fsize * 2.0, fsize * 6.0, foot));
   col = mix(col, mix(vec3(0.74, 0.78, 0.86), vec3(1.0, 0.98, 0.9), lit), flowers);
 
+  // however strong the sun, lit grass stays grass: the brightest greens are
+  // eased back toward a soft, warm light instead of clipping to neon
+  float lumG = dot(col, vec3(0.3, 0.59, 0.11));
+  col = mix(col, vec3(lumG) * vec3(1.02, 1.0, 0.88), smoothstep(0.55, 0.95, lumG) * 0.35);
+  col = min(col, vec3(0.86, 0.9, 0.7));
   col = aerial(col, vW);
   // alpha above a half marks grass for the fuzz: how near, and how sunlit
   float near = 1.0 - smoothstep(150.0, 900.0, dist);
@@ -706,44 +711,55 @@ void main() {
   painted = mix(painted, mix(base, d3.rgb, d3.a * 0.85), detail);
   vec3 col = mix(base, painted, uPaint);
 
-  // grass fuzz: fine strokes leaning with the wind over all the near grass,
-  // brightest where the sun is on it; longer and broader toward us
+  // grass fuzz: soft, tapering, gently curving blades leaning with the wind,
+  // painted as a lighter or deeper shade of the grass they stand in; strongest
+  // where the sun is on it, longer and broader toward us
   float ga = texture2D(uScene, uvOf(p)).a;
   float grassAmt = ga > 0.5 ? (ga - 0.5) * 2.0 : 0.0;
   if (uFuzz > 0.001 && grassAmt > 0.01) {
-    float persp = mix(1.7, 0.75, vUv.y);
-    float cell = 2.4 * uScale * persp;
-    float len = cell * (0.8 + uBlade * 6.0);
-    float fz = 0.0;
-    // two offset layers of blades, so they never line up in rows
+    float persp = mix(1.6, 0.75, vUv.y);
+    float cell = 3.0 * uScale * persp;
+    float len = cell * (0.8 + uBlade * 4.5);
+    float lift = 0.0;
+    float deep = 0.0;
     for (int layer = 0; layer < 2; layer++) {
       float fl = float(layer);
       vec2 off = vec2(0.37, 0.61) * cell * fl;
       vec2 gid = floor((p + off) / cell);
-      for (int j = -7; j <= 1; j++) {
+      for (int j = -6; j <= 1; j++) {
         for (int i = -1; i <= 1; i++) {
           vec2 c = gid + vec2(float(i), float(j));
           vec2 h = vec2(hash(c + 3.7 + fl * 11.0), hash(c + 8.1 + fl * 5.0));
           float h3 = hash(c + 2.9 + fl * 7.0);
           vec2 root = (c + h) * cell - off;
-          float lean = 0.3 + (h3 - 0.5) * 0.9 + sin(uTime * 1.6 + root.x * 0.05 + h.y * 6.0) * 0.12;
+          // every blade leans downwind, each a little differently, and sways
+          float lean = 0.32 + (h3 - 0.5) * 0.35 + sin(uTime * 1.6 + root.x * 0.05 + h.y * 6.0) * 0.1;
           vec2 dir = vec2(sin(lean), -cos(lean));
+          vec2 perp = vec2(-dir.y, dir.x);
           vec2 d = p - root;
           float along = dot(d, dir);
-          float across = abs(d.x * dir.y - d.y * dir.x);
-          float bl = len * (0.3 + 0.7 * h.y);
+          float bl = len * (0.45 + 0.55 * h.y);
           if (along > 0.0 && along < bl) {
-            float w = mix(1.1, 0.3, along / bl) * uScale * min(persp, 1.3);
-            float m = 1.0 - smoothstep(w * 0.4, w, across);
-            if (h.x > 0.3) fz = max(fz, m * (0.25 + 0.75 * along / bl));
-            else fz = min(fz, -0.45 * m);
+            float u = along / bl;
+            // it curves over as it rises
+            float bend = (0.12 + 0.18 * h3) * bl * u * u;
+            float across = abs(dot(d, perp) - bend);
+            float w = mix(1.1, 0.25, u) * uScale * min(persp, 1.3);
+            float m = (1.0 - smoothstep(0.0, w, across)) * smoothstep(0.0, 0.15, u) * (1.0 - 0.5 * u);
+            if (h.x > 0.35) lift = max(lift, m * (0.4 + 0.6 * u));
+            else deep = max(deep, m);
           }
         }
       }
     }
-    // sunlit blades shine; in shade they're a quieter play of light and dark
     float sunny = smoothstep(0.55, 0.95, grassAmt);
-    col *= 1.0 + fz * (0.3 + 0.4 * sunny) * uFuzz * min(1.0, grassAmt * 2.0);
+    float k = uFuzz * min(1.0, grassAmt * 2.0);
+    // lighter blades: a paler, slightly warmer shade, never a hard white
+    vec3 light = mix(col, col * vec3(1.12, 1.12, 0.95) + vec3(0.03, 0.04, 0.0), 0.5 + 0.5 * sunny);
+    // deeper blades: the green between them, never black
+    vec3 dark = col * vec3(0.82, 0.9, 0.85);
+    col = mix(col, light, lift * k * 0.75);
+    col = mix(col, dark, deep * k * 0.5);
   }
 
   // bloom and haze
