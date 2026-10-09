@@ -881,8 +881,8 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
   // lengths so each sits in the right place among the body's volumes
   {
     const N = 24;
-    const L = 24;
-    const TILT = 0.28;
+    const L = 22;
+    const TILT = 0.26;
     const calm = 1 - rest * 0.8;
     const smooth = (e0: number, e1: number, x: number) => {
       const c = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
@@ -902,7 +902,8 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
         Z += Math.sin(th) * (L / N);
       }
       const lift = smooth(0.72, 1, s) * calm * 3.5 * (0.5 + 0.5 * Math.sin(t * 0.6 + 1));
-      const r = 1.8 + 1.4 * Math.sin(Math.PI * (0.15 + 0.7 * s)) + fur * 1.2;
+      // slim, as a cat's tail is, thickening a little in its middle; the tip tapers
+      const r = 1.2 + 0.9 * Math.sin(Math.PI * (0.15 + 0.7 * s)) + fur * 0.7 - smooth(0.8, 1, s) * 0.5;
       const q = P([X, ln(2.8, 2.6, k) * (1 - s) + 1.4 * s + lift, Z]);
       pts.push({ x: q.x, y: q.y + (x0 - X) * TILT * S, d: q.d, r });
     }
@@ -924,7 +925,7 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
         for (let i = i0; i <= i1; i++) rAvg += pts[i].r;
         rAvg /= i1 - i0 + 1;
         for (const grow of [2.0, 1.1]) {
-          o.lineWidth = (rAvg + fl * 0.45 + grow) * 2 * S;
+          o.lineWidth = (rAvg + fl * 0.25 + grow) * 2 * S;
           o.beginPath();
           o.moveTo(pts[i0].x, pts[i0].y - 0.6 * S);
           for (let i = i0 + 1; i <= i1; i++) o.lineTo(pts[i].x, pts[i].y - 0.6 * S);
@@ -939,7 +940,7 @@ export function paintCatRound(g: CanvasRenderingContext2D, pose: RoundPose, look
           o.globalCompositeOperation = "source-over";
           o.strokeStyle = "rgb(244,243,248)";
           for (let i = i0; i < i1; i++) {
-            o.lineWidth = (pts[i].r + fl * 0.45) * 2 * S;
+            o.lineWidth = (pts[i].r + fl * 0.25) * 2 * S;
             o.beginPath();
             o.moveTo(pts[i].x, pts[i].y);
             o.lineTo(pts[i + 1].x, pts[i + 1].y);

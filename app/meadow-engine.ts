@@ -678,31 +678,47 @@ ${SURFACE_LIB}
 float h1(float n) { return fract(sin(n * 127.1 + 311.7) * 43758.5453); }
 void main() {
   vec4 c = texture2D(uSprite, vUv);
-  // blades of grass in front of the paws and the bottom of the body: one
-  // layer rooted where the cat sits; nearer, a sparser layer rooted further
-  // down the picture, over the tail lying out on the grass toward us
   float up = 1.0 - vUv.y - uGroundV;
   // drawn in two passes: above its ground line against the scene's depth;
   // below it (the tail out in front, which would sink into the terrain) without
-  if ((uBelow > 0.5) != (up < 0.0)) discard;
-  float blade = 0.0;
-  for (int layer = 0; layer < 2; layer++) {
-    float cols = 46.0 + float(layer) * 17.0;
-    float x = vUv.x * cols + float(layer) * 0.37;
+  // (the split sits a little above the ground line, clear of the terrain's bumps)
+  if ((uBelow > 0.5) != (up < 0.05)) discard;
+  // the grass the cat sits in, painted rather than ruled: one patch from the
+  // foot of the picture (under the tail lying toward us) to a little above
+  // where it sits. A light veil with a ragged, feathered top, and loose
+  // blades scattered through it at random spacing, height and lean
+  float u0 = up + 0.145;
+  float xs = vUv.x * 7.0;
+  float i0 = floor(xs);
+  float f0 = fract(xs);
+  float wav = mix(h1(i0), h1(i0 + 1.0), f0 * f0 * (3.0 - 2.0 * f0));
+  float xs2 = vUv.x * 23.0;
+  float i2 = floor(xs2);
+  float f2 = fract(xs2);
+  float wav2 = mix(h1(i2 + 77.0), h1(i2 + 78.0), f2 * f2 * (3.0 - 2.0 * f2));
+  float top = 0.145 + uGrassH * (0.2 + 0.35 * wav + 0.2 * wav2);
+  float blade = 0.3 * (1.0 - smoothstep(top - 0.035, top + 0.01, u0));
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    float cols = 29.0 + fk * 11.0;
+    float x = vUv.x * cols + fk * 0.43;
     float col = floor(x);
-    float root = layer == 0 ? 0.0 : -0.118;
-    float bh = (layer == 0 ? uGrassH : uGrassH * 0.55) * (0.35 + 0.65 * h1(col + float(layer) * 41.0));
-    float u0 = up - root;
-    if (u0 > -0.02 && u0 < bh) {
-      float u = clamp(u0 / bh, 0.0, 1.0);
-      float lean = (h1(col + 3.0 + float(layer) * 7.0) - 0.5) * 1.2 + sin(uTime * 1.4 + col * 0.7) * 0.12;
-      float bx = fract(x) - 0.5 - lean * u * u * 0.9;
-      float w = layer == 0 ? mix(0.3, 0.05, u) : mix(0.24, 0.04, u);
-      blade = max(blade, 1.0 - smoothstep(w * 0.6, w, abs(bx)));
-    }
+    float seed = col + fk * 113.0;
+    if (h1(seed + 5.0) < 0.62) continue;
+    // rooted anywhere down the patch, so blades stand both before the tail and the body
+    float rootAt = 0.02 * h1(seed + 21.0);
+    float bh = 0.05 + (top - 0.06) * h1(seed);
+    float u = (u0 - rootAt) / bh;
+    if (u < 0.0 || u > 1.0) continue;
+    float lean = (h1(seed + 3.0) - 0.5) * 2.4 + sin(uTime * 1.2 + col * 0.9) * 0.1;
+    float cx = 0.2 + 0.6 * h1(seed + 9.0);
+    float bx = fract(x) - cx - lean * u * u * 0.7;
+    float w = mix(0.12, 0.025, u) * (0.7 + 0.6 * h1(seed + 13.0));
+    blade = max(blade, (1.0 - smoothstep(w * 0.4, w, abs(bx))) * (0.8 - 0.3 * u));
   }
-  // at the very foot of the picture, the grass closes over completely
-  blade = max(blade, 1.0 - smoothstep(-0.145, -0.123, up));
+  // at the very foot of the picture the grass closes over, along a soft, uneven line
+  float foot = 0.002 + 0.006 * h1(floor(vUv.x * 19.0));
+  blade = max(blade, 1.0 - smoothstep(foot - 0.015, foot + 0.012, u0));
   float a = c.a * (1.0 - blade * 0.95);
   // in the shade of a passing cloud, white fur goes cool and blue
   float sh = ridgeShadow(uCatPos) * cloudShadow(uCatPos);
