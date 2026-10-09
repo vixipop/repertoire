@@ -121,7 +121,7 @@ export function poseSit(t: number, look = 0): CatPose {
 
 /** low and coiled, haunches wiggling, eyes on the prize */
 export function poseCrouch(t: number): CatPose {
-  const wiggle = Math.sin(t * 13) * 1.2;
+  const wiggle = Math.sin(t * 7) * 0.9;
   return {
     hip: [-12, 13 + wiggle * 0.5],
     hipR: 9.6,
@@ -137,7 +137,7 @@ export function poseCrouch(t: number): CatPose {
       leg([-13, 10], [-18, 2.5], [-8, 1.5], 4.4),
       leg([11, 6], [13, 2.5], [20, 1.5], 3.5),
     ],
-    tail: { base: [-20, 11], dir: Math.PI - 0.1, curl: 0.3, sway: 0.5, speed: 5, ground: 0 },
+    tail: { base: [-20, 11], dir: Math.PI - 0.1, curl: 0.3, sway: 0.22, speed: 2.5, ground: 0 },
     pitch: 0,
     blink: 0,
   };
@@ -199,7 +199,7 @@ export function poseRun(phase: number, amp = 1): CatPose {
       bentLeg([hip[0] - 1, hip[1] - 4], paw(bBase, phase + 0.5, reachB, liftB), 21, false, 4.5),
       bentLeg([chest[0] + 1, chest[1] - 5], paw(fBase, phase, reachF, liftF), 19, true, 3.5),
     ],
-    tail: { base: [hip[0] - 9, hip[1] + 2], dir: Math.PI - 0.35, curl: 0.45, sway: 0.35, speed: 7, ground: 0 },
+    tail: { base: [hip[0] - 9, hip[1] + 2], dir: Math.PI - 0.35, curl: 0.45, sway: 0.18, speed: 3, ground: 0 },
     pitch: 0,
     blink: 0,
   };
@@ -513,7 +513,7 @@ function softFur(g: CanvasRenderingContext2D, off: HTMLCanvasElement, fur: numbe
 /** The cat with its back to us, as it is when it's just sitting about:
  * sit 0 is lying down (a loaf from behind), 1 sitting up. turn swings the head
  * to look left or right, enough to show a cheek, an eye and its nose. */
-export type BackPose = { sit: number; turn: number; t: number; ears: number };
+export type BackPose = { sit: number; turn: number; t: number; ears: number; rest?: number };
 
 export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: CatLook) {
   const W = g.canvas.width;
@@ -535,14 +535,17 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
   const fl = 0.8 + fur * 1.8;
   const k = pose.sit;
   const t = pose.t;
-  const breathe = Math.sin(t * 1.4) * 0.35;
+  const rest = pose.rest ?? 0;
+  // asleep, it breathes slower and deeper
+  const breathe = Math.sin(t * (1.4 - rest * 0.7)) * (0.35 + rest * 0.15);
   const turn = pose.turn;
 
   // bottom: wide and round on the grass; back: narrower above; head on top
   const seat = { x: 0, y: ln(10, 11, k), rx: ln(16, 13.5, k) + fl * 0.5, ry: ln(10, 11.5, k) + fl * 0.5 };
   const back = { x: 0, y: ln(12, 23, k) + breathe, rx: ln(12, 10, k) + fl * 0.5, ry: ln(7, 11, k) + fl * 0.5 };
   const ruff = { x: turn * 0.8, y: ln(17, 30.5, k) + breathe, rx: ln(8.5, 8.6, k) + fl * 0.5, ry: 6 + fl * 0.4 };
-  const head = { x: turn * 3, y: ln(21.5, 36.5, k) + breathe, r: 8.3 + fl * 0.35 };
+  // dozing, the head sinks down onto its paws
+  const head = { x: turn * 3, y: ln(21.5, 36.5, k) + breathe - rest * 5, r: 8.3 + fl * 0.35 };
 
   o.setTransform(1, 0, 0, 1, 0, 0);
   o.clearRect(0, 0, W, H);
@@ -554,10 +557,11 @@ export function paintCatBack(g: CanvasRenderingContext2D, pose: BackPose, look: 
   let a = -0.1;
   for (let i = 1; i <= N; i++) {
     const s = i / N;
-    a += 0.11 + 0.32 * Math.sin(t * 1.2 - s * 2.4) * s * 0.35;
+    // the sitting sway as it was; only sleep calms it
+    a += 0.11 + 0.32 * (1 - rest * 0.8) * Math.sin(t * 1.2 - s * 2.4) * s * 0.35;
     const prev = tail[i - 1];
     // it curls round toward us, so it rises a little on the page as it goes
-    const lift = s > 0.7 ? (s - 0.7) * 10 * (0.6 + 0.4 * Math.sin(t * 1.6)) : 0;
+    const lift = s > 0.7 ? (s - 0.7) * 10 * (1 - rest * 0.7) * (0.6 + 0.4 * Math.sin(t * 1.6)) : 0;
     tail.push([prev[0] + Math.cos(a) * 1.55, 2.4 + Math.sin(a) * 0.4 * s + lift]);
   }
   o.fillStyle = WHITE;
