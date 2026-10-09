@@ -17,7 +17,7 @@ Plain three.js + Vite, no framework.
 
 ## Pictures
 
-Three presets, picked at the top: Swans, Tiger and Open Sky. Each is a short
+Three presets, picked at the top: Swans, Tiger and Landscape. Each is a short
 video in `public/presets/` (VP9 WebM, with an MP4 fallback), listed in
 `PRESETS` in `src/pictures.js`:
 
@@ -39,7 +39,7 @@ charcoal dark mode. `?debug` exposes internals for scripted tests.
 
 "Use your own image" shows a lock in place of its picture icon (which comes back once unlocked). Hovering it opens a popup (bottom right)
 saying it's a paid feature "but for the dodo team", with the code blurred until
-you hover it; hovering reveals `DODO` and types it in, then sparkles, "yay,
+you hover it; hovering reveals `DODO`, you type it in (each key clicks like a typewriter, quietly), then sparkles, "yay,
 feature unlocked", and the lock goes away (`src/unlock.js`). Uploads by button,
 drop and paste all wait for it. The unlocked flag lives in `sessionStorage`, so
 a new tab starts locked again.

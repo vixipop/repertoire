@@ -16,9 +16,9 @@
 // up from there. `crop` trims a border baked into the video, in source pixels
 // per side.
 export const PRESETS = [
-  { name: 'Swans', video: ['presets/swans.webm', 'presets/swans.mp4'], still: 3, crop: 28 },
+  { name: 'Swans', video: ['presets/swans.webm', 'presets/swans.mp4'], still: 2, crop: 56 },
   { name: 'Tiger', video: ['presets/tiger.webm', 'presets/tiger.mp4'], still: 9, crop: 48 },
-  { name: 'Open Sky', video: ['presets/open-sky.webm', 'presets/open-sky.mp4'], still: 2, crop: 64 },
+  { name: 'Landscape', video: ['presets/open-sky.webm', 'presets/open-sky.mp4'], still: 2, crop: 64 },
 ];
 
 // Resolve a preset to a picture, loading its video the first time.

@@ -122,6 +122,37 @@ export function soundSnap(strength = 1) {
   thump(ctx.currentTime + 0.002, 180, 110, 0.07, 0.07 * strength);
 }
 
+// A typewriter: a crisp little strike and a soft thock under it. Quiet, since
+// it plays on every key; each one is a touch different. Backspace is a duller,
+// lower tap.
+export function soundKey(erase = false) {
+  if (!ctx) return;
+  const ticks = [
+    { at: 0.001, attack: 0.0006, decay: rnd(0.0022, 0.0034), soft: erase ? 0.3 : rnd(0.5, 0.65), amp: erase ? 0.6 : 0.95 },
+    // the type bar landing a hair later
+    { at: rnd(0.011, 0.015), attack: 0.0008, decay: 0.003, soft: 0.35, amp: erase ? 0.2 : 0.4 },
+  ];
+  playBuffer(renderTicks(ticks, 0.05), { gain: 0.3, hp: 400, lp: erase ? 2200 : rnd(3600, 4400) });
+  thump(ctx.currentTime + 0.001, erase ? 120 : rnd(150, 190), 80, 0.045, erase ? 0.035 : 0.05);
+}
+
+// The little bell at the end of a typewriter's line, for a right answer.
+export function soundBell() {
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.05;
+  for (const [f, g] of [[2349, 0.05], [3520, 0.02]]) {
+    const o = ctx.createOscillator();
+    o.frequency.value = f;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(g, t + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(gain).connect(sfx);
+    o.start(t);
+    o.stop(t + 1);
+  }
+}
+
 export function soundLift() {
   if (!ctx) return;
   const ticks = [];

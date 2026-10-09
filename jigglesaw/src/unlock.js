@@ -1,6 +1,8 @@
+import { soundBell, soundKey, wakeAudio } from './audio.js';
+
 // "Use your own image" is a paid feature, with a wink: the Dodo team's code is
-// right there, blurred until you hover it. Hovering reveals it and types it in
-// for you; the lock then pops off in a burst of sparkles.
+// right there, blurred until you hover it. Hovering reveals it, you type it in
+// (to the sound of a typewriter), and the lock pops off in a burst of sparkles.
 //
 // This is a showpiece, not security: the code is in the page and the unlocked
 // flag lives in sessionStorage. A real gate would check a paid checkout on a
@@ -8,11 +10,9 @@
 
 const CODE = 'DODO';
 const KEY = 'jigglesaw-unlocked';
-const TYPE_MS = 150; // between auto-typed letters
 const SPARKLE_COLOURS = ['#ffc94d', '#ffd77a', '#ffe7a3', '#ffb3c8', '#ffffff'];
 
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function wasUnlocked() {
   try {
@@ -42,8 +42,6 @@ export function createUnlock(button, onUnlock) {
   const close = document.getElementById('unlock-close');
 
   let locked = !wasUnlocked();
-  let typing = false;
-  let revealed = false;
 
   const setLockedLook = () => {
     document.body.classList.toggle('is-locked', locked);
@@ -55,7 +53,10 @@ export function createUnlock(button, onUnlock) {
     if (!locked || !popup.hidden) return;
     popup.hidden = false;
     // One frame later, so the entrance transition has something to start from.
-    requestAnimationFrame(() => popup.classList.add('is-open'));
+    requestAnimationFrame(() => {
+      popup.classList.add('is-open');
+      input.focus({ preventScroll: true }); // ready to type
+    });
   }
 
   function shut() {
@@ -65,34 +66,20 @@ export function createUnlock(button, onUnlock) {
     }, 220);
   }
 
-  // The reveal types the code in for you, once per reveal.
-  async function typeCode() {
-    if (typing || !locked) return;
-    typing = true;
-    note.textContent = '';
-    input.value = '';
-    for (const letter of CODE) {
-      input.value += letter;
-      if (!reduceMotion()) await wait(TYPE_MS);
-    }
-    typing = false;
-    await wait(reduceMotion() ? 0 : 380);
-    submit();
-  }
-
-  function showReveal() {
-    reveal.classList.add('is-revealed');
-    if (!revealed) {
-      revealed = true;
-      typeCode();
-    }
-  }
+  // Hovering the blurred bit shows the code; typing it is up to you.
+  const showReveal = () => reveal.classList.add('is-revealed');
 
   function wrong() {
     note.textContent = 'not quite. hover the blurred bit?';
     form.classList.remove('shake');
     void form.offsetWidth; // restart the animation
     form.classList.add('shake');
+    // Clear it for another go once the shake has played.
+    setTimeout(() => {
+      input.value = '';
+      typed = 0;
+      input.focus({ preventScroll: true });
+    }, 420);
   }
 
   function submit() {
@@ -102,6 +89,7 @@ export function createUnlock(button, onUnlock) {
   }
 
   function celebrate() {
+    soundBell();
     locked = false;
     remember();
     form.hidden = true;
@@ -161,10 +149,17 @@ export function createUnlock(button, onUnlock) {
   reveal.addEventListener('focus', showReveal);
   reveal.addEventListener('click', showReveal);
 
+  // Each letter you type clicks like a typewriter key; backspace is duller.
+  let typed = 0;
+  input.addEventListener('keydown', wakeAudio);
   input.addEventListener('input', () => {
     input.value = input.value.replace(/[^a-z]/gi, '').slice(0, 4).toUpperCase();
+    const len = input.value.length;
+    if (len !== typed) soundKey(len < typed);
+    typed = len;
     note.textContent = '';
-    if (input.value.length === 4 && !typing) submit();
+    // Let the last key land before answering.
+    if (len === 4) setTimeout(submit, 240);
   });
   form.addEventListener('submit', (e) => {
     e.preventDefault();
