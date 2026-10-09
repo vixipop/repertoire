@@ -47,7 +47,8 @@ export type MeadowParams = {
   skyDepth: number;
   /** how much rose the clouds catch */
   pink: number;
-  /** the cows' own softening and brushwork */
+  /** the cows' own size, softening and brushwork */
+  cowSize: number;
   cowBlur: number;
   cowPaint: number;
   /** sunlit grass: golden (0) to green (1) */
@@ -77,6 +78,7 @@ export const MEADOW_DEFAULTS: MeadowParams = {
   grassSun: 0.15,
   grassShade: 0.36,
   grassRich: 1,
+  cowSize: 0.5,
   cowBlur: 0.35,
   cowPaint: 0.45,
 };
@@ -346,6 +348,9 @@ void main() {
       vec3 tint = mix(mix(peach, rose, uPink), peach, smoothstep(0.35, 0.6, gilt));
       tint = mix(tint, gold, smoothstep(0.5, 0.88, gilt));
       cl *= mix(vec3(1.0), tint, smoothstep(0.2, 0.75, gilt) * warmth);
+      // rose where the light glances: through the cloud's middle tones and on its rims
+      float glance = smoothstep(0.08, 0.4, gilt) * (1.0 - smoothstep(0.65, 0.95, gilt));
+      cl = mix(cl, cl * vec3(1.1, 0.8, 0.92) + vec3(0.03, 0.0, 0.02), uPink * (0.25 + 0.75 * glance));
       // the undersides go lavender in the warm light
       cl = mix(cl, cl * vec3(0.98, 0.92, 1.06), (1.0 - smoothstep(0.1, 0.5, gilt)) * warmth * 0.3);
       // a little air in front of the farther ones...
@@ -636,16 +641,20 @@ attribute vec3 aRoot;
 attribute vec4 aCow;
 uniform mat4 uVP;
 uniform vec3 uCamRight;
+uniform float uCowScale;
 varying vec2 vQ;
 varying vec4 vCow;
 varying vec3 vW;
 void main() {
-  // the quad in metres: three wide, from just under the hooves to above the back
+  // the quad in a cow's metres: three wide, from just under the hooves to
+  // above the back; drawn as large as asked
   vec2 q = vec2(aCorner.x * 1.5, mix(-0.25, 1.9, aCorner.y * 0.5 + 0.5));
-  vec3 p = aRoot + uCamRight * q.x + vec3(0.0, q.y, 0.0);
-  vQ = vec2(q.x * aCow.x, q.y);
+  // facing in the sign, the cow's own scale (it grows with distance) in the size
+  float sc = abs(aCow.x) * uCowScale;
+  vec3 p = aRoot + (uCamRight * q.x + vec3(0.0, q.y, 0.0)) * sc;
+  vQ = vec2(q.x * sign(aCow.x), q.y);
   vCow = aCow;
-  vW = aRoot + vec3(0.0, 0.8, 0.0);
+  vW = aRoot + vec3(0.0, 0.8 * sc, 0.0);
   gl_Position = uVP * vec4(p, 1.0);
 }
 `;
@@ -1039,7 +1048,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   const terrain = link(gl, TERRAIN_VERT, TERRAIN_FRAG, ["aPos", "aNrm"], [...surf, "uWindAmt", "uWindDir", "uPix", "uGrassSun", "uGrassShade", "uFuzz", "uSunlight"]);
   const flowers = link(gl, FLOWER_VERT, FLOWER_FRAG, ["aCorner", "aRoot", "aBlade"], [...surf, "uWindAmt", "uWindDir", "uCamRight", "uCamUp"]);
   const flies = link(gl, FLY_VERT, FLY_FRAG, ["aPos", "aInfo"], surf);
-  const cows = link(gl, COW_VERT, COW_FRAG, ["aCorner", "aRoot", "aCow"], [...surf, "uCamRight"]);
+  const cows = link(gl, COW_VERT, COW_FRAG, ["aCorner", "aRoot", "aCow"], [...surf, "uCamRight", "uCowScale"]);
   const blur = link(gl, QUAD_VERT, BLUR_FRAG, ["aPos"], ["uSrc", "uStep"]);
   const finish = link(gl, QUAD_VERT, FINISH_FRAG, ["aPos"], ["uScene", "uSoftTex", "uRes", "uSunUv", "uBloom", "uRays", "uPaint", "uBrush", "uBlur", "uScale", "uTime", "uFuzz", "uBlade", "uCow", "uCowSoft", "uCowBlur", "uCowPaint"]);
 
@@ -1233,25 +1242,64 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
   type Cow = { x: number; y: number; z: number; face: number; pose: number; want: number; timer: number; variant: number; seed: number; step: number };
   const herd: Cow[] = [];
   {
-    const cr = mulberry32(31);
-    for (let attempt = 0; attempt < 200 && herd.length < 7; attempt++) {
-      const r = 50 + cr() * 60;
-      const a = (cr() - 0.5) * 0.85;
-      const hx = r * Math.sin(a);
-      const hz = r * Math.cos(a);
-      if (!seen(hx, hz)) continue;
-      // a herd keeps together: gather what spots near this one are in view
-      const spots: Array<[number, number]> = [];
-      for (let k = 0; k < 60 && spots.length < 7; k++) {
-        const x = hx + (cr() - 0.5) * 30;
-        const z = hz + (cr() - 0.5) * 20;
-        if (seen(x, z) && spots.every(([sx, sz]) => Math.hypot(sx - x, sz - z) > 4)) spots.push([x, z]);
+    // the spots, picked on the painting (across, down, from its top-left),
+    // where a cow or two should stand
+    const SPOTS: Array<[number, number, number]> = [
+      [0.18, 0.6, 2],
+      [0.26, 0.645, 2],
+      [0.77, 0.627, 2],
+      [0.93, 0.512, 1],
+    ];
+    // follow the ray through that point of the picture down onto the land
+    const landAt = (u: number, v: number): [number, number] | null => {
+      const nx = (u * 2 - 1) * TAN_V * 1.6;
+      const ny = (1 - v * 2) * TAN_V;
+      const cp0 = Math.cos(PITCH);
+      const sp0 = Math.sin(PITCH);
+      let dx = nx;
+      let dy = ny * cp0 + sp0;
+      let dz = -ny * sp0 + cp0;
+      const l = Math.hypot(dx, dy, dz);
+      dx /= l;
+      dy /= l;
+      dz /= l;
+      let prev = 0;
+      for (let t = 2; t < 4000; t *= 1.03) {
+        if (eye[1] + dy * t < groundHeight(eye[0] + dx * t, eye[2] + dz * t)) {
+          let lo = prev;
+          let hi = t;
+          for (let i = 0; i < 24; i++) {
+            const m = (lo + hi) / 2;
+            if (eye[1] + dy * m < groundHeight(eye[0] + dx * m, eye[2] + dz * m)) hi = m;
+            else lo = m;
+          }
+          return [eye[0] + dx * hi, eye[2] + dz * hi];
+        }
+        prev = t;
       }
-      if (spots.length < 5) continue;
-      const variants = [0, 0, 1, 0, 2, 3, 0];
-      spots.forEach(([x, z], i) =>
-        herd.push({ x, y: groundHeight(x, z), z, face: cr() < 0.5 ? -1 : 1, pose: cr() < 0.7 ? 0 : 1, want: 0, timer: 2 + cr() * 8, variant: variants[i % variants.length] + 0.5, seed: cr(), step: 0 }),
-      );
+      return null;
+    };
+    const cr = mulberry32(31);
+    const variants = [0, 2, 0, 1, 0, 3, 0];
+    for (const [u, v, n] of SPOTS) {
+      const hit = landAt(u, v);
+      if (!hit) continue;
+      for (let k = 0; k < n; k++) {
+        const r = Math.hypot(hit[0], hit[1]);
+        // the second of a pair stands a few metres off, still in view
+        let x = hit[0];
+        let z = hit[1];
+        for (let tries = 0; k > 0 && tries < 20; tries++) {
+          const ox = hit[0] + (cr() - 0.5) * r * 0.12;
+          const oz = hit[1] + (cr() - 0.5) * r * 0.06;
+          if (seen(ox, oz)) {
+            x = ox;
+            z = oz;
+            break;
+          }
+        }
+        herd.push({ x, y: groundHeight(x, z), z, face: cr() < 0.5 ? -1 : 1, pose: cr() < 0.7 ? 0 : 1, want: 0, timer: 2 + cr() * 8, variant: variants[herd.length % variants.length] + 0.5, seed: cr(), step: 0 });
+      }
     }
   }
   const cowData = new Float32Array(Math.max(1, herd.length) * 7);
@@ -1281,7 +1329,10 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
         c.y = groundHeight(c.x, c.z);
       }
       c.pose += (c.want - c.pose) * Math.min(1, dt * 1.8);
-      cowData.set([c.x, c.y, c.z, c.face, c.pose, c.variant, c.seed], i * 7);
+      // far cows are drawn larger, so they read as cows and not as specks
+      const dist = Math.hypot(c.x - eye[0], c.z - eye[2]);
+      const grow = Math.min(3, Math.max(0.8, dist * 0.013));
+      cowData.set([c.x, c.y, c.z, c.face * grow, c.pose, c.variant, c.seed], i * 7);
     });
     gl.bindBuffer(gl.ARRAY_BUFFER, cowBuf);
     gl.bufferData(gl.ARRAY_BUFFER, cowData, gl.DYNAMIC_DRAW);
@@ -1791,6 +1842,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
       gl.depthMask(false);
       setSurface(cows, t, wind, vp);
       gl.uniform3f(cows.u.uCamRight, right[0], right[1], right[2]);
+      gl.uniform1f(cows.u.uCowScale, 0.5 + params.cowSize);
       attr(cornerBuf, 0, 2, 0, 0, 0);
       attr(cowBuf, 1, 3, 28, 0, 1);
       attr(cowBuf, 2, 4, 28, 12, 1);
@@ -1868,7 +1920,7 @@ export function startMeadow(canvas: HTMLCanvasElement, initial: Partial<MeadowPa
     gl.uniform1f(finish.u.uFuzz, params.fuzz);
     gl.uniform1f(finish.u.uBlade, params.blade);
     // brush sizes are the pond's, measured against its 680px-wide frame
-    gl.uniform1f(finish.u.uScale, w / 680);
+    gl.uniform1f(finish.u.uScale, (fixedWidth ? w / 2 : canvas.clientWidth || w) / 680);
     attr(quadBuf, 0, 2, 0, 0, 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     clearAttrs();
