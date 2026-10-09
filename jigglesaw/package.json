@@ -1,5 +1,5 @@
 {
-  "name": "foam-jigsaw",
+  "name": "jigglesaw",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "gifuct-js": "^2.1.2",
     "three": "^0.186.1"
   },
   "devDependencies": {

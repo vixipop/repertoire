@@ -130,3 +130,22 @@ function roundCorners(sides, radius) {
   while (Math.hypot(out[out.length - 1][0] - c0[0], out[out.length - 1][1] - c0[1]) <= radius * 1.5) out.pop();
   return out;
 }
+
+// The grid for a picture: about `target` pieces, as many columns and rows as
+// suit its shape, then each cell stretched a little so the board matches the
+// picture exactly (real puzzle pieces aren't square either). Cells stay
+// within 25% of square; a very wide picture gets cropped instead.
+export function gridFor(aspect, target = 24) {
+  let best = null;
+  for (let rows = 2; rows <= 8; rows++) {
+    for (let cols = 2; cols <= 10; cols++) {
+      const n = cols * rows;
+      if (n < target - 4 || n > target + 4) continue;
+      const cost = Math.abs(Math.log(cols / rows / aspect)) * 4 + Math.abs(n - target) / target;
+      if (!best || cost < best.cost) best = { cols, rows, cost };
+    }
+  }
+  const stretch = Math.min(1.25, Math.max(0.8, aspect / (best.cols / best.rows)));
+  const cw = Math.sqrt(stretch);
+  return { cols: best.cols, rows: best.rows, cw, ch: 1 / cw };
+}

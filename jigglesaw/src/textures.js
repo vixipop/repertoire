@@ -82,3 +82,49 @@ export function shadowTexture(outline, size, blur) {
   ctx.fill();
   return new THREE.CanvasTexture(cv);
 }
+
+// The dotted outline of the assembly area: dots walked evenly round a rounded
+// rectangle w × d (in table units), corners included, with `pad` of margin.
+export function dottedFrameTexture(w, d, pad) {
+  const ppu = 160;
+  const cv = document.createElement('canvas');
+  cv.width = Math.round((w + pad * 2) * ppu);
+  cv.height = Math.round((d + pad * 2) * ppu);
+  const ctx = cv.getContext('2d');
+  const r = 0.28;
+  const [x0, z0, x1, z1] = [pad, pad, pad + w, pad + d];
+  const path = [];
+  const arc = (cx, cz, a0) => {
+    for (let i = 0; i <= 12; i++) {
+      const a = a0 + (i / 12) * (Math.PI / 2);
+      path.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]);
+    }
+  };
+  arc(x1 - r, z0 + r, -Math.PI / 2);
+  arc(x1 - r, z1 - r, 0);
+  arc(x0 + r, z1 - r, Math.PI / 2);
+  arc(x0 + r, z0 + r, Math.PI);
+  path.push(path[0]);
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
+  const gap = total / Math.round(total / 0.13);
+  ctx.fillStyle = 'rgba(120, 112, 98, 0.32)';
+  let next = 0;
+  let walked = 0;
+  for (let i = 1; i < path.length; i++) {
+    const [ax, az] = path[i - 1];
+    const [bx, bz] = path[i];
+    const len = Math.hypot(bx - ax, bz - az);
+    while (next <= walked + len && next < total - gap / 2) {
+      const t = (next - walked) / len;
+      ctx.beginPath();
+      ctx.arc((ax + (bx - ax) * t) * ppu, (az + (bz - az) * t) * ppu, 0.017 * ppu, 0, Math.PI * 2);
+      ctx.fill();
+      next += gap;
+    }
+    walked += len;
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

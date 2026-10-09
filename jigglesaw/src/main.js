@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
-import { cutPuzzle } from './shape.js';
+import { cutPuzzle, gridFor } from './shape.js';
+import { Cluster } from './cluster.js';
+import { createQualityGuard } from './quality.js';
 import { foamMaterial, printMaterial } from './materials.js';
-import { printTexture, tableTexture, shadowTexture } from './textures.js';
-import { PRESETS, loadPreset, pictureFromFile } from './pictures.js';
+import { printTexture, tableTexture, shadowTexture, dottedFrameTexture } from './textures.js';
+import { PRESETS, loadPreset, pictureFromImage } from './pictures.js';
 import { createSparkles } from './sparkles.js';
 import { createSoften } from './soften.js';
 import { wakeAudio, soundLift, soundLand, soundSnap, soundDone, startMusic, stopMusic } from './audio.js';
@@ -46,13 +48,16 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NeutralToneMapping;
 
 // On 1× screens render at 1.5× and let the browser scale down, on top of
-// MSAA and the softening pass. The quality guard below backs off if a
-// machine can't keep up.
+// MSAA and the softening pass. The quality guard backs off if a machine
+// can't keep up.
 const native = window.devicePixelRatio || 1;
 const maxDpr = native < 1.5 ? 1.5 : Math.min(native, 2);
-let dpr = maxDpr;
-renderer.setPixelRatio(dpr);
+renderer.setPixelRatio(maxDpr);
 const soften = createSoften(renderer);
+const quality = createQualityGuard(maxDpr, (ratio) => {
+  renderer.setPixelRatio(ratio);
+  soften.resize();
+});
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(TABLE.edge);
@@ -82,26 +87,8 @@ table.rotation.x = -Math.PI / 2;
 scene.add(table);
 
 // ─── The board ───────────────────────────────────────────────────────────
-// A picture decides the grid: about 24 pieces, as many columns and rows as
-// suit its shape, then each cell is stretched a little so the board matches
-// the picture exactly (real puzzle pieces aren't square either).
+// The current puzzle's grid: columns, rows, cell size and overall size.
 const board = { cols: 6, rows: 4, cw: 1, ch: 1, w: 6, d: 4 };
-
-function gridFor(aspect) {
-  let best = null;
-  for (let rows = 2; rows <= 8; rows++) {
-    for (let cols = 2; cols <= 10; cols++) {
-      const n = cols * rows;
-      if (n < PIECES - 4 || n > PIECES + 4) continue;
-      const cost = Math.abs(Math.log(cols / rows / aspect)) * 4 + Math.abs(n - PIECES) / PIECES;
-      if (!best || cost < best.cost) best = { cols, rows, cost };
-    }
-  }
-  // Keep cells within 25% of square; a very wide picture gets cropped instead.
-  const stretch = THREE.MathUtils.clamp(aspect / (best.cols / best.rows), 0.8, 1.25);
-  const cw = Math.sqrt(stretch);
-  return { cols: best.cols, rows: best.rows, cw, ch: 1 / cw };
-}
 
 let print = printTexture(renderer, 1.5);
 let picture = null;
@@ -199,64 +186,6 @@ function disposePiece(p) {
   }
 }
 
-// A cluster is whatever moves together: one loose piece, or several that
-// have snapped. root slides on the table; body lifts and tilts. A cluster
-// seated in its true place on the board is locked until the next scatter.
-class Cluster {
-  constructor(x, z) {
-    this.root = new THREE.Group();
-    this.body = new THREE.Group();
-    this.shadows = new THREE.Group();
-    this.root.add(this.shadows, this.body);
-    scene.add(this.root);
-    this.pieces = [];
-    this.pos = new THREE.Vector2(x, z);
-    this.target = this.pos.clone();
-    this.vel = new THREE.Vector2();
-    this.lift = 0;
-    this.liftV = 0;
-    this.liftTo = 0;
-    this.tilt = new THREE.Vector2(); // x: about the x axis, y: about z
-    this.tiltV = new THREE.Vector2();
-    this.held = false;
-    this.snap = null;
-    this.locked = false;
-    this.droppedAt = -1e9;
-  }
-  add(piece, offset) {
-    piece.cluster = this;
-    piece.offset.copy(offset);
-    this.pieces.push(piece);
-    this.body.add(piece.mesh);
-    this.shadows.add(piece.soft, piece.contact);
-    piece.mesh.position.copy(offset);
-    this.foot = null;
-  }
-  // The layout point that this cluster's origin stands for. When the
-  // cluster's position equals it, every piece is in its true place.
-  ref() {
-    const p = this.pieces[0];
-    return p.layout.clone().sub(p.offset);
-  }
-  recenter() {
-    const m = new THREE.Vector3();
-    this.pieces.forEach((p) => m.add(p.offset));
-    m.divideScalar(this.pieces.length);
-    this.pieces.forEach((p) => {
-      p.offset.sub(m);
-      p.mesh.position.copy(p.offset);
-    });
-    this.pos.x += m.x;
-    this.pos.y += m.z;
-    this.target.x += m.x;
-    this.target.y += m.z;
-    this.foot = null;
-  }
-  dispose() {
-    scene.remove(this.root);
-  }
-}
-
 let pieces = [];
 let meshes = [];
 let byCell = new Map();
@@ -285,52 +214,8 @@ function buildZone() {
   zone.w = board.w + ZONE_PAD * 2;
   zone.d = board.d + ZONE_PAD * 2 + lean;
   zone.z = -lean / 2;
-  const ppu = 160;
   const pad = 0.1;
-  const cv = document.createElement('canvas');
-  cv.width = Math.round((zone.w + pad * 2) * ppu);
-  cv.height = Math.round((zone.d + pad * 2) * ppu);
-  const ctx = cv.getContext('2d');
-  // Dots walked along a rounded rectangle, evenly spaced, corners included.
-  const r = 0.28;
-  const x0 = pad;
-  const z0 = pad;
-  const x1 = pad + zone.w;
-  const z1 = pad + zone.d;
-  const path = [];
-  const arc = (cx, cz, a0) => {
-    for (let i = 0; i <= 12; i++) {
-      const a = a0 + (i / 12) * (Math.PI / 2);
-      path.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]);
-    }
-  };
-  arc(x1 - r, z0 + r, -Math.PI / 2);
-  arc(x1 - r, z1 - r, 0);
-  arc(x0 + r, z1 - r, Math.PI / 2);
-  arc(x0 + r, z0 + r, Math.PI);
-  path.push(path[0]);
-  let total = 0;
-  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
-  const count = Math.round(total / 0.13);
-  const gap = total / count;
-  ctx.fillStyle = 'rgba(120, 112, 98, 0.32)';
-  let next = 0;
-  let walked = 0;
-  for (let i = 1; i < path.length; i++) {
-    const [ax, az] = path[i - 1];
-    const [bx, bz] = path[i];
-    const len = Math.hypot(bx - ax, bz - az);
-    while (next <= walked + len && next < total - gap / 2) {
-      const t = (next - walked) / len;
-      ctx.beginPath();
-      ctx.arc((ax + (bx - ax) * t) * ppu, (az + (bz - az) * t) * ppu, 0.017 * ppu, 0, Math.PI * 2);
-      ctx.fill();
-      next += gap;
-    }
-    walked += len;
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const tex = dottedFrameTexture(zone.w, zone.d, pad);
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   zone.mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(zone.w + pad * 2, zone.d + pad * 2).rotateX(-Math.PI / 2),
@@ -346,7 +231,7 @@ function buildPuzzle(pic) {
   picture = pic;
   solvedAt = null;
   sparkles.clear();
-  Object.assign(board, gridFor(pic.aspect));
+  Object.assign(board, gridFor(pic.aspect, PIECES));
   board.w = board.cols * board.cw;
   board.d = board.rows * board.ch;
   reach = 0.5 * Math.max(board.cw, board.ch) + 0.2;
@@ -600,7 +485,7 @@ function scatter(pop = false) {
   clusters.forEach((cl) => cl.dispose());
   clusters = pieces.map((p, i) => {
     const [x, z] = spots[i];
-    const cl = new Cluster(x, z);
+    const cl = new Cluster(scene, x, z);
     if (pop && from[i]) {
       cl.pos.copy(from[i]);
       cl.liftV = 2.2 + Math.random() * 1.2;
@@ -985,47 +870,13 @@ function frame(now) {
   if (solvedAt !== null) print.userData.paint(picture, (now - solvedAt) / 1000);
   const sparkling = sparkles.update(dt, renderer.getDrawingBufferSize(bufSize).y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)));
   soften.render(scene, camera);
-  adapt(elapsed);
+  quality(elapsed);
 
   if (held || sparkling || solvedAt !== null || !clusters.every(settled)) requestAnimationFrame(frame);
   else running = false;
 }
 
-// Quality guard. Judges 30-frame windows, skips the first second and any
-// gap after the loop sleeps (shader compile and wake-up stalls aren't a slow
-// machine), and climbs back after three smooth windows — they don't need to
-// be consecutive frames, since the loop stops whenever nothing moves.
-let seen = 0;
-let winMs = 0;
-let winN = 0;
-let smooth = 0;
-function adapt(ms) {
-  seen++;
-  if (seen < 60 || ms > 200) return;
-  winMs += ms;
-  winN++;
-  if (winN < 30) return;
-  const avg = winMs / winN;
-  winMs = 0;
-  winN = 0;
-  if (avg > 24 && dpr > 1) {
-    dpr = Math.max(1, dpr - 0.25);
-    renderer.setPixelRatio(dpr);
-    soften.resize();
-    smooth = 0;
-  } else if (avg < 18) {
-    if (++smooth >= 3 && dpr < maxDpr) {
-      dpr = Math.min(maxDpr, dpr + 0.25);
-      renderer.setPixelRatio(dpr);
-      soften.resize();
-      smooth = 0;
-    }
-  } else {
-    smooth = 0;
-  }
-}
-
-// ─── Your own image (debug) ──────────────────────────────────────────────
+// ─── Your own image ──────────────────────────────────────────────────────
 // A new picture cuts a new puzzle in its shape. Uploads are stills only:
 // PNG or JPEG. (Animated pictures are presets.)
 const UPLOADABLE = ['image/png', 'image/jpeg'];
@@ -1036,7 +887,7 @@ async function useImage(file) {
     hint.classList.remove('gone');
     return;
   }
-  const pic = await pictureFromFile(file).catch(() => null);
+  const pic = await pictureFromImage(file).catch(() => null);
   if (!pic) return;
   show(pic);
   markPreset(-1);
@@ -1164,7 +1015,7 @@ if (new URLSearchParams(location.search).has('debug')) {
     pieces: () => pieces,
     clusters: () => clusters,
     stats: () => renderer.info.render,
-    dpr: () => dpr,
+    dpr: () => renderer.getPixelRatio(),
     picture: () => picture,
     solvedAt: () => solvedAt,
     sparkle: () => {
