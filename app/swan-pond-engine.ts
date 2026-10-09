@@ -142,6 +142,9 @@ export type PondController = {
   setTigerStyle(style: Partial<{ fur: number; blur: number }>): void;
   /** Have a swan or two say something now (for previewing the lettering). */
   chatter(): void;
+  /** for filming the piece: no remarks, and (with circle) the swans start
+   * together mid-pond, circling there for that many seconds before they wander */
+  film(opts: { quiet?: boolean; circle?: number }): void;
   destroy(): void;
 };
 
@@ -1827,6 +1830,9 @@ export function startPond(
   /* ---------- swans ---------- */
 
   const swans: Swan[] = [];
+  // filming: swans circling the middle until then, on a ring this wide
+  let circleUntil = -1;
+  let ringR = 0;
   const glideSpeed = (s: Swan) => 0.69 * L * s.pace * motion;
   const inner = (m: number) => ({ x0: m, y0: m, x1: W - m, y1: H - m });
 
@@ -2494,8 +2500,9 @@ export function startPond(
   const pick = (list: string[]) => list[Math.floor(Math.random() * list.length)];
 
   type Mood = "cross" | "calm";
+  let quiet = false;
   const say = (s: Swan, text: string, mood: Mood, life: number) => {
-    if (bubbles.some((b) => b.swan === s)) return;
+    if (quiet || bubbles.some((b) => b.swan === s)) return;
     const el = document.createElement("span");
     el.className = `pond-say is-${mood}`;
     const inner = document.createElement("span");
@@ -2723,6 +2730,15 @@ export function startPond(
       }
     }
 
+    // staged for filming: follow a ring round the middle of the pond
+    if (s.state === "glide" && clock < circleUntil) {
+      const ang = Math.atan2((s.y - H / 2) / 0.78, s.x - W / 2);
+      s.tx = W / 2 + Math.cos(ang + 0.7) * ringR;
+      s.ty = H / 2 + Math.sin(ang + 0.7) * ringR * 0.78;
+      s.targetTimer = 4;
+      s.loopTime = 0;
+      maxTurn *= 2;
+    }
     const dx = s.tx - s.x;
     const dy = s.ty - s.y;
     const dl = Math.hypot(dx, dy) || 1;
@@ -3404,6 +3420,26 @@ export function startPond(
       for (const s of here.sort(() => Math.random() - 0.5).slice(0, 2)) {
         const text = pick(all);
         say(s, text, CROSS.includes(text) ? "cross" : "calm", 2.2);
+      }
+    },
+    film(opts) {
+      if (opts.quiet !== undefined) quiet = opts.quiet;
+      if (opts.circle) {
+        ringR = Math.min(W, H) * 0.24;
+        circleUntil = clock + opts.circle;
+        swans.forEach((s, i) => {
+          const a = (i * Math.PI * 2) / swans.length + 0.5;
+          s.x = W / 2 + Math.cos(a) * ringR;
+          s.y = H / 2 + Math.sin(a) * ringR * 0.78;
+          // heading along the ring, the way round it is followed
+          s.h = Math.atan2(Math.cos(a) * 0.78, -Math.sin(a));
+          s.state = "glide";
+          s.v = glideSpeed(s);
+          s.w = 0;
+          s.loopTime = 0;
+          s.act = "none";
+          s.trail = [];
+        });
       }
     },
     snapshot(c, w, h) {
