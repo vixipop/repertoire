@@ -1,6 +1,55 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0e0e0e">
 <title>jahnavi</title>
-<meta http-equiv="refresh" content="0; url=pond/">
-<link rel="canonical" href="pond/">
-<a href="pond/">pond</a>
+<style>
+  html, body { height: 100%; margin: 0; background: #0e0e0e; }
+  body { display: grid; place-items: center; }
+  p {
+    margin: 0;
+    color: #c9c9c4;
+    font: 13px/1 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0.02em;
+  }
+  /* the cursor: a thin block that blinks once the word is typed */
+  p::after {
+    content: "";
+    display: inline-block;
+    width: 0.55em;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: -0.15em;
+    background: currentColor;
+    opacity: 0.8;
+  }
+  p.done::after { animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { p.done::after { animation: none; } }
+</style>
+</head>
+<body>
+<p id="t" aria-label="hello"></p>
+<script>
+  // Typed one letter at a time, with a little human unevenness.
+  const word = "hello";
+  const el = document.getElementById("t");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still) {
+    el.textContent = word;
+    el.classList.add("done");
+  } else {
+    let i = 0;
+    const type = () => {
+      el.textContent = word.slice(0, ++i);
+      if (i < word.length) setTimeout(type, 110 + Math.random() * 90);
+      else el.classList.add("done");
+    };
+    setTimeout(type, 600);
+  }
+</script>
+</body>
+</html>
