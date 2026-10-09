@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" href="moon-ink.png" media="(prefers-color-scheme: light)">
 <link rel="icon" type="image/png" href="moon-glow.png" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="moon-glow.png">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&family=Inter:wght@400;500;600&display=swap">
 <style>/* ==========================================================================
    Swan pond
    Wider than the text column and centred on it; the edges feather out into
@@ -116,7 +116,7 @@ body {
   min-height: 100svh;
   display: grid;
   grid-template-rows: auto 1fr;
-  font: 14px/22px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font: 14px/22px "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
 }
 .boot, .boot * { transition: none !important; }
@@ -691,6 +691,672 @@ function paintSwan(ctx, look, pose) {
 }
 
 /**
+ * A painted tiger wading, seen from above. Same conventions as swan-paint:
+ * one body length (rump to neck) ≈ 1, facing +x, the caller sets up the
+ * transform. The head is part of the same silhouette as the body, so the
+ * neck flows into the crown with no seam.
+ *
+ * Everything on the body is laid out in spine coordinates (u along the
+ * spine, v across it) and mapped through a spine that flexes as it walks, so
+ * the outline, the fur and every stripe bend with the body. A slow wave runs
+ * from the shoulders back through the hips into the tail with each stride;
+ * the shoulder blades and haunches roll as the weight shifts. The legs stay
+ * under the water: tigerFeet() only says where the paws come down, so the
+ * pond can ring the water there.
+ */
+const tcss = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const FUR_HI = [238, 146, 58];
+const FUR = [208, 104, 34];
+const FUR_DEEP = [140, 58, 22];
+const CREAM = [244, 232, 214];
+const INK = [18, 12, 10];
+// the stripes: a deep warm brown, softer than black against the orange
+const STRIPE = [84, 36, 18];
+const STRIDE = 0.34; // body lengths covered per stride
+const STANCE = 0.64;
+const LEGS = [
+    { front: false, side: -1, off: 0 },
+    { front: true, side: -1, off: 0.25 },
+    { front: false, side: 1, off: 0.5 },
+    { front: true, side: 1, off: 0.75 },
+];
+function rng(seed) {
+    return () => {
+        seed |= 0;
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function makeTigerLook(seed = 11) {
+    const r = rng(seed);
+    const stripes = [];
+    for (const side of [-1, 1]) {
+        let u = -0.5;
+        while (u < 0.34) {
+            const hind = u < -0.12;
+            const fore = u > 0.14;
+            const w = (hind ? 0.011 : fore ? 0.0065 : 0.0085) + r() * 0.005;
+            const stripe = {
+                u: u + (r() - 0.5) * 0.02,
+                side,
+                gap: 0.004 + r() * 0.018,
+                reach: 0.6 + r() * 0.4,
+                w,
+                sweep: 0.008 + r() * 0.03,
+                wob: (r() - 0.5) * 0.022,
+                fork: r() < 0.12 ? 0.45 + r() * 0.25 : 0,
+            };
+            stripes.push(stripe);
+            // tigers' stripes often run in close pairs
+            if (r() < 0.3)
+                stripes.push({ ...stripe, u: stripe.u - 0.016 - r() * 0.006, w: w * 0.6, reach: stripe.reach * (0.45 + r() * 0.3), gap: stripe.gap + 0.01, fork: 0 });
+            u += (hind ? 0.06 : fore ? 0.045 : 0.052) + r() * 0.025;
+        }
+    }
+    const flecks = [];
+    for (let i = 0; i < 700; i++) {
+        flecks.push({ u: -0.52 + r() * 0.9, v: (r() - 0.5) * 0.26, len: 0.012 + r() * 0.022, light: r() < 0.5 });
+    }
+    return { stripes, flecks };
+}
+/* ---------- the spine ---------- */
+const U0 = -0.56; // rump
+const U1 = 0.4; // where the neck meets the head
+const UN = 0.668; // tip of the nose
+// half-width along the spine: haunches, waist, shoulders, a thick neck,
+// then the back of the skull, the cheeks and the muzzle
+const SHAPE = [
+    [-0.56, 0],
+    [-0.54, 0.07],
+    [-0.48, 0.135],
+    [-0.38, 0.162],
+    [-0.25, 0.148],
+    [-0.09, 0.136],
+    [0.05, 0.148],
+    [0.15, 0.168],
+    [0.25, 0.152],
+    [0.33, 0.122],
+    [0.385, 0.104],
+    [0.43, 0.118],
+    [0.48, 0.14],
+    [0.52, 0.142],
+    [0.56, 0.125],
+    [0.595, 0.098],
+    [0.625, 0.07],
+    [0.648, 0.048],
+    [0.662, 0.026],
+    [UN, 0],
+];
+function baseWidth(u) {
+    if (u <= SHAPE[0][0] || u >= UN)
+        return 0;
+    for (let i = 1; i < SHAPE.length; i++) {
+        const [u1, w1] = SHAPE[i];
+        const [u0, w0] = SHAPE[i - 1];
+        if (u <= u1) {
+            const t = (u - u0) / (u1 - u0);
+            return w0 + (w1 - w0) * t * t * (3 - 2 * t);
+        }
+    }
+    return 0;
+}
+/** How much weight a leg is carrying right now, 0..1 (peaks mid-stance). */
+function load(phase, off) {
+    const p = (((phase + off) % 1) + 1) % 1;
+    return p < STANCE ? Math.sin((Math.PI * p) / STANCE) : 0;
+}
+const ease = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+};
+function makeSpine(pose) {
+    const ph = pose.phase * Math.PI * 2;
+    // a slow wave travelling back along the body, one swing per stride,
+    // strongest through the middle and the haunches, the head held steady;
+    // plus the arc of a turn, and the head turning on the neck
+    const lateral = (u) => {
+        const env = (0.55 + 0.45 * Math.cos((u - U0) * 2.2)) * (1 - 0.75 * ease(0.3, 0.6, u));
+        const neck = Math.max(0, u - 0.34);
+        return 0.03 * env * Math.sin(u * 5.4 + ph) + pose.curve * 0.5 * (u - 0.4) * (u - 0.4) - pose.curve * 0.08 + pose.headTurn * neck * neck * 2.6;
+    };
+    const e = 0.004;
+    const at = (u, v) => {
+        const y = lateral(u);
+        const dy = (lateral(u + e) - lateral(u - e)) / (2 * e);
+        const l = Math.hypot(1, dy);
+        return [u - (dy / l) * v, y + (1 / l) * v];
+    };
+    const angle = (u) => Math.atan((lateral(u + e) - lateral(u - e)) / (2 * e));
+    // shoulder blades and haunches rise on the side carrying the weight
+    const width = (u, side) => {
+        const front = side < 0 ? load(pose.phase, 0.25) : load(pose.phase, 0.75);
+        const hind = side < 0 ? load(pose.phase, 0) : load(pose.phase, 0.5);
+        // slow breathing swells the ribcage
+        const breath = 1 + 0.016 * Math.sin(pose.time * 1.4) * Math.exp(-(u * u) / 0.06);
+        return (baseWidth(u) * breath +
+            Math.exp(-((u - 0.17) ** 2) / 0.0035) * (front - 0.5) * 0.018 +
+            Math.exp(-((u + 0.36) ** 2) / 0.005) * (hind - 0.5) * 0.016);
+    };
+    return { at, angle, width, lateral };
+}
+/** Where each paw comes down, in the tiger's frame (the legs themselves stay under water). */
+function tigerFeet(pose) {
+    return LEGS.map((leg) => {
+        const p = (((pose.phase + leg.off) % 1) + 1) % 1;
+        let dx;
+        let lift = 0;
+        if (p < STANCE) {
+            dx = STRIDE * (0.5 - p / STANCE);
+        }
+        else {
+            const q = (p - STANCE) / (1 - STANCE);
+            dx = STRIDE * (-0.5 + q * q * (3 - 2 * q));
+            lift = Math.sin(Math.PI * q);
+        }
+        const base = leg.front ? 0.17 : -0.34;
+        return { x: base + dx, y: leg.side * 0.11, lift, front: leg.front, side: leg.side, p };
+    });
+}
+const polygon = (ctx, pts) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        ctx.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+    const z = pts[pts.length - 1];
+    ctx.lineTo(z[0], z[1]);
+    ctx.closePath();
+};
+const pathOf = (pts) => {
+    const p = new Path2D();
+    p.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        p.quadraticCurveTo(a[0], a[1], (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    }
+    p.closePath();
+    return p;
+};
+/**
+ * Paint the tiger into its own (cleared) layer: the caller composites it
+ * over the pond. Parts that sit under the surface are thinned out of the
+ * layer, so the real water shows through them.
+ */
+function paintTiger(ctx, look, pose) {
+    const sp = makeSpine(pose);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const ph = pose.phase * Math.PI * 2;
+    // the side of the back facing the sun
+    const lit = pose.ly < 0 ? -1 : 1;
+    // a strip along the spine from uA to uB, its edges at fl(u) and fr(u) of
+    // the half-width on each side, nudged sideways by `shift`
+    const strip = (fl, fr, uA = U0 + 0.003, uB = UN - 0.001, shift = 0, n = 48) => {
+        const L = [];
+        const R = [];
+        for (let i = 0; i <= n; i++) {
+            const u = uA + ((uB - uA) * i) / n;
+            const wl = sp.width(u, -1);
+            const wr = sp.width(u, 1);
+            L.push(sp.at(u, -wl * fl(u) + shift * wl));
+            R.push(sp.at(u, wr * fr(u) + shift * wr));
+        }
+        return [...L, ...R.reverse()];
+    };
+    const k = (f) => () => f;
+    // a line laid on the body in spine coordinates
+    const line = (pts, width, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        pts.forEach(([u, v], i) => {
+            const [x, y] = sp.at(u, v);
+            if (i === 0)
+                ctx.moveTo(x, y);
+            else
+                ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    };
+    const blob = (u, v, rx, ry, color) => {
+        const [x, y] = sp.at(u, v);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, sp.angle(u), 0, Math.PI * 2);
+        ctx.fill();
+    };
+    /* ---- tail: floats behind on the body's wave, dipping under mid-way ---- */
+    const tailPts = [];
+    const tailNrm = [];
+    const TN = 100;
+    {
+        const [bx, by] = sp.at(U0 + 0.012, 0);
+        let a = sp.angle(U0) + Math.PI;
+        let x = bx;
+        let y = by;
+        const len = 0.68;
+        for (let i = 0; i <= TN; i++) {
+            const s = i / TN;
+            tailPts.push([x, y]);
+            tailNrm.push([-Math.sin(a), Math.cos(a)]);
+            // a lazy, wandering sway of its own: slow motions at unrelated speeds,
+            // travelling down the tail, so it never settles into one repeating
+            // loop; only a light echo of the stride
+            const t = pose.time - s * 1.4;
+            const wander = 0.6 * Math.sin(t * 0.53 + 1.3) + 0.45 * Math.sin(t * 0.97 + 4.1) + 0.3 * Math.sin(t * 1.71 + 2.2) + 0.35 * Math.sin(t * 0.29 + 0.4);
+            a += (wander * 0.075 + Math.sin(ph - 1.1 - s * 3.2) * 0.03 + 0.03 * s) * (0.5 + s);
+            x += Math.cos(a) * (len / TN);
+            y += Math.sin(a) * (len / TN);
+        }
+    }
+    const tailW = (s) => 0.033 * (1 - s * 0.35);
+    const tailStrip = (s0, s1) => {
+        const i0 = Math.round(s0 * TN);
+        const i1 = Math.round(s1 * TN);
+        const L = [];
+        const R = [];
+        for (let i = i0; i <= i1; i++) {
+            const w = tailW(i / TN);
+            L.push([tailPts[i][0] + tailNrm[i][0] * w, tailPts[i][1] + tailNrm[i][1] * w]);
+            R.push([tailPts[i][0] - tailNrm[i][0] * w, tailPts[i][1] - tailNrm[i][1] * w]);
+        }
+        return [...L, ...R.reverse()];
+    };
+    ctx.fillStyle = tcss(FUR);
+    polygon(ctx, tailStrip(0, 1));
+    ctx.fill();
+    ctx.fillStyle = tcss(FUR_HI, 0.6);
+    for (let i = 0; i < TN; i++) {
+        const w = tailW(i / TN) * 0.35;
+        ctx.beginPath();
+        ctx.arc(tailPts[i][0] + tailNrm[i][0] * w * lit, tailPts[i][1] + tailNrm[i][1] * w * lit, w, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // evenly spaced rings, each the same width
+    ctx.fillStyle = tcss(STRIPE, 0.88);
+    for (let s = 0.2; s < 0.82; s += 0.1) {
+        polygon(ctx, tailStrip(s, s + 0.04));
+        ctx.fill();
+    }
+    ctx.fillStyle = tcss([52, 24, 14], 0.92);
+    polygon(ctx, tailStrip(0.86, 1));
+    ctx.fill();
+    {
+        const tip = tailPts[TN];
+        ctx.beginPath();
+        ctx.arc(tip[0], tip[1], tailW(1), 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // mid-way it slips under the surface
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    for (let i = 0; i < TN; i++) {
+        const s = i / TN;
+        if (s < 0.28 || s > 0.7)
+            continue;
+        const under = Math.sin(((s - 0.28) / 0.42) * Math.PI) * (0.55 + 0.15 * Math.sin(pose.time * 1.3 + s * 4));
+        if (under <= 0.02)
+            continue;
+        ctx.fillStyle = `rgba(0,0,0,${under.toFixed(3)})`;
+        polygon(ctx, tailStrip(s, s + 1 / TN));
+        ctx.fill();
+    }
+    ctx.restore();
+    /* ---- ears: soft and rounded, like a big cat's; they swivel, and now and then flick ---- */
+    for (const s of [-1, 1]) {
+        // a slow turn about, plus a quick twitch every so often, at different moments on each side
+        const cyc = pose.time * (0.11 + (s > 0 ? 0.023 : 0)) + (s > 0 ? 0.37 : 0);
+        const f = cyc - Math.floor(cyc);
+        const flick = f < 0.05 ? Math.sin((f / 0.05) * Math.PI) : 0;
+        const turn = 0.2 * Math.sin(pose.time * 0.5 + s * 1.7) + 0.12 * Math.sin(pose.time * 0.23 + s) + 0.38 * flick;
+        const cu = 0.437;
+        const cv = 0.107;
+        const c = Math.cos(turn);
+        const sn = Math.sin(turn);
+        // rotate about the base of the ear, in the head's own frame
+        const P = (u, v) => {
+            const du = u - cu;
+            const dv = v - cv;
+            return sp.at(cu + du * c - dv * sn, s * (cv + du * sn + dv * c));
+        };
+        const [b1x, b1y] = P(0.472, 0.108);
+        const [c1x, c1y] = P(0.468, 0.16);
+        const [tx, ty] = P(0.44, 0.176);
+        const [c2x, c2y] = P(0.41, 0.164);
+        const [b2x, b2y] = P(0.402, 0.106);
+        ctx.fillStyle = tcss(FUR);
+        ctx.beginPath();
+        ctx.moveTo(b1x, b1y);
+        ctx.quadraticCurveTo(c1x, c1y, tx, ty);
+        ctx.quadraticCurveTo(c2x, c2y, b2x, b2y);
+        ctx.closePath();
+        ctx.fill();
+        // a soft, slightly darker rim toward the tip
+        ctx.strokeStyle = tcss(FUR_DEEP, 0.55);
+        ctx.lineWidth = 0.007;
+        ctx.beginPath();
+        const [r1x, r1y] = P(0.463, 0.15);
+        const [r2x, r2y] = P(0.418, 0.152);
+        ctx.moveTo(r1x, r1y);
+        ctx.quadraticCurveTo(tx, ty, r2x, r2y);
+        ctx.stroke();
+        // the fluffy pale inside
+        const [i1x, i1y] = P(0.458, 0.114);
+        const [ic1x, ic1y] = P(0.455, 0.15);
+        const [itx, ity] = P(0.44, 0.16);
+        const [ic2x, ic2y] = P(0.423, 0.15);
+        const [i2x, i2y] = P(0.418, 0.112);
+        ctx.fillStyle = "rgba(246,218,204,0.92)";
+        ctx.beginPath();
+        ctx.moveTo(i1x, i1y);
+        ctx.quadraticCurveTo(ic1x, ic1y, itx, ity);
+        ctx.quadraticCurveTo(ic2x, ic2y, i2x, i2y);
+        ctx.closePath();
+        ctx.fill();
+    }
+    /* ---- body and head, one silhouette ---- */
+    const full = pathOf(strip(k(1), k(1)));
+    ctx.fillStyle = tcss(FUR_DEEP);
+    ctx.fill(full);
+    ctx.save();
+    ctx.clip(full);
+    // round the back and the crown: deeper down the sides, warm through the middle, a lit ridge
+    ctx.fillStyle = tcss(FUR, 0.92);
+    ctx.fill(pathOf(strip(k(0.8), k(0.8), undefined, undefined, lit * 0.06)));
+    ctx.fillStyle = tcss(FUR_HI, 0.55);
+    ctx.fill(pathOf(strip(k(0.52), k(0.52), undefined, undefined, lit * 0.12)));
+    ctx.fillStyle = tcss([248, 176, 92], 0.35);
+    ctx.fill(pathOf(strip(k(0.24), k(0.24), undefined, UN - 0.03, lit * 0.2)));
+    // shoulder blades and haunches catch the light as they roll
+    for (const [u, off] of [
+        [0.17, 0.25],
+        [-0.36, 0.0],
+    ]) {
+        for (const side of [-1, 1]) {
+            const w = sp.width(u, side);
+            const loadNow = load(pose.phase, side < 0 ? off : off + 0.5);
+            const [x, y] = sp.at(u, side * w * 0.42);
+            const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.6);
+            g.addColorStop(0, tcss([250, 182, 100], 0.18 + 0.22 * loadNow));
+            g.addColorStop(1, tcss([250, 182, 100], 0));
+            ctx.fillStyle = g;
+            ctx.fillRect(x - w, y - w, w * 2, w * 2);
+        }
+    }
+    // the spine: a darker seam where the stripes meet
+    ctx.fillStyle = tcss(FUR_DEEP, 0.3);
+    ctx.fill(pathOf(strip(k(0.07), k(0.07), U0 + 0.02, 0.42)));
+    // fur, lying back along the body: more strokes, and longer, the furrier the coat
+    const furN = Math.round(look.flecks.length * pose.fur);
+    ctx.lineWidth = 0.0045 + 0.002 * pose.fur;
+    for (const light of [true, false]) {
+        ctx.strokeStyle = light ? tcss(FUR_HI, 0.32) : tcss(FUR_DEEP, 0.24);
+        ctx.beginPath();
+        for (let i = 0; i < furN; i++) {
+            const f = look.flecks[i];
+            if (f.light !== light || f.u > 0.38)
+                continue;
+            const side = Math.sign(f.v) || 1;
+            const frac = Math.abs(f.v) / 0.13;
+            if (frac > 0.95)
+                continue;
+            const w = sp.width(f.u, side);
+            const v = side * w * Math.sin(frac * Math.PI * 0.5);
+            const a = sp.at(f.u, v);
+            const b = sp.at(f.u - f.len * (0.6 + pose.fur), v * 1.03);
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+        }
+        ctx.stroke();
+    }
+    // pale cheeks: one soft sweep of cream down each side of the face, deepening
+    // toward the edge, crescent-shaped so it fades out at both ends
+    {
+        const cheek = (f0) => (u) => 1 - (1 - f0) * Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.45) / 0.17)));
+        const outer = pathOf(strip(k(1), k(1), 0.45, 0.62, 0, 24));
+        for (const [f0, a] of [
+            [0.35, 0.22],
+            [0.5, 0.26],
+            [0.65, 0.3],
+            [0.8, 0.32],
+        ]) {
+            const ring = new Path2D();
+            ring.addPath(outer);
+            ring.addPath(pathOf(strip(cheek(f0), cheek(f0), 0.45, 0.62, 0, 24)));
+            ctx.fillStyle = tcss([242, 228, 208], a);
+            ctx.fill(ring, "evenodd");
+        }
+        // dark stripes across the white of the cheeks
+        for (const s of [-1, 1]) {
+            line([[0.485, s * 0.07], [0.495, s * 0.105], [0.486, s * 0.135]], 0.008, tcss(STRIPE, 0.85));
+            line([[0.52, s * 0.075], [0.53, s * 0.108], [0.522, s * 0.136]], 0.007, tcss(STRIPE, 0.85));
+            line([[0.553, s * 0.072], [0.56, s * 0.098], [0.553, s * 0.118]], 0.0055, tcss(STRIPE, 0.8));
+        }
+    }
+    // stripes wrap round the barrel of the body: laid out along its surface,
+    // so they crowd together as they turn down the flanks
+    ctx.fillStyle = tcss(STRIPE, 0.8);
+    for (const st of look.stripes) {
+        const surf = (u, arc) => st.side * sp.width(u, st.side) * Math.sin(Math.min(1, arc) * Math.PI * 0.5);
+        const reach = 0.55 + st.reach * 0.55; // quarter-turns round the body; past 1 it's under the water
+        const gap = st.gap / 0.13;
+        // a gentle wave along each stripe, and some broken into two pieces
+        const h = Math.sin(st.u * 917.3 + st.side * 13.1) * 43758.5453;
+        const rnd = h - Math.floor(h);
+        const brk = rnd < 0.45 ? 0.3 + rnd * 0.6 : -1;
+        const piece = (t0, t1, broken) => {
+            const n = 14;
+            const L = [];
+            const R = [];
+            for (let i = 0; i <= n; i++) {
+                const t = t0 + ((t1 - t0) * i) / n;
+                const u = st.u - st.sweep * Math.pow(t, 1.3) + st.wob * Math.sin(t * Math.PI) + 0.006 * Math.sin(t * 8 + st.u * 40);
+                const arc = gap + (reach - gap) * t;
+                // tapered at both ends; a broken stripe's pieces are rounded off where they part
+                const end = Math.sin(Math.PI * ((t - t0) / (t1 - t0)));
+                const profile = broken ? 0.1 + 0.9 * Math.sqrt(end) : Math.sin(Math.PI * (0.08 + 0.92 * t));
+                const hw = st.w * 0.85 * profile * (1.1 - 0.4 * t) + 0.001;
+                L.push(sp.at(u + hw, surf(u, arc)));
+                R.push(sp.at(u - hw, surf(u, arc)));
+            }
+            polygon(ctx, [...L, ...R.reverse()]);
+            ctx.fill();
+        };
+        if (brk > 0) {
+            piece(0, brk - 0.05, true);
+            piece(brk + 0.05, 1, true);
+        }
+        else
+            piece(0, 1, false);
+        if (st.fork) {
+            const t0 = st.fork;
+            const u0 = st.u - st.sweep * Math.pow(t0, 1.3);
+            const a0 = gap + (reach - gap) * t0;
+            const F = [];
+            const G = [];
+            for (let i = 0; i <= 8; i++) {
+                const t = i / 8;
+                const u = u0 - 0.025 * t;
+                const arc = a0 + 0.3 * t;
+                const hw = st.w * 0.5 * Math.sin(Math.PI * (0.1 + 0.9 * t)) + 0.0008;
+                F.push(sp.at(u + hw, surf(u, arc)));
+                G.push(sp.at(u - hw, surf(u, arc)));
+            }
+            polygon(ctx, [...F, ...G.reverse()]);
+            ctx.fill();
+        }
+    }
+    /* ---- the face, from above ---- */
+    // neck stripes running up onto the back of the head
+    for (const s of [-1, 1]) {
+        line([[0.4, s * 0.02], [0.405, s * 0.06], [0.392, s * 0.1]], 0.008, tcss(STRIPE, 0.9));
+        line([[0.428, s * 0.016], [0.434, s * 0.05], [0.424, s * 0.08]], 0.006, tcss(STRIPE, 0.9));
+    }
+    // the long bridge of the nose, lit
+    ctx.fillStyle = tcss([248, 178, 96], 0.6);
+    ctx.fill(pathOf(strip(k(0.3), k(0.3), 0.565, UN - 0.012, 0, 12)));
+    // forehead: stripes sweeping back and out from the middle of the brow
+    for (const s of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+            const u = 0.585 - i * 0.03;
+            line([[u, s * 0.012], [u - 0.008, s * 0.042], [u - 0.032, s * (0.07 + i * 0.006)]], 0.0055 + i * 0.0014, tcss(STRIPE, 0.92));
+        }
+    }
+    line([[0.47, 0.007], [0.53, 0.004]], 0.005, tcss(STRIPE, 0.85));
+    line([[0.47, -0.007], [0.53, -0.004]], 0.005, tcss(STRIPE, 0.85));
+    line([[0.545, 0], [0.575, 0]], 0.005, tcss(STRIPE, 0.85));
+    for (const s of [-1, 1]) {
+        // the eye: set in a soft hollow under a pale brow, about two-thirds of
+        // the way along the head; almond-shaped, amber, sleepy and half-lidded
+        const A = [0.584, 0.038]; // inner corner, toward the nose
+        const B = [0.546, 0.07]; // outer corner, back and out
+        const du = B[0] - A[0];
+        const dv = B[1] - A[1];
+        const dl = Math.hypot(du, dv);
+        const nu = -Math.abs(dv / dl); // the upper lid faces back, toward the crown
+        const nv = (du / dl) * Math.sign(-dv / dl || 1) * -1;
+        // a slow blink now and then
+        const bc = pose.time * 0.17 + 0.3;
+        const bf = bc - Math.floor(bc);
+        const open = 0.62 * (bf < 0.035 ? 1 - Math.sin((bf / 0.035) * Math.PI) : 1);
+        const lid = (t, up, grow = 1) => {
+            const h = 0.013 * grow * Math.pow(Math.sin(Math.PI * t), 0.8);
+            const u = A[0] + du * t + nu * h * up;
+            const v = A[1] + dv * t + nv * h * up;
+            return [u, s * v];
+        };
+        const almond = (upper, lower, grow) => {
+            const pts = [];
+            for (let i = 0; i <= 12; i++)
+                pts.push(lid(i / 12, upper, grow));
+            for (let i = 12; i >= 0; i--)
+                pts.push(lid(i / 12, -lower, grow));
+            return pts.map(([u, v]) => sp.at(u, v));
+        };
+        blob(0.562, s * 0.058, 0.03, 0.02, tcss(FUR_DEEP, 0.4)); // the socket's shadow
+        blob(0.553, s * 0.046, 0.016, 0.0075, tcss(CREAM, 0.8)); // pale brow
+        line([lid(0.15, -1.6), lid(0.5, -1.7), lid(0.88, -1.4)], 0.006, tcss(CREAM, 0.75)); // pale fur under the eye
+        ctx.fillStyle = tcss(INK);
+        polygon(ctx, almond(open + 0.25, 0.75, 1.15)); // dark rim
+        ctx.fill();
+        ctx.fillStyle = "rgba(214,160,56,1)";
+        polygon(ctx, almond(open, 0.55, 0.95)); // amber iris
+        ctx.fill();
+        // pupil and a glint, in the middle of the opening, the same in both eyes
+        const [pu, pv] = lid(0.5, 0);
+        const [px, py] = sp.at(pu, pv);
+        ctx.fillStyle = tcss(INK);
+        ctx.beginPath();
+        ctx.ellipse(px, py, 0.0045, 0.0045 * Math.max(0.3, open), sp.angle(pu), 0, Math.PI * 2);
+        ctx.fill();
+        if (open > 0.3) {
+            ctx.fillStyle = "rgba(255,250,236,0.85)";
+            ctx.beginPath();
+            ctx.arc(px - 0.002, py - 0.002, 0.0014, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // and the dark line running back from the outer corner across the cheek
+        line([[B[0], s * B[1]], [0.522, s * 0.086], [0.497, s * 0.096]], 0.006, tcss(STRIPE, 0.9));
+    }
+    // the nose leather at the very tip
+    {
+        const tip = [
+            [0.652, -0.013],
+            [0.667, 0],
+            [0.652, 0.013],
+            [0.648, 0],
+        ].map(([u, v]) => sp.at(u, v));
+        ctx.fillStyle = "rgba(138,74,70,1)";
+        polygon(ctx, tip);
+        ctx.fill();
+    }
+    ctx.restore();
+    /* ---- soft fur breaking the edge of the silhouette ---- */
+    if (pose.fur > 0.02) {
+        const len = 0.022 * pose.fur;
+        ctx.lineWidth = 0.004;
+        for (const light of [false, true]) {
+            ctx.strokeStyle = light ? tcss(FUR_HI, 0.55 * pose.fur) : tcss(FUR, 0.7 * pose.fur);
+            ctx.beginPath();
+            for (const side of [-1, 1]) {
+                for (let u = U0 + 0.03; u < UN - 0.03; u += 0.0045) {
+                    const h = Math.sin(u * 912.7 + side * 37.1) * 43758.5453;
+                    const rnd = h - Math.floor(h);
+                    if (light !== rnd > 0.6)
+                        continue;
+                    const w = sp.width(u, side);
+                    const a = sp.at(u, side * w * 0.9);
+                    const b = sp.at(u - len * (0.5 + rnd), side * (w + len * (0.4 + rnd * 0.8)));
+                    ctx.moveTo(a[0], a[1]);
+                    ctx.lineTo(b[0], b[1]);
+                }
+            }
+            ctx.stroke();
+        }
+    }
+    /* ---- where the body goes into the water ---- */
+    // the flanks are thinned out of the layer so the pond shows through, more
+    // the deeper they go; it eases off toward the neck, which rides above
+    const toNeck = (f) => (u) => f + (1 - f) * ease(0.28, 0.44, u);
+    const bodyOnly = (fl) => pathOf(strip(fl, fl, U0 + 0.003, 0.46));
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    const outer = bodyOnly(k(1));
+    for (const [f0, a] of [
+        [0.7, 0.18],
+        [0.8, 0.2],
+        [0.88, 0.22],
+        [0.95, 0.25],
+    ]) {
+        const ring = new Path2D();
+        ring.addPath(outer);
+        ring.addPath(bodyOnly(toNeck(f0)));
+        ctx.fillStyle = `rgba(0,0,0,${a})`;
+        ctx.fill(ring, "evenodd");
+    }
+    ctx.restore();
+    // the wet line where fur meets water, broken by the ripple of the surface
+    ctx.strokeStyle = tcss([236, 246, 244], 0.32);
+    ctx.lineWidth = 0.006;
+    for (const side of [-1, 1]) {
+        ctx.beginPath();
+        for (let i = 0; i <= 36; i++) {
+            const u = U0 + 0.05 + ((0.36 - U0 - 0.05) * i) / 36;
+            const f = 0.84 + 0.04 * Math.sin(u * 40 + ph * 2 + side);
+            const [x, y] = sp.at(u, side * sp.width(u, side) * f);
+            if (i === 0)
+                ctx.moveTo(x, y);
+            else
+                ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+    // under the surface: the bulk of the body and legs, dim and water-dark
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
+    {
+        const a = [];
+        const b = [];
+        for (let i = 0; i <= 40; i++) {
+            const u = U0 + 0.02 + ((0.44 - U0 - 0.02) * i) / 40;
+            const legs = Math.exp(-((u - 0.17) ** 2) / 0.006) * 0.05 + Math.exp(-((u + 0.36) ** 2) / 0.008) * 0.06;
+            const taper = 1 - ease(0.34, 0.44, u) * 0.6;
+            a.push(sp.at(u, -(sp.width(u, -1) * 1.22 + legs) * taper));
+            b.push(sp.at(u, (sp.width(u, 1) * 1.22 + legs) * taper));
+        }
+        ctx.fillStyle = "rgba(70,44,30,0.32)";
+        polygon(ctx, [...a, ...b.reverse()]);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+/**
  * Swan pond engine.
  *
  * Layers, bottom to top:
@@ -704,6 +1370,7 @@ function paintSwan(ctx, look, pose) {
  * Everything is sized in "pond units": the pond is designed at 680px wide and
  * `scale` = actual width / 680, so it behaves identically at any size.
  */
+
 
 const MAX_RIPPLES = 20;
 const DESIGN_WIDTH = 680;
@@ -889,6 +1556,7 @@ uniform vec3 uReflSky;
 uniform vec3 uReflSky2;
 uniform vec3 uReflTree;
 uniform float uRefl;
+uniform float uLeafSun;
 
 // Surface slope from analytic ripples (unit-amplitude wave → slope ~1).
 vec2 slope(vec2 p) {
@@ -1150,7 +1818,7 @@ void main() {
   vec4 cv = texture2D(uCanopy, clamp(p / uRes, 0.0, 1.0));
   // leaves take the hour's light: sun-coloured by day, moon-dark silhouettes at night
   float dayK = clamp((uLight - 0.2) * 1.4, 0.0, 1.0);
-  vec3 lightOn = mix(vec3(0.16, 0.2, 0.32), mix(vec3(1.0), uSun * 1.25, 0.7), dayK);
+  vec3 lightOn = mix(vec3(0.16, 0.2, 0.32), mix(vec3(1.0), uSun * 1.25, uLeafSun), dayK);
   vec3 crgb = cv.rgb * lightOn * (0.5 + 0.45 * dayK);
   crgb += cv.a * vec3(0.05, 0.07, 0.12) * uMoon;
   crgb += cv.a * vec3(0.16, 0.2, 0.04) * beams * uLight;
@@ -1524,7 +2192,10 @@ function paintBed(W, H, scale) {
 /* --------------------------------------------------------------------------
    Engine
    -------------------------------------------------------------------------- */
-function startPond(host, waterCanvas, swanCanvas, initial = {}) {
+function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
+    // "tiger": no swans and no interaction; a tiger wades slowly under sakura
+    const scene = opts.scene ?? "swans";
+    const sakura = scene === "tiger";
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const motion = reduceMotion ? 0.55 : 1;
     let target = { ...DEFAULT_PARAMS, ...initial };
@@ -1564,7 +2235,7 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
             gl.enableVertexAttribArray(0);
             gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-            for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade", "uFog", "uFogCol"]) {
+            for (const n of ["uRes", "uTime", "uScale", "uRipples", "uReflSky", "uReflSky2", "uReflTree", "uRefl", "uDeep", "uShallow", "uCaustic", "uSky", "uTint", "uMurk", "uLight", "uGlow", "uTintAmt", "uBed", "uWeeds", "uSwans", "uSurf", "uCanopy", "uSun", "uSunAmt", "uMoon", "uGrade", "uFog", "uFogCol", "uLeafSun"]) {
                 wu[n] = gl.getUniformLocation(waterProg, n);
             }
             for (const n of ["uRes", "uTime", "uScale", "uScene", "uSwans", "uPaint", "uBrush", "uBloom"]) {
@@ -1694,25 +2365,33 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const grow = (bx, by, ang, len, depth, at) => {
             const n = Math.max(5, Math.round(len / (3.4 * scale)));
             const leaves = [];
+            // cherry boughs are mostly blossom, with only a few young leaves
+            // cherry boughs here are bare white wood and blossom, no leaves
+            const leafy = sakura ? 0 : 1;
             for (let i = 0; i < n; i++) {
+                if (r() > leafy)
+                    continue;
                 const t = 0.12 + (i / n) * 0.88;
                 leaves.push(leaf(t, (r() - 0.5) * 7 * scale, (4.8 + r() * 3) * (1.1 - t * 0.3)));
             }
             // the clump at the tip
-            const clump = 10 + Math.floor(r() * 8);
+            const clump = sakura ? 0 : 10 + Math.floor(r() * 8);
             for (let i = 0; i < clump; i++) {
                 leaves.push(leaf(0.82 + r() * 0.2, (r() - 0.5) * 26 * scale, 4.4 + r() * 3.2));
             }
             const blooms = [];
-            const nb = Math.round(n * 0.18 + clump * 0.35);
+            const nb = sakura ? Math.round(n * 1.3 + 18) : Math.round(n * 0.18 + clump * 0.35);
             for (let i = 0; i < nb; i++) {
                 blooms.push({
-                    t: 0.35 + r() * 0.7,
-                    off: (r() - 0.5) * 22 * scale,
-                    r: (2.3 + r() * 1.6) * scale,
+                    t: sakura ? 0.12 + r() * 0.98 : 0.35 + r() * 0.7,
+                    off: (r() - 0.5) * (sakura ? 18 : 22) * scale,
+                    r: (sakura ? 2.6 + r() * 1.9 : 2.3 + r() * 1.6) * scale,
                     rot: r() * Math.PI,
-                    hue: 342 + r() * 14,
-                    light: 86 + r() * 8,
+                    // a cool pink, so it stays pink under warm light
+                    hue: sakura ? 322 + r() * 18 : 342 + r() * 14,
+                    light: sakura ? 84 + r() * 10 : 86 + r() * 8,
+                    sat: sakura ? 62 + r() * 28 : 85,
+                    v: Math.floor(r() * 1000),
                 });
             }
             const br = {
@@ -1746,6 +2425,9 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             grow(1.06 * W, 0.98 * H, Math.PI + 0.62, 0.19 * W, 2, 0),
             grow(-0.07 * W, 0.8 * H, -0.22, 0.14 * W, 2, 0),
         ];
+        // under the sakura, a long pale bough reaches in across the top-left
+        if (sakura)
+            branches.push(grow(-0.08 * W, 0.04 * H, 0.18, 0.46 * W, 3, 0));
     };
     const drawVineLeaf = (x, y, l, rot) => {
         const k = canopy.width / W;
@@ -1782,27 +2464,100 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         cctx.lineTo(st + r * 1.8, 0);
         cctx.stroke();
     };
-    const drawBloom = (x, y, b, rot) => {
-        const k = canopy.width / W;
-        const c = Math.cos(rot);
-        const sn = Math.sin(rot);
-        cctx.setTransform(c * k, sn * k, -sn * k, c * k, x * k, y * k);
+    // Blossoms are painted once into a handful of sprites and stamped, rather
+    // than drawn petal by petal every frame: there are hundreds of them.
+    const paintBloom = (g, r, hue, sat, light, rot) => {
+        g.rotate(rot);
+        if (sakura) {
+            // cherry blossom: five petals with a notch at each tip, a deeper pink
+            // heart and a little spray of stamens
+            const R = r * 1.1;
+            g.fillStyle = `hsl(${hue} ${sat}% ${light}%)`;
+            for (let i = 0; i < 5; i++) {
+                const a = (i / 5) * Math.PI * 2;
+                const c2 = Math.cos(a);
+                const s2 = Math.sin(a);
+                const P = (x, y) => [x * c2 - y * s2, x * s2 + y * c2];
+                g.beginPath();
+                g.moveTo(0, 0);
+                g.quadraticCurveTo(...P(R * 0.35, -R * 0.62), ...P(R * 0.92, -R * 0.3));
+                g.lineTo(...P(R * 0.76, 0));
+                g.lineTo(...P(R * 0.92, R * 0.3));
+                g.quadraticCurveTo(...P(R * 0.35, R * 0.62), 0, 0);
+                g.fill();
+            }
+            g.fillStyle = `hsl(${hue - 6} ${Math.min(95, sat + 15)}% ${light - 24}%)`;
+            g.beginPath();
+            g.arc(0, 0, R * 0.26, 0, Math.PI * 2);
+            g.fill();
+            g.strokeStyle = `hsl(${hue - 8} 60% ${light - 30}%)`;
+            g.lineWidth = R * 0.07;
+            g.fillStyle = "hsl(46 85% 72%)";
+            for (let i = 0; i < 6; i++) {
+                const a = (i / 6) * Math.PI * 2;
+                const x = Math.cos(a) * R * 0.42;
+                const y = Math.sin(a) * R * 0.42;
+                g.beginPath();
+                g.moveTo(0, 0);
+                g.lineTo(x, y);
+                g.stroke();
+                g.beginPath();
+                g.arc(x, y, R * 0.09, 0, Math.PI * 2);
+                g.fill();
+            }
+            return;
+        }
         // five soft petals, a darker heart, a speck of pollen
-        cctx.fillStyle = `hsl(${b.hue} 85% ${b.light}%)`;
+        g.fillStyle = `hsl(${hue} ${sat}% ${light}%)`;
         for (let i = 0; i < 5; i++) {
             const a = (i / 5) * Math.PI * 2;
-            cctx.beginPath();
-            cctx.ellipse(Math.cos(a) * b.r * 0.62, Math.sin(a) * b.r * 0.62, b.r * 0.62, b.r * 0.46, a, 0, Math.PI * 2);
-            cctx.fill();
+            g.beginPath();
+            g.ellipse(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.62, r * 0.46, a, 0, Math.PI * 2);
+            g.fill();
         }
-        cctx.fillStyle = `hsl(${b.hue - 4} 62% ${b.light - 22}%)`;
-        cctx.beginPath();
-        cctx.arc(0, 0, b.r * 0.34, 0, Math.PI * 2);
-        cctx.fill();
-        cctx.fillStyle = "hsl(48 80% 70%)";
-        cctx.beginPath();
-        cctx.arc(0, 0, b.r * 0.14, 0, Math.PI * 2);
-        cctx.fill();
+        g.fillStyle = `hsl(${hue - 4} 62% ${light - 22}%)`;
+        g.beginPath();
+        g.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = "hsl(48 80% 70%)";
+        g.beginPath();
+        g.arc(0, 0, r * 0.14, 0, Math.PI * 2);
+        g.fill();
+    };
+    const SPRITES = 10;
+    let sprites = [];
+    let spritesAt = 0;
+    const bloomSprite = (v, k) => {
+        if (spritesAt !== k || !sprites.length) {
+            spritesAt = k;
+            sprites = [];
+            const rr = mulberry32(77);
+            for (let i = 0; i < SPRITES; i++) {
+                const hue = sakura ? 322 + rr() * 18 : 342 + rr() * 14;
+                const light = sakura ? 84 + rr() * 10 : 86 + rr() * 8;
+                const sat = sakura ? 62 + rr() * 28 : 85;
+                const px = 4.6 * scale * k * 1.3; // a little larger than the largest bloom, so stamps only shrink
+                const size = Math.ceil(px * 2.5) + 2;
+                const img = document.createElement("canvas");
+                img.width = size;
+                img.height = size;
+                const g = img.getContext("2d");
+                g.translate(size / 2, size / 2);
+                g.lineCap = "round";
+                paintBloom(g, px, hue, sat, light, rr() * Math.PI);
+                sprites.push({ img, half: size / 2, px });
+            }
+        }
+        return sprites[v % SPRITES];
+    };
+    const drawBloom = (x, y, b, rot) => {
+        const k = canopy.width / W;
+        const sp = bloomSprite(b.v, k);
+        const sc = (b.r * k) / sp.px;
+        const c = Math.cos(rot) * sc;
+        const sn = Math.sin(rot) * sc;
+        cctx.setTransform(c, sn, -sn, c, x * k, y * k);
+        cctx.drawImage(sp.img, -sp.half, -sp.half);
     };
     const drawVines = () => {
         const k = canopy.width / W;
@@ -1841,14 +2596,36 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                 };
             };
             cctx.setTransform(k, 0, 0, k, 0, 0);
-            cctx.strokeStyle = "rgba(58,52,34,0.9)";
             cctx.lineCap = "round";
-            for (let i = 0; i < segs; i++) {
-                cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
-                cctx.beginPath();
-                cctx.moveTo(pts[i][0], pts[i][1]);
-                cctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
-                cctx.stroke();
+            if (sakura) {
+                // pale bark, like the white-limbed cherries: a soft grey underside, a lit top edge
+                for (const [col, wk, off] of [
+                    ["rgba(112,104,112,0.85)", 1.25, 0.25],
+                    ["rgba(236,232,230,0.97)", 1, 0],
+                    ["rgba(255,255,255,0.6)", 0.4, -0.25],
+                ]) {
+                    cctx.strokeStyle = col;
+                    for (let i = 0; i < segs; i++) {
+                        const w = br.width * 2.8 * (1 - (i / segs) * 0.75);
+                        const nx = -Math.sin(pts[i][2]) * w * off;
+                        const ny = Math.cos(pts[i][2]) * w * off;
+                        cctx.lineWidth = w * wk;
+                        cctx.beginPath();
+                        cctx.moveTo(pts[i][0] + nx, pts[i][1] + ny);
+                        cctx.lineTo(pts[i + 1][0] + nx, pts[i + 1][1] + ny);
+                        cctx.stroke();
+                    }
+                }
+            }
+            else {
+                cctx.strokeStyle = "rgba(58,52,34,0.9)";
+                for (let i = 0; i < segs; i++) {
+                    cctx.lineWidth = br.width * (1 - (i / segs) * 0.7);
+                    cctx.beginPath();
+                    cctx.moveTo(pts[i][0], pts[i][1]);
+                    cctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
+                    cctx.stroke();
+                }
             }
             for (const kid of br.kids) {
                 const q = at(kid.at, 0);
@@ -1937,12 +2714,18 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     };
     const petals = [];
     let nextPetal = 1.5;
+    // under the sakura the water is already scattered with fallen petals
+    if (sakura) {
+        for (let i = 0; i < 26; i++) {
+            petals.push({ x: rand(0, W), y: rand(0, H), z: 0, vx: 0, vy: 0, a: rand(0, Math.PI * 2), va: rand(-0.4, 0.4), size: rand(2.6, 3.8) * scale, hue: rand(322, 340), age: rand(0, 25), landed: true });
+        }
+    }
     const updatePetals = (dt) => {
         nextPetal -= dt;
-        if (nextPetal <= 0 && bloomSpots.length && petals.length < 34) {
+        if (nextPetal <= 0 && bloomSpots.length && petals.length < (sakura ? 70 : 34)) {
             const [x, y, hue] = bloomSpots[Math.floor(Math.random() * bloomSpots.length)];
             petals.push({ x, y, z: 1, vx: rand(-4, 8) * scale, vy: rand(-2, 6) * scale, a: rand(0, Math.PI * 2), va: rand(-2, 2), size: rand(2.6, 3.8) * scale, hue, age: 0, landed: false });
-            nextPetal = rand(0.9, 2.8);
+            nextPetal = sakura ? rand(0.25, 0.8) : rand(0.9, 2.8);
         }
         const ca = currentAngle();
         for (let i = petals.length - 1; i >= 0; i--) {
@@ -1978,6 +2761,22 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                         ty += (dy / d) * k;
                     }
                 }
+                if (tiger) {
+                    // the tiger wades through and the petals part around it
+                    const len = tigerLen();
+                    const c = Math.cos(tiger.h);
+                    const sn = Math.sin(tiger.h);
+                    const u = clamp((f.x - tiger.x) * c + (f.y - tiger.y) * sn, -0.5 * len, 0.6 * len);
+                    const dx = f.x - (tiger.x + c * u);
+                    const dy = f.y - (tiger.y + sn * u);
+                    const d = Math.hypot(dx, dy);
+                    const R = 0.3 * len;
+                    if (d < R && d > 0) {
+                        const k = (1 - d / R) * (tiger.v + 14 * scale) * 1.4;
+                        tx += (dx / d) * k;
+                        ty += (dy / d) * k;
+                    }
+                }
                 f.vx += (tx - f.vx) * (1 - Math.exp(-dt * 1.2));
                 f.vy += (ty - f.vy) * (1 - Math.exp(-dt * 1.2));
                 f.x += f.vx * dt;
@@ -2001,10 +2800,7 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         // tumbling: the petal foreshortens as it turns
         if (!f.landed)
             c.scale(1, 0.45 + 0.55 * Math.abs(Math.sin(f.age * 3 + f.hue)));
-        const g = c.createLinearGradient(-s, 0, s, 0);
-        g.addColorStop(0, `hsl(${f.hue} 62% 72%)`);
-        g.addColorStop(1, `hsl(${f.hue} 75% 88%)`);
-        c.fillStyle = g;
+        c.fillStyle = `hsl(${f.hue} 70% 82%)`;
         c.beginPath();
         c.moveTo(-s, 0);
         c.bezierCurveTo(-s * 0.4, -s * 0.85, s * 0.7, -s * 0.8, s, -s * 0.15);
@@ -2130,6 +2926,11 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             s.ty *= sy;
             s.trail.length = 0;
         }
+        if (tiger) {
+            tiger.x *= sx;
+            tiger.y *= sy;
+            tiger.trail.length = 0;
+        }
         for (const r of ripples) {
             r.x *= sx;
             r.y *= sy;
@@ -2252,8 +3053,273 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         s.v = glideSpeed(s);
         return s;
     };
-    for (let i = 0; i < SWAN_COUNT; i++)
+    for (let i = 0; i < (scene === "swans" ? SWAN_COUNT : 0); i++)
         swans.push(makeSwan(i));
+    const tigerLook = makeTigerLook();
+    const tigerStyle = { fur: 0.5, blur: 0 };
+    const tigerLen = () => 2.4 * L;
+    let tiger = null;
+    // settled in the middle of the pond, lying low in the water, at an angle
+    const spawnTiger = () => {
+        tiger = {
+            x: W * 0.52,
+            y: H * 0.5,
+            h: Math.PI / 2 + 0.55,
+            v: 0,
+            phase: 0.1,
+            bend: 0,
+            turn: 0,
+            trail: [],
+            lastTrail: -1,
+            prevP: [0.1, 0.35, 0.6, 0.85],
+            nextRing: 0.8,
+            shifting: false,
+            until: clock + rand(5, 8),
+            aim: Math.PI / 2 + 0.55,
+        };
+    };
+    if (scene === "tiger")
+        spawnTiger();
+    const tigerPose = (t) => {
+        const rot = t.h;
+        return {
+            phase: t.phase,
+            curve: t.bend,
+            // idly looking about
+            headTurn: Math.sin(clock * 0.21) * 0.16 + Math.sin(clock * 0.13 + 2) * 0.1 + Math.sin(clock * 0.47 + 1) * 0.04,
+            time: clock,
+            fur: tigerStyle.fur,
+            lx: LIGHT.x * Math.cos(-rot) - LIGHT.y * Math.sin(-rot),
+            ly: LIGHT.x * Math.sin(-rot) + LIGHT.y * Math.cos(-rot),
+        };
+    };
+    const updateTiger = (dt) => {
+        const t = tiger;
+        if (!t)
+            return;
+        const len = tigerLen();
+        // mostly it rests; every so often it shifts its weight, a slow step or two
+        // and a new angle, never far from its spot in the middle of the pond
+        if (clock >= t.until) {
+            t.shifting = !t.shifting;
+            if (t.shifting) {
+                const home = Math.atan2(H * 0.5 - t.y, W * 0.52 - t.x);
+                const far = Math.hypot(H * 0.5 - t.y, W * 0.52 - t.x) / len;
+                // drift back toward the middle if it has wandered; otherwise just turn a little
+                t.aim = far > 0.35 ? home : Math.PI / 2 + 0.55 + rand(-0.6, 0.6);
+                t.until = clock + rand(2.4, 4);
+            }
+            else {
+                t.until = clock + rand(6, 11);
+            }
+        }
+        const vWant = t.shifting ? 0.075 * len * motion : 0;
+        t.v += (vWant - t.v) * (1 - Math.exp(-dt * 0.9));
+        const turn = t.shifting ? clamp(wrapAngle(t.aim - t.h), -0.5, 0.5) * 0.35 : 0;
+        t.turn += (turn - t.turn) * (1 - Math.exp(-dt * 0.8));
+        t.h += t.turn * dt;
+        t.x += Math.cos(t.h) * t.v * dt;
+        t.y += Math.sin(t.h) * t.v * dt;
+        t.phase = (t.phase + (t.v * dt) / (STRIDE * len)) % 1;
+        // a lazy curve to the body that drifts as it settles, and leans into a turn
+        const arc = clamp(Math.sin(clock * 0.09 + 1) * 0.22 + Math.sin(clock * 0.05) * 0.12 + t.turn * 3, -0.6, 0.6);
+        t.bend += (arc - t.bend) * (1 - Math.exp(-dt * 0.8));
+        if (clock - t.lastTrail > 0.09) {
+            t.trail.push({ x: t.x, y: t.y, h: t.h, v: t.v, t: clock });
+            t.lastTrail = clock;
+        }
+        while (t.trail.length && clock - t.trail[0].t > 3)
+            t.trail.shift();
+        // each paw that comes down sends out rings; lifting one off stirs a little
+        const c = Math.cos(t.h);
+        const sn = Math.sin(t.h);
+        tigerFeet(tigerPose(t)).forEach((f, i) => {
+            const prev = t.prevP[i];
+            const wx = t.x + (c * f.x - sn * f.y) * len;
+            const wy = t.y + (sn * f.x + c * f.y) * len;
+            if (prev > 0.85 && f.p < 0.15)
+                addRipple(wx, wy, 1.2);
+            else if (prev < STANCE && f.p >= STANCE)
+                addRipple(wx, wy, 0.35);
+            t.prevP[i] = f.p;
+        });
+        // and soft rings spread from where its chest meets the water as it breathes
+        t.nextRing -= dt;
+        if (t.nextRing <= 0) {
+            addRipple(t.x + c * 0.2 * len, t.y + sn * 0.2 * len, t.shifting ? 1.4 : 0.9);
+            t.nextRing = t.shifting ? rand(1, 1.6) : rand(2.4, 4);
+        }
+    };
+    const pads = [];
+    if (sakura) {
+        const r = mulberry32(5);
+        for (let tries = 0; pads.length < 16 && tries < 400; tries++) {
+            const pr = (14 + r() * 16) * scale;
+            const x = r() * W;
+            const y = r() * H;
+            if (pads.some((p) => Math.hypot(p.x - x, p.y - y) < p.r + pr + 6 * scale))
+                continue;
+            // leave room around where the tiger lies
+            if (Math.hypot(x - W * 0.52, y - H * 0.5) < tigerLen() * 0.75 + pr)
+                continue;
+            pads.push({ x, y, ax: x, ay: y, vx: 0, vy: 0, r: pr, a: r() * Math.PI * 2, va: 0, lily: -1, seed: Math.floor(r() * 1e6), img: null, imgK: 0 });
+        }
+    }
+    // each pad is painted once into its own little canvas, then stamped
+    const padImage = (p, k) => {
+        if (p.img && p.imgK === k)
+            return p.img;
+        const r = mulberry32(p.seed);
+        const R = p.r * k;
+        const size = Math.ceil(R * 2.4) + 4;
+        const img = document.createElement("canvas");
+        img.width = size;
+        img.height = size;
+        const g = img.getContext("2d");
+        g.translate(size / 2, size / 2);
+        const notch = 0.22 + r() * 0.12;
+        const hue = 96 + r() * 26;
+        // the pad: a disc with a slit to the middle, a darker rim, veins
+        const pad = new Path2D();
+        pad.moveTo(0, 0);
+        pad.arc(0, 0, R, notch, Math.PI * 2 - notch * 0.2);
+        pad.closePath();
+        const grad = g.createRadialGradient(-R * 0.25, -R * 0.25, R * 0.1, 0, 0, R);
+        grad.addColorStop(0, `hsl(${hue} 42% ${44 + r() * 8}%)`);
+        grad.addColorStop(1, `hsl(${hue + 8} 48% ${28 + r() * 6}%)`);
+        g.fillStyle = grad;
+        g.fill(pad);
+        g.save();
+        g.clip(pad);
+        g.strokeStyle = `hsla(${hue - 10}, 40%, 22%, 0.35)`;
+        g.lineWidth = Math.max(0.6, R * 0.03);
+        for (let i = 0; i < 11; i++) {
+            const a = notch + (i / 11) * (Math.PI * 2 - notch * 1.2);
+            g.beginPath();
+            g.moveTo(0, 0);
+            g.quadraticCurveTo(Math.cos(a + 0.12) * R * 0.5, Math.sin(a + 0.12) * R * 0.5, Math.cos(a) * R, Math.sin(a) * R);
+            g.stroke();
+        }
+        g.strokeStyle = `hsla(${hue}, 40%, 18%, 0.55)`;
+        g.lineWidth = Math.max(1, R * 0.07);
+        g.stroke(pad);
+        g.fillStyle = `hsla(${hue - 20}, 60%, 80%, 0.18)`;
+        g.beginPath();
+        g.ellipse(-R * 0.3, -R * 0.35, R * 0.35, R * 0.2, -0.6, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+        if (p.lily >= 0) {
+            // a water lily: pointed petals in two rings, a golden heart
+            const L = R * 0.55;
+            const lx = R * 0.18;
+            const ly = -R * 0.12;
+            const petals = (n, len, wid, light, off) => {
+                for (let i = 0; i < n; i++) {
+                    const a = off + (i / n) * Math.PI * 2;
+                    g.save();
+                    g.translate(lx, ly);
+                    g.rotate(a);
+                    g.fillStyle = `hsl(${p.lily} ${62 + r() * 10}% ${light + r() * 6}%)`;
+                    g.beginPath();
+                    g.moveTo(0, 0);
+                    g.quadraticCurveTo(len * 0.5, -wid, len, 0);
+                    g.quadraticCurveTo(len * 0.5, wid, 0, 0);
+                    g.fill();
+                    g.restore();
+                }
+            };
+            petals(9, L, L * 0.32, 74, 0);
+            petals(7, L * 0.72, L * 0.28, 84, 0.3);
+            g.fillStyle = "hsl(44 85% 62%)";
+            g.beginPath();
+            g.arc(lx, ly, L * 0.2, 0, Math.PI * 2);
+            g.fill();
+        }
+        p.img = img;
+        p.imgK = k;
+        return img;
+    };
+    const updatePads = (dt) => {
+        const ca = currentAngle();
+        for (const p of pads) {
+            // tethered by its stem: drifts a little with the current, springs back
+            let fx = (p.ax + Math.cos(ca) * 4 * scale - p.x) * 0.25;
+            let fy = (p.ay + Math.sin(ca) * 4 * scale - p.y) * 0.25;
+            if (tiger) {
+                const len = tigerLen();
+                const c = Math.cos(tiger.h);
+                const sn = Math.sin(tiger.h);
+                const u = clamp((p.x - tiger.x) * c + (p.y - tiger.y) * sn, -0.55 * len, 0.75 * len);
+                const dx = p.x - (tiger.x + c * u);
+                const dy = p.y - (tiger.y + sn * u);
+                const d = Math.hypot(dx, dy);
+                const R = 0.22 * len + p.r;
+                if (d < R && d > 0) {
+                    const k = (1 - d / R) * (1 - d / R) * 260 * scale;
+                    fx += (dx / d) * k;
+                    fy += (dy / d) * k;
+                    p.va += ((dx * sn - dy * c) / d) * (1 - d / R) * dt * 1.5;
+                }
+            }
+            p.vx = (p.vx + fx * dt) * Math.exp(-dt * 1.6);
+            p.vy = (p.vy + fy * dt) * Math.exp(-dt * 1.6);
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.va *= Math.exp(-dt * 1.2);
+            p.a += p.va * dt;
+        }
+    };
+    const drawPads = (c) => {
+        const k = paint.width / W;
+        for (const p of pads) {
+            const img = padImage(p, k);
+            c.save();
+            c.translate(p.x, p.y);
+            c.rotate(p.a);
+            c.scale(1 / k, 1 / k);
+            c.drawImage(img, -img.width / 2, -img.height / 2);
+            c.restore();
+        }
+    };
+    // the tiger is painted on a layer of its own, so the parts under the
+    // surface can be thinned out without touching the pads and petals beneath
+    const tigerLayer = document.createElement("canvas");
+    const tlctx = tigerLayer.getContext("2d");
+    const tigerSoft = document.createElement("canvas");
+    const tsctx = tigerSoft.getContext("2d");
+    const drawTiger = (c, t) => {
+        const len = tigerLen();
+        if (tigerLayer.width !== paint.width || tigerLayer.height !== paint.height) {
+            tigerLayer.width = paint.width;
+            tigerLayer.height = paint.height;
+        }
+        const k = paint.width / W;
+        tlctx.setTransform(1, 0, 0, 1, 0, 0);
+        tlctx.clearRect(0, 0, tigerLayer.width, tigerLayer.height);
+        tlctx.setTransform(k, 0, 0, k, 0, 0);
+        tlctx.translate(t.x, t.y);
+        tlctx.rotate(t.h);
+        tlctx.scale(len, len);
+        paintTiger(tlctx, tigerLook, tigerPose(t));
+        if (tigerStyle.blur > 0.01) {
+            // soften: shrink the layer and let it be smoothed back up
+            const f = 1 / (1 + tigerStyle.blur * 5);
+            const bw = Math.max(1, Math.round(tigerLayer.width * f));
+            const bh = Math.max(1, Math.round(tigerLayer.height * f));
+            if (tigerSoft.width !== bw || tigerSoft.height !== bh) {
+                tigerSoft.width = bw;
+                tigerSoft.height = bh;
+            }
+            tsctx.clearRect(0, 0, bw, bh);
+            tsctx.imageSmoothingQuality = "high";
+            tsctx.drawImage(tigerLayer, 0, 0, bw, bh);
+            c.imageSmoothingQuality = "high";
+            c.drawImage(tigerSoft, 0, 0, W, H);
+        }
+        else {
+            c.drawImage(tigerLayer, 0, 0, W, H);
+        }
+    };
     for (const s of swans)
         pickWaypoint(s);
     const nearestOther = (s) => {
@@ -2365,7 +3431,7 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         leaf.curl = rand(-0.3, 0.3);
         return leaf;
     };
-    for (let i = 0; i < LEAF_COUNT; i++)
+    for (let i = 0; i < (sakura ? 0 : LEAF_COUNT); i++)
         leaves.push(spawnLeaf(null, true));
     const updateLeaves = (dt) => {
         const ca = currentAngle();
@@ -2673,11 +3739,16 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             sayLater(s, pick(CROSS), "cross", 0.6, (s.fleeAt >= 0 ? s.fleeAt : clock) + rand(0.05, 0.3));
         }
     };
-    host.addEventListener("pointermove", onMove);
-    host.addEventListener("pointerleave", onLeave);
-    host.addEventListener("pointerdown", onDown);
-    host.addEventListener("contextmenu", onCtx);
-    host.addEventListener("pointerup", onUp);
+    if (scene === "swans") {
+        host.addEventListener("pointermove", onMove);
+        host.addEventListener("pointerleave", onLeave);
+        host.addEventListener("pointerdown", onDown);
+        host.addEventListener("contextmenu", onCtx);
+        host.addEventListener("pointerup", onUp);
+    }
+    else {
+        host.style.cursor = "default";
+    }
     /* ---------- simulation ---------- */
     const update = (s, dt) => {
         if (s.state === "away") {
@@ -3131,6 +4202,44 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             sctx.fillStyle = g;
             sctx.fillRect(bx - sz, by - sz, sz * 2, sz * 2);
         }
+        if (tiger) {
+            // the tiger pushes a broad, slow wake, and the water rides up around it
+            const t = tiger;
+            const len = tigerLen();
+            const tr = t.trail;
+            for (const arm of [1, -1]) {
+                let px = 0;
+                let py = 0;
+                for (let i = tr.length - 1; i >= 0; i--) {
+                    const p = tr[i];
+                    const age = clock - p.t;
+                    const lat = 0.16 * len + 0.45 * p.v * age;
+                    const x = p.x - Math.sin(p.h) * lat * arm + Math.cos(p.h) * 0.2 * len;
+                    const y = p.y + Math.cos(p.h) * lat * arm + Math.sin(p.h) * 0.2 * len;
+                    if (i < tr.length - 1) {
+                        sctx.strokeStyle = `rgba(255,255,255,${0.26 * (1 - age / 3)})`;
+                        sctx.lineWidth = (4 + age * 3) * scale;
+                        sctx.beginPath();
+                        sctx.moveTo(px, py);
+                        sctx.lineTo(x, y);
+                        sctx.stroke();
+                    }
+                    px = x;
+                    py = y;
+                }
+            }
+            sctx.save();
+            sctx.translate(t.x, t.y);
+            sctx.rotate(t.h);
+            const g = sctx.createRadialGradient(0.05 * len, 0, 0.1 * len, 0.05 * len, 0, 0.42 * len);
+            g.addColorStop(0, "rgba(255,255,255,0)");
+            g.addColorStop(0.55, "rgba(255,255,255,0.22)");
+            g.addColorStop(1, "rgba(255,255,255,0)");
+            sctx.scale(1.25, 0.6);
+            sctx.fillStyle = g;
+            sctx.fillRect(-len, -len, 2 * len, 2 * len);
+            sctx.restore();
+        }
         sctx.globalCompositeOperation = "source-over";
     };
     /* ---------- uniforms from params ---------- */
@@ -3164,6 +4273,8 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         gl.uniform1f(wu.uRefl, 0.12 + 0.15 * p.paint + 0.38 * p.skySat * (1 - p.moon * 0.6));
         gl.uniform1f(wu.uGrade, p.lightSat * (1 - p.moon * 0.7));
         gl.uniform1f(wu.uFog, p.fog);
+        // sakura keeps its pink: the sun warms it less than green leaves
+        gl.uniform1f(wu.uLeafSun, sakura ? 0.25 : 0.7);
         // mist glows with the sky and the low sun
         const fogSky = hsl(p.skyHue, p.skySat * 0.45, 0.86);
         const fogSun = hsl(p.lightHue, p.lightSat * 0.5, 0.9);
@@ -3251,6 +4362,8 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         }
         for (const s of swans)
             update(s, dt * motion);
+        updateTiger(dt);
+        updatePads(dt);
         resolveOverlaps(dt * motion);
         updateLeaves(dt);
         updatePetals(dt);
@@ -3262,6 +4375,7 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const k = paint.width / W;
         pctx.setTransform(k, 0, 0, k, 0, 0);
         pctx.clearRect(0, 0, W, H);
+        drawPads(pctx);
         for (const f of leaves)
             drawLeaf(pctx, f);
         for (const f of petals)
@@ -3273,6 +4387,8 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         const live = swans.filter((s) => s.state !== "away").sort((a, b) => a.y - b.y);
         for (const s of live)
             drawSwan(pctx, s);
+        if (tiger)
+            drawTiger(pctx, tiger);
         for (const f of petals)
             if (!f.landed)
                 drawPetal(pctx, f);
@@ -3379,6 +4495,12 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             frameListeners.add(cb);
             return () => frameListeners.delete(cb);
         },
+        setTigerStyle(style) {
+            if (typeof style.fur === "number")
+                tigerStyle.fur = clamp(style.fur, 0, 1);
+            if (typeof style.blur === "number")
+                tigerStyle.blur = clamp(style.blur, 0, 1);
+        },
         setTapMode(mode) {
             tapFeeds = mode === "feed";
         },
@@ -3465,6 +4587,7 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         destroy() {
             if (raf)
                 cancelAnimationFrame(raf);
+            host.style.cursor = "";
             io.disconnect();
             ro.disconnect();
             document.removeEventListener("visibilitychange", onVis);
