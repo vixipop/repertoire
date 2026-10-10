@@ -130,9 +130,9 @@ export function dottedFrameTexture(w, d, pad, colour) {
   return tex;
 }
 
-// A soft shaded patch with a faint edge, w × d table units, where the
+// A soft shaded patch, no outline, w × d table units, where the
 // finished puzzle sits.
-export function targetTexture(w, d, colour) {
+export function targetTexture(w, d, colour, strength = 0.28) {
   const ppu = 64;
   const cv = document.createElement('canvas');
   cv.width = Math.round(w * ppu);
@@ -142,13 +142,9 @@ export function targetTexture(w, d, colour) {
   const r = 0.12 * ppu;
   ctx.beginPath();
   ctx.roundRect(inset, inset, cv.width - inset * 2, cv.height - inset * 2, r);
-  ctx.globalAlpha = 0.28;
+  ctx.globalAlpha = strength;
   ctx.fillStyle = colour;
   ctx.fill();
-  ctx.globalAlpha = 0.9;
-  ctx.strokeStyle = colour;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;

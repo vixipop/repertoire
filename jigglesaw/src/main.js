@@ -241,7 +241,7 @@ function buildZone() {
   // the dotted line for the place to build.
   const target = new THREE.Mesh(
     new THREE.PlaneGeometry(board.w, board.d).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ map: targetTexture(board.w, board.d, THEMES[theme].dots), transparent: true, depthWrite: false, toneMapped: false })
+    new THREE.MeshBasicMaterial({ map: targetTexture(board.w, board.d, THEMES[theme].dots, theme === 'dark' ? 0.1 : 0.28), transparent: true, depthWrite: false, toneMapped: false })
   );
   target.position.set(0, 0.0005, -zone.z);
   zone.mesh.add(target);
