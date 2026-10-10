@@ -149,3 +149,32 @@ export function gridFor(aspect, target = 24) {
   const cw = Math.sqrt(stretch);
   return { cols: best.cols, rows: best.rows, cw, ch: 1 / cw };
 }
+
+// One pass of corner-cutting: every point is replaced by two, a quarter of the
+// way along each neighbouring segment. Softens sharp kinks without moving the
+// outline by more than a hair.
+export function smooth(outline) {
+  const out = [];
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % outline.length];
+    out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+  }
+  return out;
+}
+
+// True if any triangle of the extruded top face points the wrong way. The
+// rounded edge pushes the outline inward, and at a tight kink that can turn a
+// triangle inside out, which shows as a tilted sheet floating over the piece.
+export function topFlipped(geo, z) {
+  const p = geo.attributes.position;
+  let up = 0;
+  let down = 0;
+  for (let i = 0; i < p.count; i += 3) {
+    if ([0, 1, 2].some((k) => Math.abs(p.getZ(i + k) - z) > 1e-6)) continue;
+    const area = (p.getX(i + 1) - p.getX(i)) * (p.getY(i + 2) - p.getY(i)) - (p.getX(i + 2) - p.getX(i)) * (p.getY(i + 1) - p.getY(i));
+    if (area > 0) up++;
+    else down++;
+  }
+  return up > 0 && down > 0;
+}

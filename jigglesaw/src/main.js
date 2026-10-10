@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
-import { cutPuzzle, gridFor } from './shape.js';
+import { cutPuzzle, gridFor, smooth, topFlipped } from './shape.js';
 import { Cluster } from './cluster.js';
 import { createQualityGuard } from './quality.js';
 import { THEMES, savedTheme, saveTheme } from './theme.js';
 import { createUnlock } from './unlock.js';
 import { foamMaterial, printMaterial } from './materials.js';
-import { printTexture, tableTexture, shadowTexture, dottedFrameTexture } from './textures.js';
+import { printTexture, tableTexture, shadowTexture, dottedFrameTexture, targetTexture } from './textures.js';
 import { PRESETS, loadPreset, pictureFromImage } from './pictures.js';
 import { createSparkles } from './sparkles.js';
 import { createSoften } from './soften.js';
@@ -121,16 +121,23 @@ const layoutOf = (c, r) =>
 function buildPiece({ c, r, outline }) {
   const cx = (c + 0.5) * board.cw;
   const cy = (r + 0.5) * board.ch;
-  const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
-  let geo = new THREE.ExtrudeGeometry(shape, {
-    depth: THICK,
-    bevelEnabled: true,
-    bevelThickness: ROUND_H,
-    bevelSize: ROUND_W,
-    bevelOffset: -ROUND_W - GAP,
-    bevelSegments: 8,
-    UVGenerator: uvGen,
-  });
+  const extrude = (pts) =>
+    new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), {
+      depth: THICK,
+      bevelEnabled: true,
+      bevelThickness: ROUND_H,
+      bevelSize: ROUND_W,
+      bevelOffset: -ROUND_W - GAP,
+      bevelSegments: 8,
+      UVGenerator: uvGen,
+    });
+  let geo = extrude(outline);
+  // A few cuts have a kink the rounded edge can't follow; soften it and retry.
+  for (let tries = 0, pts = outline; tries < 3 && topFlipped(geo, THICK + ROUND_H); tries++) {
+    pts = smooth(pts);
+    geo.dispose();
+    geo = extrude(pts);
+  }
   geo.translate(-cx, -cy, ROUND_H);
   geo.rotateX(-Math.PI / 2);
   // Smooth the curved walls but keep the cap edges crisp. The helper hashes
@@ -210,6 +217,10 @@ function buildZone() {
     zone.mesh.geometry.dispose();
     zone.mesh.material.map.dispose();
     zone.mesh.material.dispose();
+    const old = zone.mesh.children[0];
+    old.geometry.dispose();
+    old.material.map.dispose();
+    old.material.dispose();
   }
   // Seen from above at an angle, the board's top face sits further up the
   // screen than its footprint. Give the far side that much extra room so
@@ -226,6 +237,14 @@ function buildZone() {
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false })
   );
   zone.mesh.position.set(0, 0.001, zone.z);
+  // The spot the finished picture fills: a soft shaded patch, so nobody takes
+  // the dotted line for the place to build.
+  const target = new THREE.Mesh(
+    new THREE.PlaneGeometry(board.w, board.d).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ map: targetTexture(board.w, board.d, THEMES[theme].dots), transparent: true, depthWrite: false, toneMapped: false })
+  );
+  target.position.set(0, 0.0005, -zone.z);
+  zone.mesh.add(target);
   scene.add(zone.mesh);
 }
 
