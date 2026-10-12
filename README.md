@@ -122,6 +122,17 @@ through a Web Audio gain node because iOS Safari ignores `audio.volume`.
 The mute toggle only exists on the homepage (it is part of the strip above the pond).
 The music carries on to other pages with no control there.
 
+## Link hover sound
+
+Hovering a link plays [Cuelume](https://github.com/danielwh2/cuelume)'s `select` cue in the
+`bubble` theme (`app/ui-sounds.tsx`; the theme is passed per play, so Cuelume's own active
+theme is untouched). Cuelume advises against hover sounds and has no hover binding, so
+the handler is ours, with guards: mouse/pen only (not touch), moving inside one link is not a
+new hover, at most one sound per 80ms across links, and the same link can't retrigger for
+400ms. It follows the same mute button as the music. Browsers keep Web Audio silent until the
+first click or key press, so hovers before that make no sound. To change the sound, edit
+`CUE` / `THEME` at the top of that file; `HOVER` volume is Cuelume's default (full).
+
 ## Bangalore time
 
 `bangalore, ka | 02:24pm`, always in `Asia/Kolkata` whatever the visitor's own timezone.

@@ -27,17 +27,20 @@ const STORAGE_KEY = "ambient-muted";
 type Ambient = {
   /** Sound is actually coming out of the speakers. */
   audible: boolean;
+  /** The visitor has asked for silence (remembered across visits). UI sounds follow it too. */
+  muted: boolean;
   /** Mute if it is playing; otherwise start it. */
   toggle: () => void;
 };
 
-const AmbientContext = createContext<Ambient>({ audible: false, toggle: () => {} });
+const AmbientContext = createContext<Ambient>({ audible: false, muted: false, toggle: () => {} });
 export const useAmbient = () => useContext(AmbientContext);
 
 type Webkit = typeof window & { webkitAudioContext?: typeof AudioContext };
 
 export default function AudioProvider({ children }: { children: React.ReactNode }) {
   const [audible, setAudible] = useState(false);
+  const [mutedState, setMutedState] = useState(false);
   const controls = useRef<{ start: () => Promise<boolean>; stop: () => void } | null>(null);
 
   useEffect(() => {
@@ -57,8 +60,10 @@ export default function AudioProvider({ children }: { children: React.ReactNode 
     } catch {
       /* storage can be unavailable (private mode, blocked cookies) */
     }
+    setMutedState(muted);
     const remember = (m: boolean) => {
       muted = m;
+      setMutedState(m);
       try {
         localStorage.setItem(STORAGE_KEY, m ? "1" : "0");
       } catch {
@@ -150,6 +155,6 @@ export default function AudioProvider({ children }: { children: React.ReactNode 
     else void c.start();
   }, [audible]);
 
-  const value = useMemo(() => ({ audible, toggle }), [audible, toggle]);
+  const value = useMemo(() => ({ audible, muted: mutedState, toggle }), [audible, mutedState, toggle]);
   return <AmbientContext.Provider value={value}>{children}</AmbientContext.Provider>;
 }
