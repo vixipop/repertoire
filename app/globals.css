@@ -4,12 +4,7 @@
    ========================================================================== */
 
 :root {
-  --zinc-950: #000;
-  --zinc-900: #18181b;
-  --zinc-800: #27272a;
-  --zinc-400: #9f9fa9;
   --pink-400: #fb5ab2;
-  --pink-100: #ffd9eb;
   --accent: var(--pink-400);
 
   /* --font-inter is injected by next/font (self-hosted, no CDN request).
@@ -27,11 +22,8 @@
   --text-muted: #9f9f9f;
   --border-soft: #e4e4e4;
   --border-faint: #f5f5f5;
-  --border-divider: #00000014;
   --selection-bg: #0000000d;
   --button-bg: #000;
-  --button-bg-hover: #111;
-  --button-bg-active: #1c1c1c;
   --button-text: #fafafa;
   --dock-shadow: 0 2px 2px 0 #00000014, 0 12px 20px 0 #0000001f;
 }
@@ -46,11 +38,8 @@
   --text-muted: #6e6e6e;
   --border-soft: #1c1c1c;
   --border-faint: #141414;
-  --border-divider: #181818;
   --selection-bg: #ffffff14;
   --button-bg: #fff;
-  --button-bg-hover: #f0f0f0;
-  --button-bg-active: #d4d4d4;
   --button-text: #0a0a0a;
   --dock-shadow: none;
 }

@@ -25,6 +25,8 @@ npm run dev     # http://localhost:3000
 | `app/pond/time-of-day.ts` | Keyframe hours and the blend between looks |
 | `app/about/` | About page with the Spline scene |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
+| `app/tooltip.tsx` | Hover/focus tooltip used by the name line |
+| `app/ui-sounds.tsx` | Link-hover sound (Cuelume), follows the mute button (client) |
 | `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
 
 ## What was carried over exactly
@@ -65,8 +67,9 @@ contribute to layout height.
 - **All copy.** Every paragraph, project name, date and note title is a
   placeholder. The reference site's actual writing is its author's own content.
 - **Avatar** — a CSS circle at the correct `40×40`. Drop in a square image.
-- **Images** — none included. The reference site's photography, artwork and
-  third-party brand logos aren't redistributable.
+- **Images** — the only image assets are the favicon (`app/icon.png`, `app/apple-icon.png`).
+  The reference site's photography, artwork and third-party brand logos aren't
+  redistributable, so none of those are here.
 - **Social icons** — generic shapes in the dock; swap for real ones.
 
 ## Known gaps
@@ -90,8 +93,11 @@ const BASE_DELAY_MS = 40;  // delay before the first
 ## The pond hero
 
 The engine (`engine.ts`, `swan-paint.ts`) is lifted from the standalone Swan Pond
-artifact. The colours, shaders and swan behaviour are untouched — only the
-tuner panel was removed and the frame made responsive. Those two files are plain
+artifact. The colours, shaders and swan behaviour are untouched. Removed: the tuner
+panel, the video/GIF recorder and the engine code that only the recorder used
+(its high-quality mode, `snapshot`, `onFrame` and friends); the frame was made
+responsive. The only method the app calls on the engine is `setParams`, plus
+`destroy`. Those two files are plain
 JavaScript carrying a `// @ts-nocheck` pragma; the typed surface the app uses is
 `pond-hero.tsx` and `time-of-day.ts`.
 
@@ -106,6 +112,17 @@ Click to make a splash and startle the swans; right-click (long-press on touch) 
 toss them corn. They talk back in handwriting (Gaegu); the ink colour follows the
 hour like everything else. The speech size is set in CSS (`--say-size` on
 `.pond-hero`) because the pond here is narrower than the 680px it was drawn at.
+
+**Time of day.** The look follows the *visitor's* local clock, read in their own
+browser, so someone in Mumbai at 7pm sees dusk while someone in Los Angeles at the
+same instant sees their morning. Windows (local time): dark until ~4:30, dawn
+~5:48–7:24, day ~8:30–16:48, dusk ~18:00–19:36, dark from ~20:48, crossfading
+between. The four looks are `TIMES` in `engine.ts`; the hours are `KEYS` in
+`time-of-day.ts`. To preview one without waiting:
+
+```
+/?time=dawn   /?time=day   /?time=dusk   /?time=dark   /?hour=18.5
+```
 
 ## Music
 
@@ -131,21 +148,10 @@ the handler is ours, with guards: mouse/pen only (not touch), moving inside one 
 new hover, at most one sound per 80ms across links, and the same link can't retrigger for
 400ms. It follows the same mute button as the music. Browsers keep Web Audio silent until the
 first click or key press, so hovers before that make no sound. To change the sound, edit
-`CUE` / `THEME` at the top of that file; `HOVER` volume is Cuelume's default (full).
+`CUE` / `THEME` at the top of that file. Volume is Cuelume's default (full).
 
 ## Bangalore time
 
 `bangalore, ka | 02:24pm`, always in `Asia/Kolkata` whatever the visitor's own timezone.
 It is empty on the server and filled in after mount, because the server's clock isn't
 the point and would mismatch on hydration.
-
-**Time of day.** The look follows the *visitor's* local clock, read in their own
-browser, so someone in Mumbai at 7pm sees dusk while someone in Los Angeles at the
-same instant sees their morning. Windows (local time): dark until ~4:30, dawn
-~5:48–7:24, day ~8:30–16:48, dusk ~18:00–19:36, dark from ~20:48, crossfading
-between. The four looks are `TIMES` in `engine.ts`; the hours are `KEYS` in
-`time-of-day.ts`. To preview one without waiting:
-
-```
-/?time=dawn   /?time=day   /?time=dusk   /?time=dark   /?hour=18.5
-```

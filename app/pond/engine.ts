@@ -48,28 +48,7 @@ export const TIMES = [
     },
 ];
 const DEFAULT_PARAMS = { ...TIMES[1].params };
-const PARAM_SPECS = [
-    { key: "waterHue", label: "Hue", group: "Water", min: 0, max: 360, step: 1, kind: "hue" },
-    { key: "waterSat", label: "Colour", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "waterDepth", label: "Depth", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "waterLight", label: "Daylight", group: "Water", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "lightHue", label: "Sun hue", group: "Light", min: 0, max: 360, step: 1, kind: "hue" },
-    { key: "lightSat", label: "Sun colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "sun", label: "Sunbeams", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "skyHue", label: "Sky hue", group: "Light", min: 0, max: 360, step: 1, kind: "hue" },
-    { key: "skySat", label: "Sky colour", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "moon", label: "Moon", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "fog", label: "Fog", group: "Light", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "swanHue", label: "Tint hue", group: "Swans", min: 0, max: 360, step: 1, kind: "hue" },
-    { key: "swanTint", label: "Tint", group: "Swans", min: 0, max: 0.5, step: 0.01, kind: "amount" },
-    { key: "glow", label: "Glow", group: "Swans", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "paint", label: "Brushwork", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "brush", label: "Brush size", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
-    { key: "bloom", label: "Bloom", group: "Painting", min: 0, max: 1, step: 0.01, kind: "amount" },
-];
 const HUE_KEYS = new Set(["waterHue", "lightHue", "skyHue", "swanHue", "inkHue"]);
-/** Settings that belong to the scene rather than to a time of day. */
-const GLOBAL_KEYS = new Set([]);
 /** Blend two looks; hues travel the short way round the wheel. */
 export function mixParams(a, b, t) {
     const out = { ...a };
@@ -1338,21 +1317,14 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let sceneW = 1;
     let sceneK = 0.7; // water pass resolution, relative to the output
     let sceneH = 1;
-    // while recording in high quality: the output width, and the settings to go back to
-    let hqWidth = 0;
-    let beforeHq = { wd: 1, sceneK: 0.7 };
     const sizeLayers = () => {
-        // the swans stay sharp even when the water is rendered small
-        if (hqWidth)
-            wd = hqWidth / W;
-        const pr = hasGL ? (hqWidth ? wd : Math.min(window.devicePixelRatio || 1, 1.5)) : dpr;
+        const pr = hasGL ? Math.min(window.devicePixelRatio || 1, 1.5) : dpr;
         paint.width = Math.round(W * pr);
         paint.height = Math.round(H * pr);
         // weeds are seen through moving water, so they can be a little soft
-        const wk = hqWidth ? 1.5 : 0.75;
-        weeds.width = Math.round(W * wk);
-        weeds.height = Math.round(H * wk);
-        const ck = hqWidth ? wd : Math.min(wd, 1);
+        weeds.width = Math.round(W * 0.75);
+        weeds.height = Math.round(H * 0.75);
+        const ck = Math.min(wd, 1);
         canopy.width = Math.round(W * ck);
         canopy.height = Math.round(H * ck);
         surf.width = Math.round(W * 0.5);
@@ -1372,7 +1344,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     };
     // A softly torn edge, like the deckled border of watercolour paper. Built
     // per pixel so it looks the same in every browser.
-    let edgeMask = null;
     const featherEdge = () => {
         const mw = Math.max(1, Math.round(W / 2));
         const mh = Math.max(1, Math.round(H / 2));
@@ -1423,7 +1394,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             }
         }
         mc.putImageData(img, 0, 0);
-        edgeMask = m;
         const url = `url(${m.toDataURL("image/png")})`;
         host.style.setProperty("-webkit-mask-image", url);
         host.style.setProperty("mask-image", url);
@@ -2506,7 +2476,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let sinceUp = Infinity; // windows since the last climb
     let climbLocked = false; // a climb failed: stop trying for this session
     let canopyTick = 0;
-    const frameListeners = new Set();
     const frame = (now) => {
         raf = 0;
         const real = (now - last) / 1000;
@@ -2522,8 +2491,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         // counted, and it climbs back after three clean windows at >=54fps. If a climb is
         // followed straight away by a drop, that level is more than this machine can hold,
         // so it stops climbing for the session instead of pulsing. The order of what is
-        // shed, the steps, the floors and the threshold for shedding are unchanged, and
-        // the recording-mode branch is untouched.
+        // shed, the steps, the floors and the threshold for shedding are unchanged.
         if (perfWarm > 0) {
             perfWarm--;
         }
@@ -2531,22 +2499,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             perfAcc += real;
             perfN++;
         }
-        // while recording in high quality the output stays at video size; only the
-        // water's detail gives a little if the machine can't keep up
-        if (perfN >= 30 && hqWidth) {
-            const avg = perfAcc / perfN;
-            if (hasGL && avg > 0.04 && sceneK > 0.5) {
-                sceneK = Math.max(0.5, sceneK - 0.125);
-                sizeLayers();
-            }
-            else if (hasGL && avg < 0.022 && sceneK < 1) {
-                sceneK = Math.min(1, sceneK + 0.125);
-                sizeLayers();
-            }
-            perfAcc = 0;
-            perfN = 0;
-        }
-        else if (perfN >= 45) {
+        if (perfN >= 45) {
             const avg = perfAcc / perfN;
             sinceUp++;
             const dropped = () => {
@@ -2680,8 +2633,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             ctx.drawImage(paint, 0, 0, swanCanvas.width, swanCanvas.height);
         }
         updateTalk();
-        for (const cb of frameListeners)
-            cb();
         scheduleFromFrame();
     };
     const schedule = () => {
@@ -2715,96 +2666,6 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
             if (instant) {
                 params = { ...target };
                 uploadParams();
-            }
-        },
-        getParams() {
-            return { ...target };
-        },
-        size() {
-            return { width: W, height: H };
-        },
-        onFrame(cb) {
-            frameListeners.add(cb);
-            return () => frameListeners.delete(cb);
-        },
-        setHighQuality(width) {
-            if (!hasGL)
-                return;
-            if (width && !hqWidth)
-                beforeHq = { wd, sceneK };
-            if (width) {
-                hqWidth = width;
-                sceneK = 0.875;
-            }
-            else if (hqWidth) {
-                hqWidth = 0;
-                wd = beforeHq.wd;
-                sceneK = beforeHq.sceneK;
-            }
-            else
-                return;
-            sizeLayers();
-        },
-        chatter() {
-            const here = swans.filter((s) => s.state !== "away" && s.x > 0 && s.x < W && s.y > 0 && s.y < H);
-            const all = [...CROSS, ...HUNGRY, ...FULL, ...MORE, "dibs!", "glutton!"];
-            for (const s of here.sort(() => Math.random() - 0.5).slice(0, 2)) {
-                const text = pick(all);
-                say(s, text, CROSS.includes(text) ? "cross" : "calm", 2.2);
-            }
-        },
-        snapshot(c, w, h) {
-            // the page behind shows through the torn edge
-            c.save();
-            c.globalCompositeOperation = "source-over";
-            c.clearRect(0, 0, w, h);
-            c.imageSmoothingQuality = "high";
-            c.drawImage(hasGL ? waterCanvas : swanCanvas, 0, 0, w, h);
-            if (edgeMask) {
-                c.globalCompositeOperation = "destination-in";
-                c.drawImage(edgeMask, 0, 0, w, h);
-            }
-            c.globalCompositeOperation = "destination-over";
-            c.fillStyle = getComputedStyle(document.body).backgroundColor || "#fafafa";
-            c.fillRect(0, 0, w, h);
-            c.restore();
-            // the remarks are DOM text over the canvas, so paint them in by hand,
-            // letter by letter where the page has laid them out (shake and all)
-            const box = host.getBoundingClientRect();
-            const kx = w / (box.width || 1);
-            const ky = h / (box.height || 1);
-            for (const b of bubbles) {
-                const inner = b.el.firstElementChild;
-                if (!inner)
-                    continue;
-                const alpha = Number(getComputedStyle(inner).opacity);
-                if (!(alpha > 0.01))
-                    continue;
-                const cs = getComputedStyle(b.el.querySelector("b") ?? b.el);
-                c.save();
-                c.globalAlpha = alpha;
-                c.fillStyle = cs.color;
-                c.strokeStyle = cs.color;
-                c.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * kx}px ${cs.fontFamily}`;
-                c.textAlign = "center";
-                c.textBaseline = "middle";
-                for (const l of b.el.querySelectorAll("i")) {
-                    const r = l.getBoundingClientRect();
-                    c.fillText(l.textContent ?? "", (r.left + r.width / 2 - box.left) * kx, (r.top + r.height / 2 - box.top) * ky);
-                }
-                const svg = b.el.querySelector("svg");
-                if (svg) {
-                    const r = svg.getBoundingClientRect();
-                    const u = (r.width / 12) * kx;
-                    c.lineWidth = 1.3 * u;
-                    c.lineCap = "round";
-                    c.translate((r.left - box.left) * kx, (r.top - box.top) * ky);
-                    c.beginPath();
-                    c.moveTo(8.5 * u, 1.5 * u);
-                    c.bezierCurveTo(7.9 * u, 4.5 * u, 6.5 * u, 7.1 * u, 3.9 * u, 9.9 * u);
-                    c.stroke();
-                }
-                c.restore();
             }
         },
         destroy() {
