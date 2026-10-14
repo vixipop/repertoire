@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TABS } from "./data";
+import { TABS } from "../data";
 
 /** The three Work tabs. Each is its own route, so a tab can be linked to directly. */
 export default function WorkTabs() {

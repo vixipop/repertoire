@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { UI_PIECES } from "../data";
+import { SHADERS } from "../../data";
 
-export const metadata: Metadata = { title: "UI" };
+export const metadata: Metadata = { title: "Shaders" };
 
 /** A gallery of tiles; swap each placeholder tile for a screenshot, video or live canvas. */
-export default function UIGallery() {
+export default function ShadersGallery() {
   return (
     <ul className="work-grid appear">
-      {UI_PIECES.map((p) => (
+      {SHADERS.map((p) => (
         <li className="work-tile" key={p.name}>
           <div className="work-tile-art" aria-hidden="true" />
           <div className="work-tile-meta">

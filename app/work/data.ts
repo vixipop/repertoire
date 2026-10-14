@@ -1,11 +1,34 @@
+import { cloudverseStory } from "./cloudverse-story";
+
 /**
  * Everything on the Work pages. Copy below is placeholder until each piece is written;
  * edit here and the homepage lists, the tabs and the detail pages all follow.
  */
-export type CaseStudy = { slug: string; name: string; blurb: string };
+export type Figure = { src: string; width: number; height: number; alt: string; caption: string };
+
+/** One block inside a section: a paragraph, a quote, a list, or a figure. */
+export type Block =
+  | { kind: "p"; text: string }
+  | { kind: "quote"; text: string; by: string }
+  | { kind: "list"; items: string[] }
+  | { kind: "figure"; figure: Figure };
+
+export type StorySection = { id: string; title: string; blocks: Block[] };
+
+/** A full case study page: header, sectioned body, one-liner and footnote. */
+export type Story = {
+  title: string;
+  meta: string;
+  summary: string;
+  sections: StorySection[];
+  callout: string;
+  footnote: string;
+};
+
+export type CaseStudy = { slug: string; name: string; blurb: string; story?: Story };
 
 export const CASE_STUDIES: CaseStudy[] = [
-  { slug: "cloudverse-ai", name: "Cloudverse AI", blurb: "End-to-end revamp and automation." },
+  { slug: "cloudverse-ai", name: "Cloudverse AI", blurb: "End-to-end revamp and automation.", story: cloudverseStory },
   { slug: "advisee", name: "Advisee", blurb: "PLACEHOLDER — one line on what this was." },
   { slug: "godrej-lafs", name: "Godrej LAFS", blurb: "PLACEHOLDER — one line on what this was." },
 ];
