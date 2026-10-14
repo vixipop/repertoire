@@ -2474,7 +2474,9 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
     let perfWarm = 120; // frames to ignore at startup
     let goodRun = 0; // consecutive windows fast enough to try climbing back
     let sinceUp = Infinity; // windows since the last climb
-    let climbLocked = false; // a climb failed: stop trying for this session
+    let climbLocked = false; // climbs failed twice: stop trying for this session
+    let failedClimbs = 0;
+    let slowRun = 0; // consecutive slow windows
     let canopyTick = 0;
     const frame = (now) => {
         raf = 0;
@@ -2502,10 +2504,16 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
         if (perfN >= 45) {
             const avg = perfAcc / perfN;
             sinceUp++;
+            host.dataset.perf = `${Math.round(1 / avg)}fps scene=${sceneK.toFixed(2)} scale=${wd.toFixed(2)}`;
+            const slow = hasGL && avg > 0.024;
+            slowRun = slow ? slowRun + 1 : 0;
             const dropped = () => {
-                if (sinceUp <= 3)
+                // a drop right after a climb means that level is too much; the second
+                // time that happens, stop trying for the session
+                if (sinceUp <= 3 && ++failedClimbs >= 2)
                     climbLocked = true;
                 goodRun = 0;
+                slowRun = 0;
                 sizeLayers();
             };
             const climbed = () => {
@@ -2514,12 +2522,13 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                 sizeLayers();
             };
             // shed load from the water first (the brushwork hides it), and only
-            // then soften the whole picture
-            if (hasGL && avg > 0.024 && sceneK > 0.42) {
+            // then soften the whole picture. Two slow windows in a row are needed, so
+            // a one-off hitch (the music starting, a GC pause) never costs resolution.
+            if (slow && slowRun >= 2 && sceneK > 0.42) {
                 sceneK = Math.max(0.42, sceneK - 0.1);
                 dropped();
             }
-            else if (hasGL && avg > 0.024 && wd > 0.85) {
+            else if (slow && slowRun >= 2 && wd > 0.85) {
                 wd = Math.max(0.85, wd - 0.15);
                 dropped();
             }
@@ -2532,7 +2541,7 @@ export function startPond(host, waterCanvas, swanCanvas, initial = {}) {
                     climbed();
                 }
             }
-            else {
+            else if (!slow) {
                 goodRun = 0;
             }
             perfAcc = 0;

@@ -65,7 +65,7 @@ export default function PondHero() {
       className="pond-hero appear"
       ref={hostRef}
       role="img"
-      aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to startle the swans, or take corn from the hanging feeder and throw it in."
+      aria-label="A pond with swans gliding across it. Move over the water to ripple it; click to startle the swans, or right-click to toss them some corn."
     />
   );
 }
