@@ -5,7 +5,6 @@ import SiteBehaviour from "./site-behaviour";
 import Dock from "./dock";
 import ThemeToggle from "./theme-toggle";
 import AudioProvider from "./audio-provider";
-import UiSounds from "./ui-sounds";
 
 // Self-hosted at build time — no runtime CDN request. Exposed as --font-inter,
 // which globals.css feeds into the --font-sf token.
@@ -89,7 +88,6 @@ export default function RootLayout({
           {children}
           <Dock />
           <SiteBehaviour />
-          <UiSounds />
         </AudioProvider>
       </body>
     </html>
