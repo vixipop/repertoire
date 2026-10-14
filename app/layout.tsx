@@ -3,6 +3,7 @@ import { Inter, Noto_Sans_Devanagari, Noto_Naskh_Arabic, Gaegu } from "next/font
 import "./globals.css";
 import SiteBehaviour from "./site-behaviour";
 import SelectionHighlight from "./selection-highlight";
+import UiSounds from "./ui-sounds";
 import Dock from "./dock";
 import ThemeToggle from "./theme-toggle";
 
@@ -87,6 +88,7 @@ export default function RootLayout({
         <Dock />
         <SiteBehaviour />
         <SelectionHighlight />
+        <UiSounds />
       </body>
     </html>
   );

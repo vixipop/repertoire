@@ -4,12 +4,13 @@ import CopyButton from "./copy-button";
 import Tooltip from "./tooltip";
 import PondHero from "./pond/pond-hero";
 import HeroBar from "./hero-bar";
+import { CASE_STUDIES } from "./work/data";
 
 /**
  * Homepage.
  *
- * Structure and spacing follow the layout system in globals.css. All copy,
- * project names and dates below are placeholders — swap them for your own.
+ * Structure and spacing follow the layout system in globals.css. The project
+ * lists come from work/data.ts, so they stay in step with the Work pages.
  */
 export default function Home() {
   return (
@@ -38,29 +39,40 @@ export default function Home() {
               </div>
 
               <div className="information">
+                <p className="appear">I&apos;m Jahnavi, lingering somewhere between code snippets and human behaviour.</p>
                 <p className="appear">
-                  PLACEHOLDER — one-line introduction goes here, name and what you do.
+                  Amid shifting paradigms like AI, product design and design engineering, at my core I
+                  aim to collect and build experiences that enrich my creative vision and taste. Code
+                  and Claude are tools that often help me deliver those experiences to users.
                 </p>
                 <p className="appear">
-                  PLACEHOLDER — a second line for background or current focus. Keep it to a
-                  sentence or two; the column is intentionally narrow.
-                </p>
-                <p className="appear">
-                  PLACEHOLDER — recent work, with inline links like{" "}
-                  <a href="#">
-                    <span className="link-label">Project One</span>
-                  </a>{" "}
-                  and{" "}
-                  <a href="#">
-                    <span className="link-label">Project Two</span>
-                  </a>
+                  Recently: an end-to-end revamp and automation for{" "}
+                  <Link href="/work/case-studies/cloudverse-ai">
+                    <span className="link-label">Cloudverse AI</span>
+                  </Link>
+                  . All my product design work lives{" "}
+                  <Link href="/work/case-studies">
+                    <span className="link-label">here</span>
+                  </Link>
                   .
                 </p>
                 <p className="appear">
+                  My chosen medium for{" "}
+                  <Link href="/work/shaders">
+                    <span className="link-label">playing around</span>
+                  </Link>{" "}
+                  with creative tech is GLSL shaders and three.js in the browser.
+                </p>
+                <p className="appear">
+                  Outside of screens I enjoy reading, writing, and watching motorsport and tennis. I
+                  also play badminton and video games regularly.
+                </p>
+                <p className="appear">
                   Explore my{" "}
-                  <a href="#">
-                    <span className="link-label">Selected work</span>
-                  </a>
+                  <Link href="/work">
+                    <span className="link-label">selected work</span>
+                  </Link>
+                  .
                 </p>
               </div>
             </div>
@@ -69,28 +81,19 @@ export default function Home() {
               <div className="link-divider" />
               <LinkSection
                 title="Projects"
-                rows={[
-                  { name: "Placeholder project", meta: "Month 2026", href: "#", external: true },
-                  { name: "Another project", meta: "Month 2026", href: "#", external: true },
-                  { name: "Unreleased thing", meta: "soon" },
-                ]}
+                rows={CASE_STUDIES.map((c) => ({
+                  name: c.name,
+                  meta: "case study",
+                  href: `/work/case-studies/${c.slug}`,
+                }))}
               />
 
               <div className="link-divider" />
               <LinkSection
                 title="Playground"
                 rows={[
-                  { name: "Experiment one", meta: "Month 2026", href: "#", external: true },
-                  { name: "Experiment two", meta: "Month 2026", href: "#", external: true },
-                ]}
-              />
-
-              <div className="link-divider" />
-              <LinkSection
-                title="Notes"
-                rows={[
-                  { name: "A written note", meta: "5 min read", href: "/notes/a-written-note" },
-                  { name: "Another note", meta: "8 min read", href: "/notes/another-note" },
+                  { name: "Shader gallery", meta: "glsl, three.js", href: "/work/shaders" },
+                  { name: "UI gallery", meta: "interface", href: "/work/ui" },
                 ]}
               />
 
@@ -100,9 +103,19 @@ export default function Home() {
             <section className="connect-section appear" aria-labelledby="Connect-title">
               <h2 id="Connect-title">Connect</h2>
               <div className="connect-copy">
+                <p>Collaborations start at $1000 and scale with scope.</p>
                 <p>
-                  Reach me at <a href="mailto:your@email.com">your@email.com</a>
-                  <CopyButton value="your@email.com" />
+                  I&apos;m always excited to meet interesting, fun and thoughtful people, and to
+                  collaborate on ambitious projects. The best way to reach me is via{" "}
+                  {/* TODO: point this at your own profile */}
+                  <a href="https://x.com" target="_blank" rel="noopener noreferrer">
+                    <span className="link-label">X (Twitter)</span>
+                  </a>
+                  . You can also email me at{" "}
+                  <a href="mailto:jahnavijworks@gmail.com">
+                    <span className="link-label">jahnavijworks@gmail.com</span>
+                  </a>
+                  <CopyButton value="jahnavijworks@gmail.com" />
                 </p>
               </div>
             </section>

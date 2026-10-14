@@ -24,8 +24,10 @@ npm run dev     # http://localhost:3000
 | `app/pond/time-of-day.ts` | Keyframe hours and the blend between looks |
 | `app/about/` | About page with the Spline scene |
 | `app/copy-button.tsx` | Copy-to-clipboard button (client) |
-| `app/tooltip.tsx` | Hover/focus tooltip used by the name line |
-| `app/notes/[slug]/page.tsx` | Note detail route — stub, wire up to your own content |
+| `app/tooltip.tsx` | Pointer-following tooltip used by the name line (client) |
+| `app/work/` | Work pages: `/work` (→ case studies), `/work/case-studies[/slug]`, `/work/ui`, `/work/shaders`; content lives in `work/data.ts` |
+| `app/ui-sounds.tsx` | Click and hover ticks, synthesised with Web Audio (client) |
+| `app/selection-highlight.tsx` | Rounded text-selection highlight (client) |
 
 ## What was carried over exactly
 
@@ -62,9 +64,9 @@ contribute to layout height.
 
 ## What's placeholder — replace this
 
-- **All copy.** Every paragraph, project name, date and note title is a
-  placeholder. The reference site's actual writing is its author's own content.
-- **Avatar** — a CSS circle at the correct `40×40`. Drop in a square image.
+- **Work pages.** The homepage copy is final; the case-study, UI and shader pages are
+  structure only, with placeholder text and tiles (`app/work/data.ts`). The X link in
+  Connect points at x.com until you set your own.
 - **Images** — the only image assets are the favicon (`app/icon.png`, `app/apple-icon.png`).
   The reference site's photography, artwork and third-party brand logos aren't
   redistributable, so none of those are here.
