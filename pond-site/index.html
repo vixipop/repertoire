@@ -2971,6 +2971,9 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
     };
     /* ---------- swans ---------- */
     const swans = [];
+    // filming: swans circling the middle until then, on a ring this wide
+    let circleUntil = -1;
+    let ringR = 0;
     const glideSpeed = (s) => 0.69 * L * s.pace * motion;
     const inner = (m) => ({ x0: m, y0: m, x1: W - m, y1: H - m });
     const pickWaypoint = (s) => {
@@ -3621,8 +3624,9 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
     let feedsSinceDibs = 3;
     let inkKey = "";
     const pick = (list) => list[Math.floor(Math.random() * list.length)];
+    let quiet = false;
     const say = (s, text, mood, life) => {
-        if (bubbles.some((b) => b.swan === s))
+        if (quiet || bubbles.some((b) => b.swan === s))
             return;
         const el = document.createElement("span");
         el.className = `pond-say is-${mood}`;
@@ -3847,6 +3851,15 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
                 s.tx = s.food.x;
                 s.ty = s.food.y;
             }
+        }
+        // staged for filming: follow a ring round the middle of the pond
+        if (s.state === "glide" && clock < circleUntil) {
+            const ang = Math.atan2((s.y - H / 2) / 0.78, s.x - W / 2);
+            s.tx = W / 2 + Math.cos(ang + 0.7) * ringR;
+            s.ty = H / 2 + Math.sin(ang + 0.7) * ringR * 0.78;
+            s.targetTimer = 4;
+            s.loopTime = 0;
+            maxTurn *= 2;
         }
         const dx = s.tx - s.x;
         const dy = s.ty - s.y;
@@ -4528,6 +4541,27 @@ function startPond(host, waterCanvas, swanCanvas, initial = {}, opts = {}) {
             for (const s of here.sort(() => Math.random() - 0.5).slice(0, 2)) {
                 const text = pick(all);
                 say(s, text, CROSS.includes(text) ? "cross" : "calm", 2.2);
+            }
+        },
+        film(opts) {
+            if (opts.quiet !== undefined)
+                quiet = opts.quiet;
+            if (opts.circle) {
+                ringR = Math.min(W, H) * 0.24;
+                circleUntil = clock + opts.circle;
+                swans.forEach((s, i) => {
+                    const a = (i * Math.PI * 2) / swans.length + 0.5;
+                    s.x = W / 2 + Math.cos(a) * ringR;
+                    s.y = H / 2 + Math.sin(a) * ringR * 0.78;
+                    // heading along the ring, the way round it is followed
+                    s.h = Math.atan2(Math.cos(a) * 0.78, -Math.sin(a));
+                    s.state = "glide";
+                    s.v = glideSpeed(s);
+                    s.w = 0;
+                    s.loopTime = 0;
+                    s.act = "none";
+                    s.trail = [];
+                });
             }
         },
         snapshot(c, w, h) {
