@@ -21,14 +21,6 @@ export default function Home() {
             <PondHero />
           </div>
 
-          <div className="avatar-wrap appear">
-            <span className="avatar-swap">
-              {/* 40x40. Drop a square image into /public and swap this span for
-                  next/image when you have one. */}
-              <span className="avatar avatar-still" role="img" aria-label="Avatar placeholder" />
-            </span>
-          </div>
-
           <div className="stack">
             <div className="body-copy">
               <div className="greetings appear">

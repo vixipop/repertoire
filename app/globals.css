@@ -68,7 +68,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-::selection { background: var(--selection-bg); }
+::selection { background: var(--selection-bg); color: inherit; text-shadow: none; }
+
+/* Text selection is drawn as rounded rectangles by selection-highlight.tsx; the native
+   highlight is hidden while that is active (inputs keep the native one). */
+html.has-selection-highlight ::selection { color: inherit; background: transparent; }
+html.has-selection-highlight input::selection,
+html.has-selection-highlight textarea::selection { background: var(--selection-bg); color: inherit; }
+.selection-highlight-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+.selection-highlight-rect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--selection-bg);
+  border-radius: 5px;
+  transform: translate3d(var(--selection-x), var(--selection-y), 0);
+}
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
@@ -344,26 +367,22 @@ body {
    ========================================================================== */
 
 .cv-tooltip-wrap {
-  position: relative;
   display: inline-block;
   cursor: default;
   outline: none;
 }
 
+/* A floating label that follows the pointer (placed by tooltip.tsx, portalled to the body). */
 .cv-tooltip {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  top: 0;
+  left: 0;
   z-index: 9999;
   display: inline-flex;
   padding: 4px 10px;
   border-radius: 6px;
   background: var(--button-bg);
   color: var(--button-text);
-  /* Fixed rather than themed: the tooltip floats over body copy in both
-     palettes and needs to read as a separate surface. */
-  box-shadow: 0 2px 2px 0 #00000014, 0 12px 20px 0 #0000001f;
   font-family: var(--font-sf);
   font-size: 12px;
   font-weight: 400;
@@ -373,10 +392,12 @@ body {
   pointer-events: none;
   transition: opacity .15s cubic-bezier(.25, .46, .45, .94);
 }
-.cv-tooltip-wrap:hover .cv-tooltip,
-.cv-tooltip-wrap:focus-visible .cv-tooltip {
+.cv-tooltip-visible {
   opacity: 1;
-  will-change: opacity;
+  will-change: opacity, transform;
+}
+@media (max-width: 720px) {
+  .cv-tooltip { white-space: normal; max-width: 260px; }
 }
 
 .information {
@@ -556,31 +577,6 @@ a[href]:focus-visible .link-label::after { height: 2px; transform: scaleX(1); }
   position: absolute;
   top: 0;
   left: 0;
-}
-
-/* ==========================================================================
-   Avatar
-   ========================================================================== */
-
-.avatar-wrap {
-  display: flex;
-  flex: none;
-  align-items: center;
-  width: 40px;
-  height: 40px;
-  padding-left: 0;
-}
-
-.avatar-swap { display: block; width: 40px; height: 40px; }
-
-.avatar {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--bg-icon);
-  box-shadow: inset 0 0 0 1px var(--border-soft);
 }
 
 /* ==========================================================================
