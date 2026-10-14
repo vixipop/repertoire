@@ -144,7 +144,6 @@ function LinkSection({ title, rows }: { title: string; rows: Row[] }) {
                   <span className="link-label">{row.name}</span>
                 </a>
               ) : row.href ? (
-                // Client-side navigation: a full page load would cut the music off.
                 <Link href={row.href}>
                   <span className="link-label">{row.name}</span>
                 </Link>

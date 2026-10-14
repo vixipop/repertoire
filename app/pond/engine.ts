@@ -3259,7 +3259,7 @@ export function startPond(
       };
       // shed load from the water first (the brushwork hides it), and only
       // then soften the whole picture. Two slow windows in a row are needed, so a
-      // one-off hitch (the music starting, a GC pause) never costs resolution.
+      // one-off hitch (a GC pause, a tab switch) never costs resolution.
       if (slow && slowRun >= 2 && sceneK > 0.42) {
         sceneK = Math.max(0.42, sceneK - 0.1);
         dropped();

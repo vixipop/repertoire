@@ -17,8 +17,7 @@ npm run dev     # http://localhost:3000
 | `app/site-behaviour.tsx` | Staggered entrance (client) |
 | `app/dock.tsx` | Floating dock — social slots (client) |
 | `app/theme-toggle.tsx` | Top-right light/dark toggle (client) |
-| `app/audio-provider.tsx` | Ambient music, mounted once in the root layout so it survives page changes (client) |
-| `app/hero-bar.tsx` | The strip above the pond: Bangalore time on the left, music toggle on the right (client) |
+| `app/hero-bar.tsx` | The strip above the pond: Bangalore time (client) |
 | `app/pond/pond-hero.tsx` | The hero's React frame: mounts the engine, follows the clock (client) |
 | `app/pond/engine.ts` | The pond engine, lifted from the standalone artifact: painted floor, weeds, vines, ripples, wakes, the water + brushwork shaders, swan behaviour, the four time-of-day looks |
 | `app/pond/swan-paint.ts` | The painted swans |
@@ -119,21 +118,6 @@ between. The four looks are `TIMES` in `engine.ts`; the hours are `KEYS` in
 ```
 /?time=dawn   /?time=day   /?time=dusk   /?time=dark   /?hour=18.5
 ```
-
-## Music
-
-One track (`public/audio/`), 40% volume, looping. The player lives in the root layout,
-so it keeps playing as you move between pages **as long as those moves are client-side**
-(`next/link`). A plain `<a href>` to an internal page reloads the document and restarts
-the music, so use `Link` for anything internal.
-
-Browsers only allow sound after a gesture, so nothing is fetched or played until the
-first click, tap or key press; the icon shows "off" until then. Muting stops it and is
-remembered (`localStorage`, key `ambient-muted`), including across reloads. Volume goes
-through a Web Audio gain node because iOS Safari ignores `audio.volume`.
-
-The mute toggle only exists on the homepage (it is part of the strip above the pond).
-The music carries on to other pages with no control there.
 
 ## Bangalore time
 
