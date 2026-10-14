@@ -1,4 +1,4 @@
-import { TIMES, mixParams } from "./engine";
+import { TIMES, mixParams, type PondParams, type TimeName } from "./engine";
 
 /**
  * Time of day. The pond follows the viewer's local clock, blending between the
@@ -8,13 +8,9 @@ import { TIMES, mixParams } from "./engine";
  * are the ones tuned in the standalone pond.
  */
 
-export type TimeName = "Dawn" | "Day" | "Dusk" | "Dark";
-type Params = Record<string, number>;
+export type { TimeName };
 
-const LOOKS = Object.fromEntries(TIMES.map((t: { name: string; params: Params }) => [t.name, t.params])) as Record<
-  TimeName,
-  Params
->;
+const LOOKS = Object.fromEntries(TIMES.map((t) => [t.name, t.params])) as Record<TimeName, PondParams>;
 
 /** hour -> look. Between two different neighbours the looks crossfade. */
 const KEYS: ReadonlyArray<readonly [number, TimeName]> = [
@@ -49,7 +45,7 @@ export function hourFor(search: string): number {
   return d.getHours() + d.getMinutes() / 60;
 }
 
-export function lookAt(hour: number): { params: Params; name: TimeName } {
+export function lookAt(hour: number): { params: PondParams; name: TimeName } {
   for (let i = 0; i < KEYS.length - 1; i++) {
     const [h0, a] = KEYS[i];
     const [h1, b] = KEYS[i + 1];

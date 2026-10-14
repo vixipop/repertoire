@@ -92,21 +92,18 @@ const BASE_DELAY_MS = 40;  // delay before the first
 
 ## The pond hero
 
-The engine (`engine.ts`, `swan-paint.ts`) is lifted from the standalone Swan Pond
-artifact. The colours, shaders and swan behaviour are untouched. Removed: the tuner
-panel, the video/GIF recorder and the engine code that only the recorder used
-(its high-quality mode, `snapshot`, `onFrame` and friends); the frame was made
-responsive. The only method the app calls on the engine is `setParams`, plus
-`destroy`. Those two files are plain
-JavaScript carrying a `// @ts-nocheck` pragma; the typed surface the app uses is
-`pond-hero.tsx` and `time-of-day.ts`.
+The engine (`engine.ts`, `swan-paint.ts`, `tiger-paint.ts`) is the typed source of
+the standalone Swan Pond, copied verbatim: colours, shaders and swan behaviour are
+untouched, including the tiger scene and recorder hooks the page doesn't use. The
+app only calls `setParams` and `destroy`.
 
-It pauses while off-screen or in a hidden tab, and steps its own render
-resolution down if frames start taking too long. One change from the standalone
-engine: that guard could only ever step *down* (it needed >80fps to climb back, which
-a 60Hz screen can't reach, and it counted startup stalls), so it now ignores the
-first ~2s and climbs back after three clean windows at >=54fps. The order of what
-it sheds, the steps, the floors and the threshold for shedding are unchanged.
+It pauses while off-screen or in a hidden tab, and steps its own render resolution
+down if frames start taking too long. One change from the standalone engine, in that
+guard only: it ignores the first ~2s, needs two slow windows in a row before
+shedding, and climbs back after three clean windows at >=54fps (giving up on
+climbing after two failed tries). The order of what it sheds, the steps, the floors
+and the threshold are unchanged. Its latest reading is in `data-perf` on the
+`.pond-hero` element.
 
 Click to make a splash and startle the swans; right-click (long-press on touch) to
 toss them corn. They talk back in handwriting (Gaegu); the ink colour follows the
