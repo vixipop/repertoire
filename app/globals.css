@@ -892,12 +892,7 @@ html.is-theme-switching .theme-toggle-icon {
 }
 .cs-index-list a:hover,
 .cs-index-list a:focus-visible { color: var(--text-strong); outline: none; }
-.cs-index-list a[aria-current="location"] {
-  color: var(--text-strong);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1px;
-}
+.cs-index-list a[aria-current="location"] { color: var(--text-strong); }
 
 @media (min-width: 1100px) {
   .cs-index {
@@ -911,7 +906,7 @@ html.is-theme-switching .theme-toggle-icon {
     margin: 0;
     z-index: 5;
   }
-  .cs-index-list { flex-direction: column; gap: 1px; }
+  .cs-index-list { flex-direction: column; gap: 6px; } /* 24px between links */
 }
 
 .cs-article {

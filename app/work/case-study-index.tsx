@@ -28,9 +28,9 @@ export default function CaseStudyIndex({ sections }: { sections: { id: string; t
   return (
     <nav className="cs-index appear" aria-label="Contents">
       <a className="cs-index-back" href="/work/case-studies" aria-label="Back to case studies">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M10 2v3a2.5 2.5 0 0 1-2.5 2.5H2" />
-          <path d="M4 5.5 1.5 7.5 4 9.5" />
+        <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M10.5 1.5v3.2A2.8 2.8 0 0 1 7.7 7.5H1.8" />
+          <path d="M4.2 5.1 1.8 7.5l2.4 2.4" />
         </svg>
       </a>
       <ol className="cs-index-list">
