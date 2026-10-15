@@ -59,8 +59,8 @@ function renderBlock(b: Block, i: number) {
       return <p key={i}>{b.text}</p>;
     case "quote":
       return (
-        <blockquote key={i} className="cs-quote">
-          <p>{b.text}</p>
+        <blockquote key={i} className="cs-note">
+          <p>{withBold(b.text, b.bold)}</p>
           <footer>{b.by}</footer>
         </blockquote>
       );
@@ -82,4 +82,13 @@ function renderBlock(b: Block, i: number) {
         </figure>
       );
   }
+}
+
+/** Wraps each phrase in `bold` in <strong>, the way key words are marked on the sticky notes. */
+function withBold(text: string, bold: string[] = []) {
+  if (bold.length === 0) return text;
+  const escaped = bold.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return text.split(new RegExp(`(${escaped.join("|")})`)).map((part, i) =>
+    bold.includes(part) ? <strong key={i}>{part}</strong> : part,
+  );
 }

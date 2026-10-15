@@ -42,6 +42,7 @@ export const cloudverseStory: Story = {
           kind: "quote",
           text: "If there's a safe way to automate things like deleting unused snapshots or right-sizing VMs, and teams can trust us with the right permissions, that's where the real savings happen.",
           by: "Chand Deshwal, CEO & Founder, Cloudverse AI",
+          bold: ["safe way to automate", "the real savings happen"],
         },
         { kind: "p", text: "Three questions kept coming up:" },
         {

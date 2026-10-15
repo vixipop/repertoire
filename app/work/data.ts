@@ -9,7 +9,7 @@ export type Figure = { src: string; width: number; height: number; alt: string; 
 /** One block inside a section: a paragraph, a quote, a list, or a figure. */
 export type Block =
   | { kind: "p"; text: string }
-  | { kind: "quote"; text: string; by: string }
+  | { kind: "quote"; text: string; by: string; bold?: string[] }
   | { kind: "list"; items: string[] }
   | { kind: "figure"; figure: Figure };
 

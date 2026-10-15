@@ -952,8 +952,7 @@ html.is-theme-switching .theme-toggle-icon {
 }
 .cs-prose { display: flex; flex-direction: column; gap: 16px; }
 .cs-prose > p,
-.cs-list li,
-.cs-quote p {
+.cs-list li {
   margin: 0;
   font-family: var(--font-sf);
   font-size: 14px;
@@ -962,20 +961,33 @@ html.is-theme-switching .theme-toggle-icon {
   text-wrap: pretty;
 }
 
-.cs-quote {
-  margin: 0;
-  padding-left: 14px;
-  border-left: 1px solid var(--border-soft);
+/* The quote sits on a sticky note, like the ones from discovery (same yellow). */
+.cs-note {
+  margin: 12px 0 14px; /* with the 16px gap: 28px above and 30px below */
+  padding: 22px 22px 18px;
+  background: #ffe398;
+  color: #2b2410;
+  border-radius: 2px;
+  box-shadow: 0 1px 1px #00000020, 0 14px 22px -10px #00000066;
+  transform: rotate(-.7deg);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
 }
-.cs-quote p { color: var(--text-strong); }
-.cs-quote footer {
+.cs-note p {
+  margin: 0;
+  font-family: var(--font-sf);
+  font-size: 14px;
+  line-height: 22px;
+  color: #2b2410;
+  text-wrap: pretty;
+}
+.cs-note strong { font-weight: 600; }
+.cs-note footer {
   font-family: var(--font-sf);
   font-size: 12px;
   line-height: 18px;
-  color: var(--text-muted);
+  color: #6f5f2e;
 }
 
 .cs-list {
@@ -984,9 +996,11 @@ html.is-theme-switching .theme-toggle-icon {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 .cs-list li { position: relative; padding-left: 18px; }
+/* a lead-in line belongs to the list under it: 8px, not the usual 16px */
+.cs-prose > p + .cs-list { margin-top: -8px; }
 .cs-list li::before {
   content: "–";
   position: absolute;
