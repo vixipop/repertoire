@@ -84,7 +84,7 @@ export const cloudverseStory: Story = {
       blocks: [
         {
           kind: "p",
-          text: "The design system couldn't keep up with the product. Components were inconsistently sized, typography had no clear hierarchy, and data-heavy screens had little support. Rebuilding it cut design-to-dev handoff by about 45%.",
+          text: "The design system couldn't keep up with the product. Components were inconsistently sized, typography had no clear hierarchy, and data-heavy screens had little support. Rebuilding it cut design-to-dev handoff by about 43%.",
         },
         {
           kind: "figure",
@@ -167,5 +167,5 @@ export const cloudverseStory: Story = {
   callout:
     "Making the product look better was the easy part. The real challenge was getting a tool to act on a cloud bill without anyone losing trust in it.",
   footnote:
-    "Built alongside the Cloudverse engineering team. Feasibility was checked with them as the flows were drafted.",
+    "I was the point of contact for Cloudverse at Turbostart and acted as PM end to end: planning every module with the Turbostart devs, running the UI/UX reviews, and talking to the client every day.",
 };

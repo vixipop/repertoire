@@ -41,7 +41,7 @@ Those questions became one job: turn finding and fixing savings into scheduled p
 
 ## System
 
-The design system couldn't keep up with the product. Components were inconsistently sized, typography had no clear hierarchy, and data-heavy screens had little support. Rebuilding it cut design-to-dev handoff by about 45%.
+The design system couldn't keep up with the product. Components were inconsistently sized, typography had no clear hierarchy, and data-heavy screens had little support. Rebuilding it cut design-to-dev handoff by about 43%.
 
 *[image 06 — colour tokens]*
 *[image 11 — dashboard elements]*

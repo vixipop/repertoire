@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Block, Story } from "./data";
 import CaseStudyIndex from "./case-study-index";
+import FigureImage from "./figure-image";
 
 /** Renders one case study: index, header, sections of short prose and figures, callout, footnote. */
 export default function CaseStudyView({ story }: { story: Story }) {
@@ -75,14 +76,7 @@ function renderBlock(b: Block, i: number) {
       return (
         <figure key={i} className="cs-figure">
           <div className="cs-figure-frame">
-            {/* Static exports from /public, already resized for the column. */}
-            <img
-              src={b.figure.src}
-              alt={b.figure.alt}
-              width={b.figure.width}
-              height={b.figure.height}
-              loading="lazy"
-            />
+            <FigureImage figure={b.figure} />
           </div>
           <figcaption>{b.figure.caption}</figcaption>
         </figure>
