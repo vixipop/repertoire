@@ -11,7 +11,8 @@ export type Block =
   | { kind: "p"; text: string }
   | { kind: "quote"; text: string; by: string; bold?: string[] }
   | { kind: "list"; items: string[] }
-  | { kind: "figure"; figure: Figure };
+  | { kind: "figure"; figure: Figure }
+  | { kind: "compare"; before: Figure; after: Figure };
 
 export type StorySection = { id: string; title: string; blocks: Block[] };
 

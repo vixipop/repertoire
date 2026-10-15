@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Block, Story } from "./data";
 import CaseStudyIndex from "./case-study-index";
 import FigureImage from "./figure-image";
+import CompareSlider from "./compare-slider";
 
 /** Renders one case study: index, header, sections of short prose and figures, callout, footnote. */
 export default function CaseStudyView({ story }: { story: Story }) {
@@ -72,6 +73,8 @@ function renderBlock(b: Block, i: number) {
           ))}
         </ul>
       );
+    case "compare":
+      return <CompareSlider key={i} before={b.before} after={b.after} />;
     case "figure":
       return (
         <figure key={i} className="cs-figure">
