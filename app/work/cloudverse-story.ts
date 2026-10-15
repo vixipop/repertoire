@@ -167,5 +167,5 @@ export const cloudverseStory: Story = {
   callout:
     "Making the product look better was the easy part. The real challenge was getting a tool to act on a cloud bill without anyone losing trust in it.",
   footnote:
-    "I was the point of contact for Cloudverse at Turbostart and acted as PM end to end: planning every module with the Turbostart devs, running the UI/UX reviews, and talking to the client every day.",
+    "I was the point of contact for Cloudverse at Turbostart and acted as PM end to end: planning every module with the Turbostart devs, running the UI/UX reviews, and collaborating regularly with the Cloudverse founder.",
 };
