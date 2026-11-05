@@ -152,6 +152,11 @@ html.has-selection-highlight textarea::selection { background: var(--selection-b
 
 .stack { gap: 18px; width: 100%; }
 
+/* The greeting sits as far below the pond as the time strip sits above it.
+   The content gap is 36px on desktop and 26px on mobile; these pull the greeting
+   up by the difference, measured from the rendered pixels. */
+.hero + .stack { margin-top: -40px; }
+
 .link-section {
   flex: none;
   gap: 14px;          /* space between the h2 and its rows */
@@ -763,6 +768,7 @@ html.is-theme-switching .theme-toggle-icon {
   }
   .body-copy { gap: 12px; }
   .information { gap: 10px; }
+  .hero + .stack { margin-top: -27px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

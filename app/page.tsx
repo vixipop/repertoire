@@ -25,15 +25,15 @@ export default function Home() {
           <div className="stack">
             <div className="body-copy">
               <div className="greetings appear">
-                <span>jahnavi,</span>
+                <span>hey,</span>
                 <Tooltip label="Hindi">
                   <span lang="hi">
-                    जाह्नवी<span className="greetings-comma">,</span>
+                    नमस्ते<span className="greetings-comma">,</span>
                   </span>
                 </Tooltip>
                 <Tooltip label="Sindhi">
                   <span lang="sd" dir="rtl">
-                    جھانوي
+                    سلام
                   </span>
                 </Tooltip>
               </div>
