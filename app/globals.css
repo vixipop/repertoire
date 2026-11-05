@@ -1015,11 +1015,22 @@ html.is-theme-switching .theme-toggle-icon {
 }
 
 .cs-figure { margin: 14px 0 0; width: 100%; }
+/* A card with one fixed padding all round, the image centred and never cropped.
+   Mockups carry their own transparent margins, which are trimmed off the files so the
+   padding is the same on every figure. Full-page sheets (is-bleed) fill the card instead. */
 .cs-figure-frame {
-  border: 1px dashed var(--border-soft);
-  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border-radius: 20px;
+  background: #f2f2f2;
   overflow: hidden;
-  background: var(--bg-surface);
+}
+.cs-figure-frame.is-bleed { padding: 0; }
+@media (max-width: 720px) {
+  .cs-figure-frame { padding: 18px; border-radius: 16px; }
+  .cs-figure-frame.is-bleed { padding: 0; }
 }
 .cs-figure img {
   display: block;

@@ -4,7 +4,8 @@ import { cloudverseStory } from "./cloudverse-story";
  * Everything on the Work pages. Copy below is placeholder until each piece is written;
  * edit here and the homepage lists, the tabs and the detail pages all follow.
  */
-export type Figure = { src: string; width: number; height: number; alt: string; caption: string };
+/** `card` (default): a transparent mockup centred on a padded card. `bleed`: an opaque full-page sheet, edge to edge. */
+export type Figure = { src: string; width: number; height: number; alt: string; caption: string; fit?: "card" | "bleed" };
 
 /** One block inside a section: a paragraph, a quote, a list, or a figure. */
 export type Block =

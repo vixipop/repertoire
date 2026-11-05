@@ -138,6 +138,8 @@ export type PondController = {
   setHighQuality(width: number | null): void;
   /** What a plain tap or left click does: splash the water (default) or toss corn. */
   setTapMode(mode: "splash" | "feed"): void;
+  /** Stop (true) or restart (false) drawing, e.g. while the page navigates away. */
+  setPaused(paused: boolean): void;
   /** Tiger scene: how furry the coat looks and how soft the tiger is, each 0..1. */
   setTigerStyle(style: Partial<{ fur: number; blur: number }>): void;
   /** Have a swan or two say something now (for previewing the lettering). */
@@ -3200,20 +3202,26 @@ export function startPond(
   let raf = 0;
   let last = performance.now();
   let visible = true;
+  let paused = false; // held by the page while it navigates away
   let pageVisible = !document.hidden;
   let perfAcc = 0;
   let perfN = 0;
+  let jsAcc = 0; // time spent running the frame itself (CPU side), for the data-perf readout
   let perfWarm = 120; // startup frames (shader compile, hydration) are not counted
   let goodRun = 0; // consecutive fast windows before climbing back
   let sinceUp = Infinity; // windows since the last climb
   let climbLocked = false; // climbs failed twice: stop trying for this session
   let failedClimbs = 0;
   let slowRun = 0; // consecutive slow windows
+  let floorAvg = 0; // frame time at the lowest quality, for judging the full-quality trial below
+  let probe = 0; // windows left in a full-quality trial (2 = settling, 1 = deciding)
+  let settled = false; // the trial is over: stop adapting
   let canopyTick = 0;
   const frameListeners = new Set<() => void>();
 
   const frame = (now: number) => {
     raf = 0;
+    const jsStart = performance.now();
     const real = (now - last) / 1000;
     const dt = Math.min(0.05, real);
     last = now;
@@ -3241,7 +3249,7 @@ export function startPond(
     } else if (perfN >= 45) {
       const avg = perfAcc / perfN;
       sinceUp++;
-      host.dataset.perf = `${Math.round(1 / avg)}fps scene=${sceneK.toFixed(2)} scale=${wd.toFixed(2)}`;
+      host.dataset.perf = `${Math.round(1 / avg)}fps scene=${sceneK.toFixed(2)} scale=${wd.toFixed(2)} js=${(jsAcc / perfN).toFixed(0)}ms`;
       const slow = hasGL && avg > 0.024;
       slowRun = slow ? slowRun + 1 : 0;
       const dropped = () => {
@@ -3260,12 +3268,35 @@ export function startPond(
       // shed load from the water first (the brushwork hides it), and only
       // then soften the whole picture. Two slow windows in a row are needed, so a
       // one-off hitch (a GC pause, a tab switch) never costs resolution.
-      if (slow && slowRun >= 2 && sceneK > 0.42) {
+      if (probe > 0) {
+        // Trial of full quality (see below): the first window is settling, the second decides.
+        if (--probe === 0) {
+          // clearly slower than the floor: resolution does cost time here, so the floor was right
+          if (avg > floorAvg * 1.25) {
+            sceneK = 0.42;
+            wd = 0.85;
+            sizeLayers();
+          }
+          settled = true;
+        }
+      } else if (settled) {
+        // the trial is over; hold whatever it chose
+      } else if (slow && slowRun >= 2 && sceneK > 0.42) {
         sceneK = Math.max(0.42, sceneK - 0.1);
         dropped();
       } else if (slow && slowRun >= 2 && wd > 0.85) {
         wd = Math.max(0.85, wd - 0.15);
         dropped();
+      } else if (slow && slowRun >= 2) {
+        // Already at the lowest quality and still slow: the water's resolution is not what is
+        // costing the time, so the soft picture buys nothing. Try full quality, and keep it
+        // unless it turns out clearly slower.
+        floorAvg = avg;
+        sceneK = 0.7;
+        wd = maxWd;
+        slowRun = 0;
+        probe = 2;
+        sizeLayers();
       } else if (hasGL && avg < 0.0185 && !climbLocked && (wd < maxWd || sceneK < 0.7)) {
         if (++goodRun >= 3) {
           if (wd < maxWd) wd = Math.min(maxWd, wd + 0.1);
@@ -3277,6 +3308,7 @@ export function startPond(
       }
       perfAcc = 0;
       perfN = 0;
+      jsAcc = 0;
     }
 
     // looks change like light does: gradually
@@ -3373,17 +3405,19 @@ export function startPond(
 
     updateTalk();
     for (const cb of frameListeners) cb();
+    if (perfWarm > 0) jsAcc = 0;
+    else jsAcc += performance.now() - jsStart;
     scheduleFromFrame();
   };
 
   const schedule = () => {
-    if (!raf && visible && pageVisible) {
+    if (!raf && visible && pageVisible && !paused) {
       last = performance.now();
       raf = requestAnimationFrame(frame);
     }
   };
   const scheduleFromFrame = () => {
-    if (!raf && visible && pageVisible) raf = requestAnimationFrame(frame);
+    if (!raf && visible && pageVisible && !paused) raf = requestAnimationFrame(frame);
   };
 
   const io = new IntersectionObserver(([entry]) => {
@@ -3429,6 +3463,13 @@ export function startPond(
     },
     setTapMode(mode) {
       tapFeeds = mode === "feed";
+    },
+    setPaused(p) {
+      paused = p;
+      if (p) {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+      } else schedule();
     },
     setHighQuality(width) {
       if (!hasGL) return;

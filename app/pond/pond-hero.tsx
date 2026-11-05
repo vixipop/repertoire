@@ -47,7 +47,23 @@ export default function PondHero() {
       ctl.setParams(now.params);
     }, 30_000);
 
+    // Pressing an internal link starts a page change on the same main thread the pond draws on,
+    // so hold the pond still for the moment it takes. (If nothing navigates, it restarts.)
+    let resume = 0;
+    const onPress = (e: PointerEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.origin !== window.location.origin) return;
+      if (a.pathname === window.location.pathname && a.search === window.location.search) return;
+      ctl.setPaused(true);
+      window.clearTimeout(resume);
+      resume = window.setTimeout(() => ctl.setPaused(false), 2500);
+    };
+    document.addEventListener("pointerdown", onPress, true);
+
     return () => {
+      document.removeEventListener("pointerdown", onPress, true);
+      window.clearTimeout(resume);
       window.clearInterval(clock);
       ctl.destroy();
       water.remove();

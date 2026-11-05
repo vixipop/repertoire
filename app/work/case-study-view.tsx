@@ -78,7 +78,7 @@ function renderBlock(b: Block, i: number) {
     case "figure":
       return (
         <figure key={i} className="cs-figure">
-          <div className="cs-figure-frame">
+          <div className={`cs-figure-frame${b.figure.fit === "bleed" ? " is-bleed" : ""}`}>
             <FigureImage figure={b.figure} />
           </div>
           <figcaption>{b.figure.caption}</figcaption>

@@ -23,7 +23,7 @@ export const cloudverseStory: Story = {
           figure: {
             src: "/work/cloudverse/hero-dashboard.webp",
             width: 1200,
-            height: 781,
+            height: 780,
             alt: "Cloudverse cost dashboard showing total spend across AWS, GCP and Azure, with the cost trend explorer",
             caption: "Cost dashboard: spend across clouds, before automation",
           },
@@ -57,8 +57,8 @@ export const cloudverseStory: Story = {
           kind: "figure",
           figure: {
             src: "/work/cloudverse/research-notes.webp",
-            width: 929,
-            height: 769,
+            width: 900,
+            height: 750,
             alt: "Sticky notes with user concerns about batching, risky changes and rollback",
             caption: "What users kept raising in discovery",
           },
@@ -72,7 +72,7 @@ export const cloudverseStory: Story = {
           figure: {
             src: "/work/cloudverse/flow.webp",
             width: 1200,
-            height: 357,
+            height: 346,
             alt: "Flow from the optimisation engine's recommendations to the automations module",
             caption: "From recommendation to executed policy",
           },
@@ -91,8 +91,9 @@ export const cloudverseStory: Story = {
           kind: "figure",
           figure: {
             src: "/work/cloudverse/colour-tokens.webp",
-            width: 773,
-            height: 1200,
+            fit: "bleed",
+            width: 1160,
+            height: 1800,
             alt: "Colour tokens with hex values and usage notes",
             caption: "Colour tokens, with the job each one does",
           },
@@ -101,6 +102,7 @@ export const cloudverseStory: Story = {
           kind: "figure",
           figure: {
             src: "/work/cloudverse/dashboard-elements.webp",
+            fit: "bleed",
             width: 1200,
             height: 1183,
             alt: "Dashboard elements: anomaly cards, tables, tabs and tooltips",
@@ -136,7 +138,7 @@ export const cloudverseStory: Story = {
           figure: {
             src: "/work/cloudverse/policy-dry-run.webp",
             width: 1200,
-            height: 742,
+            height: 728,
             alt: "Policy creation screen with a dry run preview",
             caption: "Policy creation with a dry run preview",
           },
@@ -146,7 +148,7 @@ export const cloudverseStory: Story = {
           figure: {
             src: "/work/cloudverse/review.webp",
             width: 1200,
-            height: 742,
+            height: 725,
             alt: "Review and approvals table of pending recommendations",
             caption: "Review and approvals",
           },
@@ -156,7 +158,7 @@ export const cloudverseStory: Story = {
           figure: {
             src: "/work/cloudverse/logs.webp",
             width: 1200,
-            height: 742,
+            height: 728,
             alt: "Execution logs with run status, savings and rollback",
             caption: "Execution logs, with rollback",
           },
