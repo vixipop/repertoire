@@ -2,7 +2,7 @@
 
 Product design · Enterprise web SaaS · 6 months (Aug 2025 – Jan 2026)
 
-A FinOps tool that could only point at problems, rebuilt so it could fix them too.
+Cloudverse could spot wasted cloud spend, but left every fix to the user. We rebuilt it to act on its own advice, with guardrails people could trust.
 
 **Contents:** Context · Research · System · Screens
 
